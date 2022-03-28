@@ -1,0 +1,6 @@
+*~
+.depend
+*.hints
+_local/
+dist/
+obj/

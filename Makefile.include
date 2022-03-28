@@ -1,0 +1,24 @@
+PROJECT_HOME ?= .
+
+ifeq (,$(FSTAR_HOME))
+  $(error FSTAR_HOME is not defined)
+endif
+
+ifeq (,$(KREMLIN_HOME))
+  $(error KREMLIN_HOME is not defined)
+endif
+
+SOURCE_DIRS = $(PROJECT_HOME)/
+
+INCLUDE_DIRS = \
+  $(SOURCE_DIRS) \
+  $(FSTAR_HOME)/ulib/.cache \
+  $(KREMLIN_HOME)/kremlib \
+  $(KREMLIN_HOME)/kremlib/obj \
+  $(PROJECT_HOME)/obj
+
+
+FSTAR_INCLUDES = $(addprefix --include ,$(INCLUDE_DIRS))
+
+%.fst-in %.fsti-in:
+	@echo $(FSTAR_INCLUDES)
