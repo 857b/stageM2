@@ -14,38 +14,22 @@ let rec append_index (#a:Type) (l1 l2 : list a) (i : nat{i < length l1 + length 
     | [] -> ()
     | _ :: tl -> if i = 0 then () else append_index tl l2 (i-1)
 
-(* [reverse] *)
-(* TODO: already defined as [rev'] *)
-let rec reverse (#a:Type) (l : list a) : list a =
-  match l with
-  | [] -> []
-  | hd :: tl -> (reverse tl)@[hd]
+(* [rev'] *)
 
-let rec reverse_length (#a:Type) (l : list a)
-  : Lemma (length (reverse l) = length l) [SMTPat (length (reverse l))]
+let rec rev'_length (#a:Type) (l : list a)
+  : Lemma (length (rev' l) = length l) [SMTPat (length (rev' l))]
   = match l with
   | [] -> ()
-  | hd :: tl -> reverse_length tl;
+  | hd :: tl -> rev'_length tl;
               append_length tl [hd]
 
-let rec reverse_index (#a:Type) (l : list a) (i : nat{i < length l})
-  : Lemma (index (reverse l) i == index l (length l - 1 - i))
+let rec rev'_index (#a:Type) (l : list a) (i : nat{i < length l})
+  : Lemma (index (rev' l) i == index l (length l - 1 - i))
   = match l with
   | [] -> ()
   | hd :: tl ->
-       append_index (reverse tl) [hd] i;
-       if i < length tl then reverse_index tl i
-    
-let rec rev_acc_reverse (#a : Type) (l1 l2 : list a) :
-  Lemma (rev_acc l1 l2 == (reverse l1)@l2)
-  = match l1 with
-  | [] -> ()
-  | hd :: tl -> rev_acc_reverse tl (hd :: l2);
-              append_assoc (reverse tl) [hd] l2
-
-let rev_reverse (#a : Type) (l : list a):
-  Lemma (rev l == reverse l)
-  = rev_acc_reverse l []
+       append_index (rev' tl) [hd] i;
+       if i < length tl then rev'_index tl i
 
 (* [for_allP] *)
 
@@ -104,16 +88,16 @@ let rec for_allP_append (#a : Type) (f : a -> prop) (l1 l2 : list a)
     | [] -> ()
     | _ :: tl -> for_allP_append f tl l2
 
-let rec for_allP_reverse (#a : Type) (f : a -> prop) (l : list a)
-  : Lemma (for_allP f (reverse l) <==> for_allP f l)
+let rec for_allP_rev' (#a : Type) (f : a -> prop) (l : list a)
+  : Lemma (for_allP f (rev' l) <==> for_allP f l)
   = match l with
     | [] -> ()
     | hd :: tl ->
       calc (<==>) {
-        for_allP f (reverse l);
+        for_allP f (rev' l);
       <==> {}
-        for_allP f (reverse tl) /\ for_allP f [hd];
-      <==> {for_allP_reverse f tl}
+        for_allP f (rev' tl) /\ for_allP f [hd];
+      <==> {for_allP_rev' f tl}
         for_allP f tl /\ f hd;
       <==> {}
         for_allP f (hd :: tl);
@@ -125,21 +109,6 @@ let rec for_all_opairsP (#a : Type) (f : a -> a -> prop) (l : list a) : prop
   = match l with
     | [] -> True
     | hd :: tl -> for_allP (f hd) tl /\ for_all_opairsP f tl
-
-(*
-let iffI (d0 : T.term -> T.Tac unit) (d1 : T.term -> T.Tac unit) : T.Tac unit =
-  T.(split (); iseq [(fun () -> let h = implies_intro () in d0 h);
-                     (fun () -> let h = implies_intro () in d1 h)])
-
-let test_iff (a : Type) (p : a -> Type) : GTot (squash ((forall x . p x) <==> (forall x . p x))) =
-  _ by T.(iffI (fun h -> let x  = forall_intro () in
-                      let h' = instantiate h x in
-                      hyp h')
-               (fun _ -> smt ()))
-
-let test_impl (p : nat -> Type) (l : p 0 -> squash (p 1)) : GTot ((squash (p 0 ==> p 1))) =
-  _ by T.(let h = implies_intro () in apply (quote l); hyp h)
-*)
 
 let rec for_all_opairsP_index (#a : Type) (f : a -> a -> prop) (l : list a)
   : Lemma (for_all_opairsP f l
@@ -184,16 +153,16 @@ let rec for_all_opairsP_append (#a : Type) (f : a -> a -> prop) (l1 l2 : list a)
 
 let flip (#a #b #c : Type) (f : a -> b -> c) : b -> a -> c = fun x y -> f y x
 
-let for_all_opairsP_reverse (#a : Type) (f : a -> a -> prop) (l : list a)
-  : Lemma (for_all_opairsP f (reverse l) <==> for_all_opairsP (flip f) l)
+let for_all_opairsP_rev' (#a : Type) (f : a -> a -> prop) (l : list a)
+  : Lemma (for_all_opairsP f (rev' l) <==> for_all_opairsP (flip f) l)
   =
   let flip_f = flip f in
   calc (<==>) {
-      for_all_opairsP f (reverse l);
-    <==> {for_all_opairsP_index f (reverse l)}
-      forall (i j : (x:nat{x < length l})). i < j ==> f (index (reverse l) i) (index (reverse l) j);
-    <==> {introduce forall (i:nat{i < length l}). index (reverse l) i == index l (length l - 1 - i)
-             with reverse_index l i}
+      for_all_opairsP f (rev' l);
+    <==> {for_all_opairsP_index f (rev' l)}
+      forall (i j : (x:nat{x < length l})). i < j ==> f (index (rev' l) i) (index (rev' l) j);
+    <==> {introduce forall (i:nat{i < length l}). index (rev' l) i == index l (length l - 1 - i)
+             with rev'_index l i}
       forall (i j : (x:nat{x < length l})). i < j ==> f (index l (length l - 1 - i)) (index l (length l - 1 - j));
     <==> {
       introduce (forall (i j : (x:nat{x < length l})). i < j ==> f (index l (length l - 1 - i)) (index l (length l - 1 - j)))
@@ -342,17 +311,17 @@ let rec permutation_t_cons_snoc #a x l
                        (permutation_t_append [hd] (x :: tl) (snoc (tl,x)) []
                          (permutation_t_cons_snoc #a x tl))
         
-let rec permutation_t_reverse #a l
-  : Tot (permutation_t #a l (reverse l))
+let rec permutation_t_rev' #a l
+  : Tot (permutation_t #a l (rev' l))
         (decreases l)
   = match l with
     | [] -> Perm_refl _
     | hd :: tl ->
       Perm_trans _ _ _ (permutation_t_cons_snoc hd tl)
-                       (permutation_t_append [] tl (reverse tl) [hd]
-                         (permutation_t_reverse tl))
+                       (permutation_t_append [] tl (rev' tl) [hd]
+                         (permutation_t_rev' tl))
 
-(* [g_fold_right] *)
+(* [fold_right_gtot] *)
 
 let rec fold_right_gtot_append #a #b l0 l1 f x
   : Lemma (ensures fold_right_gtot #a #b (l0@l1) f x == fold_right_gtot l0 f (fold_right_gtot l1 f x))
@@ -376,3 +345,57 @@ let rec fold_right_gtot_comm_permutation_t #a #b l0 l1 f x (p : permutation_t l0
     | Perm_trans l0 l1 l2 p0 p1 ->
                 fold_right_gtot_comm_permutation_t l0 l1 f x p0;
                 fold_right_gtot_comm_permutation_t l1 l2 f x p1
+
+(* [g_for_all] *)
+
+let rec g_for_allP (#a : Type) (l : list a) (f : a -> GTot Type) : prop
+  = match l with
+    | [] -> True
+    | hd :: tl -> f hd /\ g_for_allP tl f
+
+let rec g_for_allP_morph_strong (#a : Type) (l : list a) (f g : a -> GTot Type) :
+  Lemma (requires g_for_allP l (fun x -> f x <==> g x))
+        (ensures  g_for_allP l f <==> g_for_allP l g)
+  = match l with
+    | [] -> ()
+    | _ :: tl -> g_for_allP_morph_strong tl f g
+
+let rec g_for_allP_True (#a : Type) (l : list a) (f : a -> GTot Type) :
+  Lemma (requires forall x. f x) (ensures g_for_allP l f)
+  = match l with
+    | [] -> ()
+    | _ :: tl -> g_for_allP_True tl f
+
+let g_for_allP_morph (#a : Type) (l : list a) (f g : a -> GTot Type) :
+  Lemma (requires forall x . f x <==> g x)
+        (ensures  g_for_allP l f <==> g_for_allP l g)
+  = g_for_allP_True l (fun x -> f x <==> g x);
+    g_for_allP_morph_strong l f g
+
+let rec g_for_allP_mem (#a : Type) (l : list a) (f : a -> GTot Type)
+  : Lemma (g_for_allP l f <==> (forall x . memP x l ==> f x))
+  = match l with
+    | [] -> ()
+    | _ :: tl -> g_for_allP_mem tl f
+
+let rec g_for_allP_append (#a : Type) (l1 l2 : list a) (f : a -> GTot Type)
+  : Lemma (g_for_allP (l1@l2) f <==> g_for_allP l1 f /\ g_for_allP l2 f)
+          [SMTPat (g_for_allP #a (l1@l2) f)]
+  = match l1 with
+    | [] -> ()
+    | _ :: tl -> g_for_allP_append tl l2 f
+
+let rec g_for_allP_rev' (#a : Type) (l : list a) (f : a -> GTot Type)
+  : Lemma (g_for_allP (rev' l) f <==> g_for_allP l f)
+  = match l with
+    | [] -> ()
+    | hd :: tl ->
+      calc (<==>) {
+        g_for_allP (rev' l) f;
+      <==> {}
+        g_for_allP (rev' tl) f /\ g_for_allP [hd] f;
+      <==> {g_for_allP_rev' tl f}
+        g_for_allP tl f /\ f hd;
+      <==> {}
+        g_for_allP (hd :: tl) f;
+      }

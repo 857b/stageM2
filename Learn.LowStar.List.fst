@@ -15,6 +15,9 @@ module LLoops = Learn.LowStar.Loops
 open LowStar.BufferOps
 open FStar.HyperStack.ST
 
+#set-options "--fuel 1 --ifuel 1"
+(* live_seg pose problème sans ces options *)
+
 #push-options "--__no_positivity"
 noeq
 type t (a: Type0) =
@@ -62,12 +65,29 @@ let rec loc_seg (#a : Type) (sg : list_seg a) : GTot M.loc
     | [] -> M.loc_none
     | hd :: tl -> M.(loc_union (loc_buffer hd._1) (loc_seg (tail_seg sg)))
 
+(* Utiliser uniquement cette version ? *)
+let rec loc_addr_seg (#a : Type) (sg : list_seg a) : GTot M.loc
+  (decreases sg.segment)
+  = match sg.segment with
+    | [] -> M.loc_none
+    | hd :: tl -> M.(loc_union (loc_addr_of_buffer hd._1) (loc_addr_seg (tail_seg sg)))
+
 let rec wf_seg (#a : Type) (sg : list_seg a) : Tot prop
   (decreases sg.segment)
   = match sg.segment with
     | [] -> True
     | hd :: tl -> (M.loc_disjoint (B.loc_buffer hd._1) (loc_seg (tail_seg sg)))
              /\ wf_seg (tail_seg sg)
+
+let rec wf_addr_seg (#a : Type) (sg : list_seg a) : Tot prop
+  (decreases sg.segment)
+  = match sg.segment with
+    | [] -> True
+    | hd :: tl -> (M.loc_disjoint (B.loc_addr_of_buffer hd._1) (loc_addr_seg (tail_seg sg)))
+             /\ wf_addr_seg (tail_seg sg)
+
+let freeable_seg (#a : Type) (sg : list_seg a) : Tot prop
+  = Ll.g_for_allP sg.segment (fun x -> B.freeable x._1)
 
 let rec live_seg (#a : Type) (h : HS.mem) (sg : list_seg a) : Tot prop
   (decreases sg.segment)
@@ -84,6 +104,21 @@ let rec loc_seg_live_in (#a : Type) (h : HS.mem) (sg : list_seg a)
   = match sg.segment with
     | [] -> ()
     | _ :: _ -> loc_seg_live_in h (tail_seg sg)
+
+let rec loc_addr_seg_live_in (#a : Type) (h : HS.mem) (sg : list_seg a)
+  : Lemma (requires live_seg h sg) (ensures B.loc_in (loc_addr_seg sg) h)
+          (decreases sg.segment)
+  = match sg.segment with
+    | [] -> ()
+    | _ :: _ -> loc_addr_seg_live_in h (tail_seg sg)
+
+let rec loc_addr_seg_includes (#a : Type) (sg : list_seg a)
+  : Lemma (ensures M.loc_includes (loc_addr_seg sg) (loc_seg sg))
+          (decreases sg.segment)
+  = match sg.segment with
+    | [] -> ()
+    | _ :: _ -> loc_addr_seg_includes (tail_seg sg)
+
 
 let rec loc_seg_includes_cell (#a : Type) (sg : list_seg a) (i : nat)
   : Lemma (requires  i < sg_length sg)
@@ -165,7 +200,87 @@ let null_is_empty (#a : Type0) (h : HS.mem) (sg : list_seg a)
     | [] -> ()
 
 
+inline_for_extraction
+let sg_next (#a : Type) (p : t a) (sg : G.erased (list_seg a))
+  : Stack (t a) (requires fun h0       -> live_seg h0 sg /\ p == entry sg /\ Cons? sg.segment)
+                (ensures  fun h0 p' h1 -> M.(modifies loc_none h0 h1) /\
+                                       live_seg h1 (tail_seg sg) /\ p' == entry (tail_seg sg))
+  = (p.(0ul)).next
 
+
+(* permet de forcer une preuve de [M.modifies] par transitivité *)
+noeq type mod_seq (#mod : M.loc) : HS.mem -> HS.mem -> Type =
+  | MNil  : h : HS.mem -> mod_seq #mod h h
+  | MCons : h0 : HS.mem -> #h1 : HS.mem -> #h2 : HS.mem ->
+               #squash (M.modifies mod h0 h1) -> mod_seq #mod h1 h2 -> mod_seq #mod h0 h2
+
+let rec mod_of_seq (mod : M.loc) (#h0 #h1 : HS.mem) (sq : mod_seq #mod h0 h1)
+  : Lemma (ensures M.modifies mod h0 h1) (decreases sq)
+  = match sq with
+    | MNil _ -> ()
+    | MCons _ sq -> mod_of_seq mod sq
+
+
+
+(* [free] *)
+
+let rec free #a (p : t a) (sg : G.erased (list_nil a))
+  : ST unit (requires fun h0 -> wf_addr_seg sg /\ freeable_seg sg /\
+                             live_seg h0 sg /\
+                             p == entry sg)
+            (ensures fun h0 () h1 -> M.(modifies (loc_addr_seg sg) h0 h1))
+  =
+    if B.is_null p then ()
+    else begin
+      loc_addr_seg_includes (tail_seg sg);
+      let p_next = sg_next p (G.reveal sg) in
+      B.free p;
+      free p_next (tail_seg sg)
+    end
+
+(* Pour une version itérative: besoin d'une boucle avec un corps ST
+#push-options "--z3rlimit 30"
+let free #a (p : t a) (sg0 : G.erased (list_nil a))
+  : Stack unit (requires fun h0 -> wf_addr_seg sg0 /\ freeable_seg sg0 /\
+                                live_seg h0 sg0 /\
+                                p == entry sg0)
+               (ensures fun h0 () h1 -> M.(modifies (loc_addr_seg sg0) h0 h1))
+  = let h00 = ST.get () in
+        loc_addr_seg_live_in h00 sg0;
+    push_frame ();
+    let it = B.alloca #(t a) p 1ul in
+    let it_sg = B.alloca #(G.erased (list_nil a)) sg0 1ul in
+    let lloc = G.hide (M.(loc_union (loc_buffer it) (loc_buffer it_sg))) in
+    let h0 = ST.get () in
+    let inv h : Tot prop =
+      M.(modifies (loc_union lloc (loc_addr_seg sg0)) h0 h) /\
+      B.live h it /\ B.live h it_sg /\
+     (let p  = B.deref h it in
+      let sg = B.deref h it_sg in
+      p == entry sg /\
+      wf_addr_seg sg /\ freeable_seg sg /\
+      live_seg h sg /\
+      M.loc_includes (loc_addr_seg sg0) (loc_addr_seg sg))
+    in let test_inv (b:bool) h : Tot prop =
+      inv h /\ (Cons? (B.deref h it_sg).segment <==> b)
+    in
+    let test () : Stack bool (requires fun h -> inv h) (ensures fun _ b h -> test_inv b h)
+      = not (B.is_null it.(0ul))
+    in let body ()
+      : Stack unit (requires fun h -> inv h /\ Cons? (B.deref h it_sg).segment) (ensures fun _ () h -> inv h)
+      =
+          let sg = it_sg.(0ul) in
+          loc_addr_seg_includes (tail_seg sg);
+        let cell = it.(0ul) in
+        it.(0ul) <- sg_next it.(0ul) (G.hide (G.reveal sg));
+          it_sg.(0ul) <- tail_seg sg;
+        B.free cell;
+          let h' = ST.get () in
+          assert (M.(modifies (loc_union lloc (loc_addr_seg sg0)) h0 h'))
+    in
+    C.Loops.while #inv #test_inv test body;
+    pop_frame ()
+#pop-options*)
 
 (* [reverse] *)
 
@@ -180,8 +295,8 @@ let reverse_seg_loc (#a : Type) (sg : list_seg a)
     loc_seg_fold sg;
     loc_seg_fold_f_comm a;
     Ll.fold_right_gtot_comm_permutation_t _ _ (loc_seg_fold_f #a)
-                 M.loc_none (Ll.permutation_t_reverse sg.segment);
-    Ll.rev_reverse sg.segment
+                 M.loc_none (Ll.permutation_t_rev' sg.segment);
+    L.rev_rev' sg.segment
 
 let reverse_ct_hyps #a
       (sg : list_nil a) (lloc : M.loc)
@@ -227,21 +342,6 @@ let reverse_loop_test #a
      (ensures  fun _ b h -> reverse_ct_inv_test sg lloc it_f it_r sgs h0 b h)
   =
     not (B.is_null it_f.(0ul)) 
-
-(* permet de forcer une preuve de [M.modifies] par transitivité *)
-noeq type mod_seq (#mod : M.loc) : HS.mem -> HS.mem -> Type =
-  | MNil  : h : HS.mem -> mod_seq #mod h h
-  | MCons : h0 : HS.mem -> #h1 : HS.mem -> #h2 : HS.mem ->
-               #squash (M.modifies mod h0 h1) -> mod_seq #mod h1 h2 -> mod_seq #mod h0 h2
-
-let rec mod_of_seq (mod : M.loc) (#h0 #h1 : HS.mem) (sq : mod_seq #mod h0 h1)
-  : Lemma (ensures M.modifies mod h0 h1) (decreases sq)
-  = match sq with
-    | MNil _ -> ()
-    | MCons _ sq -> mod_of_seq mod sq
-
-#push-options "--fuel 1 --ifuel 1"
-(* live_seg pose problème sans ces options *)
 
 inline_for_extraction
 let reverse_loop_body #a
@@ -317,8 +417,6 @@ let reverse (#a : Type) (p : t a) (sg : G.erased (list_nil a))
       M.modifies_fresh_frame_popped h00 h01 (loc_seg sg) h1 h1'; (* appel explicit nécessaire *)
     rt
 
-#pop-options
-
 
 (* --- length --- *)
 
@@ -351,14 +449,17 @@ let length_loop_body a (l:Ghost.erased nat) h0 r
     (p     : B.pointer (t a))
     (seg   : B.pointer (Ghost.erased (list_nil a)))
     (count : B.pointer (U32.t))
-  (hyp0 : squash M.(loc_disjoint (loc_buffer p)   (loc_buffer seg) /\
+  () : Stack unit
+    (requires fun h     ->
+            M.(loc_disjoint (loc_buffer p)   (loc_buffer seg) /\
                   loc_disjoint (loc_buffer p)   (loc_buffer count) /\
                   loc_disjoint (loc_buffer seg) (loc_buffer count) /\
                   loc_includes (loc_region_only true r)
-                     (loc_union (loc_buffer p) (loc_union (loc_buffer seg) (loc_buffer count)))))
-  (hyp1 : squash (l <= FStar.UInt.max_int U32.n))
-  () : Stack unit (requires fun h     -> length_test_inv a l h0 r p seg count true h)
-                  (ensures fun _ () h -> length_inv a l h0 r p seg count h)
+                     (loc_union (loc_buffer p) (loc_union (loc_buffer seg) (loc_buffer count)))) /\
+              l <= FStar.UInt.max_int U32.n /\
+              length_test_inv a l h0 r p seg count true h)
+    (ensures fun _ () h ->
+              length_inv a l h0 r p seg count h)
   =
       let seg0 = seg.(0ul) in
     p.(0ul) <- (p.(0ul).(0ul)).next;
@@ -378,7 +479,7 @@ let length_loop (#a : Type0) (p : t a) (sg : G.erased (list_nil a){p == entry sg
     C.Loops.while #(length_inv      a (sg_length sg) h0 stack_frame p seg count)
                   #(length_test_inv a (sg_length sg) h0 stack_frame p seg count)
                   (length_loop_test a (sg_length sg) h0 stack_frame p seg count)
-                  (length_loop_body a (sg_length sg) h0 stack_frame p seg count () ());
+                  (length_loop_body a (sg_length sg) h0 stack_frame p seg count);
 
     let rt = count.(0ul) in
     pop_frame ();
@@ -509,6 +610,8 @@ let insert_post (#a : Type) (r : HS.rid) (i : nat) (x : a) (sg : list_seg a)
     live_seg h1 sg' /\ wf_seg sg' /\
     p1 == entry sg')
 
+#push-options "--fuel 2"
+
 let rec insert_aux (#a : Type) (r : HS.rid) (i : U32.t) (x : a)
                    (p : t a) (sg : Ghost.erased (list_seg a))
   : ST unit (requires fun h0 -> insert_pre r (U32.v i) h0 p sg /\ U32.v i > 0)
@@ -531,6 +634,8 @@ let rec insert_aux (#a : Type) (r : HS.rid) (i : U32.t) (x : a)
         with prf. introduce exists p_f. insert_post r (U32.v i) x sg h0 (loc_seg sg) p p_f h1
         with p_f and ()
     end
+
+#pop-options
 
 let insert (#a : Type) (r : HS.rid) (i : U32.t) (x : a) (p : t a) (sg : G.erased (list_seg a))
   : ST (t a) (requires fun h0 -> insert_pre r (U32.v i) h0 p sg)
@@ -604,6 +709,7 @@ let insert_loop_body (#a : Type) (r : HS.rid) (x : a)
                                                     M.(loc_union l_locals (loc_seg sg)) p p_f h2
              with p_f and insert_post_lemma r (U32.v i) x sg h1 l_locals p_f h2)
 
+#push-options "--fuel 2"
 inline_for_extraction
 let insert_loop_exit (#a : Type) (r : HS.rid) (x : a)
                      (l_p : B.pointer (t a)) (l_sg : B.pointer (G.erased (list_seg a))) (_:unit)
@@ -620,6 +726,7 @@ let insert_loop_exit (#a : Type) (r : HS.rid) (x : a)
                                    M.(loc_union (loc_union (loc_buffer l_p) (loc_buffer l_sg)) (loc_seg sg))
                                    p p_f h1
                 with p_f and ()
+#pop-options
 
 inline_for_extraction
 let insert_loop_loop (#a : Type) (r : HS.rid) (i : U32.t) (x : a)
@@ -750,6 +857,8 @@ let forward_inv (#a : Type) (sg : list_seg a) (h0 : HS.mem)
   : Tot prop
   = M.(modifies loc_none h0 h1) /\ p == entry (splitAt_seg i sg)._2
 
+#push-options "--fuel 2"
+
 let rec splitAt_next (#a : Type) (i : nat) (sg : list_seg a)
   : Lemma (requires i < sg_length sg)
           (ensures  (splitAt_seg_bd (i + 1) sg)._2 == tail_seg (splitAt_seg_bd i sg)._2)
@@ -768,6 +877,8 @@ let rec splitAt_next_live (#a : Type) (i : nat) (sg : list_seg a) (h : HS.mem)
   = splitAt_seg_live i h sg;
     if i = 0 then ()
     else splitAt_next_live (i-1) (tail_seg sg) h
+
+#pop-options
 
 inline_for_extraction
 let forward (#a : Type) (i : U32.t) (p : t a) (sg : G.erased (list_seg a))
@@ -831,13 +942,6 @@ let set (#a : Type) (i : U32.t) (x : a) (p : t a) (sg : G.erased (list_seg a))
 
 (* [last] *)
 
-inline_for_extraction
-let sg_next (#a : Type) (p : t a) (sg : G.erased (list_seg a))
-  : Stack (t a) (requires fun h0       -> live_seg h0 sg /\ p == entry sg /\ Cons? sg.segment)
-                (ensures  fun h0 p' h1 -> M.(modifies loc_none h0 h1) /\
-                                       live_seg h1 (tail_seg sg) /\ p' == entry (tail_seg sg))
-  = (p.(0ul)).next
-
 let last_ct_locals #a (l_it : B.pointer (B.pointer (cell a))) (l_k  : B.pointer (G.erased nat))
   : GTot M.loc =
   M.(loc_union (loc_buffer l_it) (loc_buffer l_k))
@@ -865,6 +969,8 @@ let lemma_last_loop_inv_it_live #a (sg : list_nil a) c_h0
   = let vk = B.deref h l_k in
     assert (live_seg h sg);
     splitAt_seg_live vk h sg
+
+#push-options "--fuel 2"
 
 inline_for_extraction
 let last_loop_body #a (sg : G.erased (list_nil a)) c_h0
@@ -914,8 +1020,11 @@ let last (#a : Type) (p : t a) (sg : G.erased (list_nil a))
     pop_frame ();
     rt
 
+#pop-options
+
 (* [append] *)
 
+#push-options "--fuel 2"
 let append (#a : Type) (p0 : t a) (sg0 : G.erased (list_nil a)) (p1 : t a) (sg1 : G.erased (list_seg a))
   : Stack (t a) (requires fun h0 -> live_seg h0 sg0 /\
                                  wf_seg sg0 /\ M.loc_disjoint (loc_seg sg0) (loc_seg sg1) /\
@@ -946,6 +1055,7 @@ let append (#a : Type) (p0 : t a) (sg0 : G.erased (list_nil a)) (p1 : t a) (sg1 
         assert (live_seg h1 ({sg01 with exit = p1}));
       p0
     end
+#pop-options
 
 (* ------------------------------------------------------------------------------------------- *)
 
@@ -976,6 +1086,8 @@ let append_u32 = append #U32.t
 
 let reverse_u32 = reverse #U32.t
 
+let free_u32 = free #U32.t
+
 let test_for () : Stack unit (fun _ -> True) (fun _ _ _ -> True)
   =
     C.Loops.for 0ul 10ul (fun _ _ -> True) (fun _ -> ())
@@ -992,6 +1104,7 @@ let test_ghost () : Stack unit (fun _ -> True) (fun _ _ _ -> True)
     b.(0ul) <- 42;
     pop_frame ()
 
+#push-options "--fuel 2"
 let test () : Stack unit (fun _ -> True) (fun _ _ _ -> True)
   = push_frame ();
     let b = B.alloca ({next=B.null; data=42ul}) 1ul in
@@ -1000,3 +1113,4 @@ let test () : Stack unit (fun _ -> True) (fun _ _ _ -> True)
     assert (b == entry sg);
     assert (live_seg h sg);
     pop_frame ()
+#pop-options
