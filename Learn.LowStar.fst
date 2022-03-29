@@ -86,3 +86,12 @@ let test_rt_ghost_callee () : Stack (U32.t & G.erased U32.t) (fun _ -> True) (fu
 let test_rt_ghost_caller () : Stack U32.t (fun _ -> True) (fun _ _ _ -> True) =
   (*[@inline_inv]*)let (v, gv) = test_rt_ghost_callee () in
   v
+
+
+inline_for_extraction
+let test_struct_arg_callee (p : test_struct) : Stack U32.t (fun _ -> True) (fun _ _ _ -> True)
+  = U32.(p.fld_a +%^ p.fld_b)
+
+let test_struct_arg_caller () : Stack U32.t (fun _ -> True) (fun _ _ _ -> True)
+  = [@inline_let]let p = {fld_a = 0ul; fld_b = 1ul} in
+    test_struct_arg_callee p
