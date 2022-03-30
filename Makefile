@@ -146,12 +146,6 @@ obj/%.krml:
 
 KRML=$(KREMLIN_HOME)/krml
 
-# Note: the implementation of the intrinsic uses external linkage, but you could
-# easily turn this file into a .h, use -add-include '"Impl_Bignum_Intrinsics.h"'
-# and pass -static-header Impl.Bignum.Intrinsics as described in the
-# documentation.
-HAND_WRITTEN_C_FILES = #code/c/Impl_Bignum_Intrinsics.c
-
 # This is now the preferred and recommended way to compile C code with KreMLin.
 #
 # KreMLin (via -skip-compilation) only generates a stub Makefile in dist/,
@@ -174,7 +168,7 @@ HAND_WRITTEN_C_FILES = #code/c/Impl_Bignum_Intrinsics.c
 # option works. We also use -minimal.
 dist/Makefile.basic: $(ALL_KRML_FILES) $(HAND_WRITTEN_C_FILES)
 	@mkdir -p $(dir $@)
-	@#cp $(HAND_WRITTEN_C_FILES) $(dir $@)
+	@cp c/* $(dir $@)
 	@echo
 	@echo == KRML ====================================================
 	@$(KRML) -tmpdir $(dir $@) -skip-compilation \
@@ -183,7 +177,7 @@ dist/Makefile.basic: $(ALL_KRML_FILES) $(HAND_WRITTEN_C_FILES)
 	  -fparentheses \
 	  -bundle 'LowStar.*,Prims,Learn.LowStar.Loops,C.Loops' \
 	  -bundle 'FStar.*' \
-	  -bundle 'Learn.LowStar.List=Learn.LowStar.List.Data' \
+	  -bundle 'Learn.LowStar.List+Learn.LowStar.List.Impl=Learn.LowStar.List.*'[rename=list] \
 	  -minimal \
 	  -add-include '<stdint.h>' \
 	  -add-include '"kremlin/internal/target.h"'
@@ -193,5 +187,5 @@ extract:dist/Makefile.basic
 
 # Compilation
 
-dist/Learn_LowStar_List.o:extract
-	$(MAKE) -C dist -f Makefile.basic Learn_LowStar_List.o
+dist/test.exe:extract
+	$(MAKE) -C dist -f Makefile test.exe
