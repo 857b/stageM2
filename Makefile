@@ -181,18 +181,17 @@ dist/Makefile.basic: $(ALL_KRML_FILES) $(HAND_WRITTEN_C_FILES)
 	  $(filter %.krml,$^) \
 	  -warn-error @4@5@18 \
 	  -fparentheses \
-	  -bundle 'LowStar.*,Prims' \
-	  -minimal \
+	  -bundle 'LowStar.*,Prims,Learn.LowStar.Loops,C.Loops' \
 	  -bundle 'FStar.*' \
-	  -o test.o #-dstructs > _local/krml.out 2>&1
+	  -bundle 'Learn.LowStar.List=Learn.LowStar.List.Data' \
+	  -minimal \
+	  -add-include '<stdint.h>' \
+	  -add-include '"kremlin/internal/target.h"'
+	  @#-dstructs > _local/krml.out 2>&1
 
 extract:dist/Makefile.basic
 
-# Compiling the hand-written test
-# -------------------------------
+# Compilation
 
-CFLAGS += -I dist -I $(KREMLIN_HOME)/include
-
-tests/c-tests.exe: dist/libbignum.a tests/c-tests.o
-	$(CC) $^ -o $@
-
+dist/Learn_LowStar_List.o:extract
+	$(MAKE) -C dist -f Makefile.basic Learn_LowStar_List.o
