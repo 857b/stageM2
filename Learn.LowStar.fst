@@ -73,18 +73,16 @@ let buffer_copy_uint32 = buffer_copy_rec #U32.t
 
 type test_struct = { fld_a : U32.t; fld_b : U32.t }
 
-let test_set_field () : Stack unit (fun _ -> True) (fun _ _ _ -> True) =
-  push_frame ();
-  let r = B.alloca #test_struct ({fld_a = 0ul; fld_b = 0ul}) 1ul in
-  r.(0ul) <- { r.(0ul) with fld_a = 1ul };
-  pop_frame ()
+let test_set_field (x : B.pointer test_struct)
+  : Stack unit (fun h -> B.live h x) (fun _ _ _ -> True) =
+  x.(0ul) <- { x.(0ul) with fld_a = 1ul }
 
 
 let test_rt_ghost_callee () : Stack (U32.t & G.erased U32.t) (fun _ -> True) (fun _ _ _ -> True) =
   (0ul, G.hide 1ul)
 
 let test_rt_ghost_caller () : Stack U32.t (fun _ -> True) (fun _ _ _ -> True) =
-  (*[@inline_inv]*)let (v, gv) = test_rt_ghost_callee () in
+  (*[@inline_let]*) let (v, gv) = test_rt_ghost_callee () in
   v
 
 

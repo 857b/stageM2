@@ -41,7 +41,7 @@ FSTAR_EXTRACT = #--extract 'OCaml:-* +Spec'
 # But also:
 # - --cmi, for cross-module inlining, a must-have for anyone who relies on
 #   inline_for_extraction in the presence of interfaces
-# - --cache_checked_modules to rely on a pre-built ulib and kremlib
+# - --cache_checked_modules to rely on a pre-built ulib and krmllib
 # - --cache_dir, to avoid polluting our generated build artifacts outside o
 FSTAR_NO_FLAGS = $(FSTAR_HOME)/bin/fstar.exe $(FSTAR_HINTS) \
   --odir obj --cache_checked_modules $(FSTAR_INCLUDES) --cmi \
@@ -138,13 +138,13 @@ check:$(ALL_CHECKED_FILES)
 obj/%.krml:
 	@echo
 	@echo FSTAR $(notdir $@)
-	@$(FSTAR) $(notdir $(subst .checked,,$<)) --codegen Kremlin \
+	@$(FSTAR) $(notdir $(subst .checked,,$<)) --codegen krml \
 		--extract_module $(basename $(notdir $(subst .checked,,$<)))
 
 # F* --> C
 # --------
 
-KRML=$(KREMLIN_HOME)/krml
+KRML=$(KRML_HOME)/krml
 
 # This is now the preferred and recommended way to compile C code with KreMLin.
 #
@@ -180,7 +180,7 @@ dist/Makefile.basic: $(ALL_KRML_FILES) $(HAND_WRITTEN_C_FILES)
 	  -bundle 'Learn.LowStar.List+Learn.LowStar.List.Impl=Learn.LowStar.List.*'[rename=list] \
 	  -minimal \
 	  -add-include '<stdint.h>' \
-	  -add-include '"kremlin/internal/target.h"'
+	  -add-include '"krml/internal/target.h"'
 	  @#-dstructs > _local/krml.out 2>&1
 
 extract:dist/Makefile.basic
