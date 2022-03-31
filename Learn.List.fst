@@ -7,6 +7,7 @@ open FStar.List.Pure
 module U = Learn.Util
 module T  = FStar.Tactics
 module Cl = FStar.Classical
+module Tuq = Learn.Tactics.Unsquash
 
 let rec append_index (#a:Type) (l1 l2 : list a) (i : nat{i < length l1 + length l2}):
   Lemma (index (l1@l2) i == (if i < length l1 then index l1 i else index l2 (i - length l1)))
@@ -71,14 +72,12 @@ let rec for_allP_index (#a : Type) (f : a -> prop) (l : list a)
       calc (<==>) {
         for_allP f l;
       <==> {for_allP_index f tl}
-        f (index l 0) /\ (forall (i:nat{i < length tl}). f (index tl i));
-      <==> {}
-        f (index l 0) /\ (forall (i:nat{i < length tl}). f (index (hd :: tl) (i+1)));
-      <==> {}
-        f (index l 0) /\ (forall (i:nat{i < length tl}).{:pattern (f (index l (i+1)))}
-                                                 f (index l (i+1)));
-      <==> {}
-        (forall (i:nat{i< length l}). if i=0 then f (index l 0) else f (index l (i-1+1)));
+        f hd /\ (forall (i:nat{i < length tl}). f (index tl i));
+      <==> {_ by (Tuq.(lbd_prf (iff (And Nop (All Nop)) (All Nop)))
+               [(`(fun h_hd h_tl i -> if i = 0 then h_hd else h_tl (i-1)));
+                (`(fun hi -> hi 0));
+                (`(fun hi i -> hi (i+1)))])}
+        (forall (i:nat{i< length (hd :: tl)}). f (index (hd :: tl) i));
       }
 
 let rec for_allP_append (#a : Type) (f : a -> prop) (l1 l2 : list a)
