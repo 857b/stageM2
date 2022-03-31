@@ -14,27 +14,13 @@ module LLoops = Learn.LowStar.Loops
 
 open LowStar.BufferOps
 open FStar.HyperStack.ST
+open Learn.LowStar.Util
 
 open Learn.LowStar.List.Data
 open Learn.LowStar.List.Prop
 
-
 #set-options "--fuel 1 --ifuel 0"
 (* live_seg pose problème sans ces options *)
-
-(* permet de forcer une preuve de [M.modifies] par transitivité *)
-#push-options "--ifuel 1"
-noextract noeq type mod_seq (#mod : M.loc) : HS.mem -> HS.mem -> Type =
-  | MNil  : h : HS.mem -> mod_seq #mod h h
-  | MCons : h0 : HS.mem -> #h1 : HS.mem -> #h2 : HS.mem ->
-               #squash (M.modifies mod h0 h1) -> mod_seq #mod h1 h2 -> mod_seq #mod h0 h2
-
-let rec mod_of_seq (mod : M.loc) (#h0 #h1 : HS.mem) (sq : mod_seq #mod h0 h1)
-  : Lemma (ensures M.modifies mod h0 h1) (decreases sq)
-  = match sq with
-    | MNil _ -> ()
-    | MCons _ sq -> mod_of_seq mod sq
-#pop-options
 
 (* [free] *)
 
@@ -333,9 +319,11 @@ let rec index (#a : Type0) (p : t a) (sg : G.erased (list_seg a))
   : Stack a (requires fun h -> live_seg h sg /\ p == entry sg)
             (ensures  fun h0 x h1 -> h0 == h1 /\ x == L.index (sg_v sg) (U32.v i))
   = 
-      let _ = sg_uncons sg in
-    if i = 0ul then (p.(0ul)).data
-    else index (p.(0ul)).next (G.hide (tail_seg (G.reveal sg))) U32.(i -^ 1ul)
+      let hd,y,tl = sg_uncons sg in
+    if i = u32_zero then
+      (p.(0ul)).data
+    else
+      index (sg_next p sg) tl U32.(i -^ 1ul)
 
 let index_loop (#a : Type0) (p : t a) (sg : G.erased (list_seg a){p == entry sg})
                            (i : U32.t {U32.v i < sg_length sg})
@@ -359,18 +347,16 @@ let index_loop (#a : Type0) (p : t a) (sg : G.erased (list_seg a){p == entry sg}
     L.index (sg_v sg) (U32.v i) == L.index (sg_v vsg') i'))
   in
   C.Loops.for 0ul i inv (fun j ->
-      let _ = sg_uncons sg'.(0ul) in 
-    p'.(0ul) <- (p'.(0ul).(0ul)).next;
-    let vsg' = sg'.(0ul) in
-    sg'.(0ul) <- G.hide (tail_seg vsg');
-    assert_norm (L.index (sg_v vsg') U32.(v i - v j) == L.index (sg_v (tail_seg vsg')) U32.((v i - v j) - 1));
-    let h = ST.get () in
-    assert (inv h (U32.v j + 1))
+      let vsg' = sg'.(0ul) in
+      let _,_,tl = sg_uncons vsg' in 
+    p'.(0ul) <- sg_next (p'.(0ul)) vsg';
+    sg'.(0ul) <- tl
   );
     let _ = sg_uncons sg'.(0ul) in
   let rt = (p'.(0ul).(0ul)).data in
   pop_frame ();
   rt
+
 
 (* --- insert --- *)
 
@@ -426,7 +412,7 @@ let insert (#a : Type) (r : HS.rid) (i : U32.t) (x : a) (p : t a) (sg : G.erased
              (ensures  fun h0 p1 h1 -> exists p_f. insert_post r (U32.v i) x sg h0 (loc_seg sg) p1 p_f h1)
   =
   let h0 = ST.get () in
-  if i = 0ul then
+  if i = u32_zero then
     let rt = B.malloc r ({next = p; data = x}) 1ul in
     let _ = sg_mkcons (rt, x) sg in
     let h1 = ST.get () in
@@ -523,14 +509,11 @@ let insert_loop_loop (#a : Type) (r : HS.rid) (i : U32.t) (x : a)
   : ST unit (requires fun h -> U32.v i > 0 /\ insert_loop_pre r x l_p l_sg (U32.v i) h)
             (ensures fun h0 () h1 -> (insert_loop_post r x l_p l_sg (U32.v i) h0 () h1))
   =
-      let h0 = ST.get () in
     LLoops.rec_reverse_for i 1ul
            (insert_loop_pre  r x l_p l_sg)
            (insert_loop_post r x l_p l_sg)
            (insert_loop_body r x l_p l_sg)
-           (insert_loop_exit r x l_p l_sg);
-      let h1 = ST.get () in
-      assert (insert_loop_post r x l_p l_sg (U32.v i) h0 () h1)
+           (insert_loop_exit r x l_p l_sg)
 
 let insert_loop_lemma0 #a r (x : a) p sg (l_p : B.pointer _) (l_sg : B.pointer _) i h0 h1:
   Lemma (requires i <= sg_length sg /\
@@ -557,7 +540,7 @@ let insert_loop_lemma1 #a r i (x : a) p sg (p_f : B.pointer (cell a)) (l_locals 
     assert M.(modifies (loc_union l_locals (loc_seg sg)) h2 h3);
     M.modifies_fresh_frame_popped h0 h1 (loc_seg sg) h3 h4;
     assert M.(modifies (loc_seg sg) h0 h4);
- 
+
     assert (live_seg h3 sg');
     assert (live_seg h4 sg');
 
@@ -569,7 +552,7 @@ let insert_loop (#a : Type) (r : HS.rid) (i : U32.t) (x : a) (p : t a) (sg : G.e
              (ensures  fun h0 p1 h1 -> exists p_f. insert_post r (U32.v i) x sg h0 (loc_seg sg) p1 p_f h1)
   =
   let h0 = ST.get () in
-  if i = 0ul then
+  if i = u32_zero then
     let rt = B.malloc r ({next = p; data = x}) 1ul in
       let _ = sg_mkcons (rt, x) sg in
       let h1 = ST.get () in

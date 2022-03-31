@@ -165,7 +165,7 @@ let sg_uncons (#a : Type) (sg : G.erased (list_seg a))
   : Stack (G.erased (B.pointer (cell a)) & G.erased a & G.erased (list_seg a))
           (requires fun h -> live_seg h sg /\ Cons? sg.segment)
           (ensures  fun h (cell, data, tl) h' -> h' == h /\
-                     L.hd sg.segment == (G.reveal cell, G.reveal data) /\
+                     sg.segment == (G.reveal cell, G.reveal data) :: tl.segment /\
                      G.reveal tl == tail_seg sg /\
                      B.live h cell /\
                      B.deref h cell == {next = entry tl; data} /\
