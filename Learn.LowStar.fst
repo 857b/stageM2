@@ -75,7 +75,7 @@ type test_struct = { fld_a : U32.t; fld_b : U32.t }
 
 let test_set_field (x : B.pointer test_struct)
   : Stack unit (fun h -> B.live h x) (fun _ _ _ -> True) =
-  x.(0ul) <- { x.(0ul) with fld_a = 1ul }
+  x *= { !*x with fld_a = 1ul }
 
 
 let test_rt_ghost_callee () : Stack (U32.t & G.erased U32.t) (fun _ -> True) (fun _ _ _ -> True) =
@@ -93,3 +93,13 @@ let test_struct_arg_callee (p : test_struct) : Stack U32.t (fun _ -> True) (fun 
 let test_struct_arg_caller () : Stack U32.t (fun _ -> True) (fun _ _ _ -> True)
   = [@inline_let]let p = {fld_a = 0ul; fld_b = 1ul} in
     test_struct_arg_callee p
+
+
+
+(*
+let pointer_atomicity (#a : Type) (x y : B.pointer a) :
+  Lemma (x == y \/ M.(loc_disjoint (loc_buffer x) (loc_buffer y)))
+  = 
+    if B.frameOf x = B.frameOf y && B.as_addr x = B.as_addr y then
+       ()
+*)

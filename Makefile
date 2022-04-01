@@ -175,9 +175,10 @@ dist/Makefile.basic: $(ALL_KRML_FILES)
 	  $(filter %.krml,$^) \
 	  -warn-error @4@5@18 \
 	  -fparentheses \
-	  -bundle 'LowStar.*,Prims,Learn.LowStar.Loops,C.Loops' \
-	  -bundle 'FStar.*,Learn.Tactics.*' \
+	  -bundle 'LowStar.*,Prims,Learn.LowStar.Loops,C.Loops,FStar.*' \
+	  -bundle 'Learn.Tactics.*' \
 	  -bundle 'Learn.LowStar.List+Learn.LowStar.List.Impl=Learn.LowStar.List.*'[rename=list] \
+	  -bundle 'Learn.LowStar.Queue+Learn.LowStar.Queue.Impl=Learn.LowStar.Queue.*'[rename=queue] \
 	  -minimal \
 	  -add-include '<stdint.h>' \
 	  -add-include '"krml/internal/target.h"'
@@ -188,4 +189,4 @@ extract:dist/Makefile.basic
 # Compilation
 
 dist/test.exe:extract
-	$(MAKE) -C dist -f Makefile test.exe
+	@$(MAKE) -C dist -f Makefile test.exe
