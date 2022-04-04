@@ -1,6 +1,7 @@
 #include "stdio.h"
 
 #include "list.h"
+#include "queue.h"
 
 typedef Learn_LowStar_List_Data_cell__uint32_t* list;
 
@@ -16,8 +17,8 @@ void print_list(list p) {
 	printf("\n");
 }
 
-int main() {
-	printf ("=== test ===\n");
+void test_list() {
+	printf ("=== test list ===\n");
 	list l = Learn_LowStar_List_Impl_initi_id(2, 6);
 	// 2 3 4 5
 	print_list(l);
@@ -43,5 +44,29 @@ int main() {
 	// 2 7 8 9 4 5
 	print_list(l);
 	Learn_LowStar_List_Impl_free_u32(l);
+}
+
+typedef Learn_LowStar_Queue_Test_cell qcell;
+typedef Learn_LowStar_Queue_Prop_queue_st__Learn_LowStar_Queue_Test_cell* queue;
+
+void test_queue() {
+	printf("=== test queue ===\n");
+	queue q = Learn_LowStar_Queue_Test_malloc();
+	qcell cs[2];
+	cs[0].data_x = 0;
+	cs[1].data_x = 1;
+	Learn_LowStar_Queue_Test_enqueue(cs+0, q);
+	Learn_LowStar_Queue_Test_enqueue(cs+1, q);
+	qcell *x0 =  Learn_LowStar_Queue_Test_dequeue(q);
+	qcell *x1 =  Learn_LowStar_Queue_Test_dequeue(q);
+	// 0 1
+	printf("%u %u\n", x0->data_x, x1->data_x);
+	Learn_LowStar_Queue_Test_free(q);
+}
+
+int main() {
+	test_list();
+	Learn_LowStar_Queue_Test_test_queue_spec();
+	test_queue();
 	return 0;
 }

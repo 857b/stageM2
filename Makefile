@@ -176,7 +176,7 @@ KRML=$(KRML_HOME)/krml
 #
 # See the advanced topics section for an in-depth explanation of how the -bundle
 # option works. We also use -minimal.
-dist/Makefile.basic: $(ALL_KRML_FILES)
+dist/Makefile.basic: $(ALL_KRML_FILES) c/*
 	@mkdir -p $(dir $@)
 	@cp c/* $(dir $@)
 	@echo
@@ -188,7 +188,7 @@ dist/Makefile.basic: $(ALL_KRML_FILES)
 	  -bundle 'LowStar.*,Prims,Learn.LowStar.Loops,C.Loops,FStar.*' \
 	  -bundle 'Learn.Tactics.*' \
 	  -bundle 'Learn.LowStar.List+Learn.LowStar.List.Impl=Learn.LowStar.List.*'[rename=list] \
-	  -bundle 'Learn.LowStar.Queue+Learn.LowStar.Queue.Impl=Learn.LowStar.Queue.*'[rename=queue] \
+	  -bundle 'Learn.LowStar.Queue.Test=Learn.LowStar.Queue,Learn.LowStar.Queue.*'[rename=queue] \
 	  -minimal \
 	  -add-include '<stdint.h>' \
 	  -add-include '"krml/internal/target.h"'

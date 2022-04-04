@@ -22,3 +22,7 @@ let rec mod_of_seq (mod : M.loc) (#h0 #h1 : HS.mem) (sq : mod_seq #mod h0 h1)
     | MNil _ -> ()
     | MCons _ sq -> mod_of_seq mod sq
 #pop-options
+
+let loc_union_comm12 (s0 s1 s2 : M.loc)
+  : Lemma M.(loc_union s0 (loc_union s1 s2) == loc_union s1 (loc_union s0 s2))
+  = M.(loc_union_assoc s0 s1 s2; loc_union_comm s0 s1; loc_union_assoc s1 s0 s2)

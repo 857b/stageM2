@@ -6,7 +6,7 @@ module Tuq = Learn.Tactics.Unsquash
 open FStar.Calc
 open FStar.List.Pure
 
-
+(*
 [@expect_failure]
 let () = assert ((True ==> False) ==> (forall (x : nat) . False))
            by Tuq.(let h = impI () in
@@ -38,7 +38,7 @@ let () = assert (((True ==> False) /\ (forall (x:int) . True)) ==> False)
            by Tuq.(let h = andD1 (impI ()) in
                    let _ = hyp_pair_morph impD allD h in
                    T.qed ())
-
+*)
 
 let test0 (a : Type) (f : a -> prop) (hd : a) (tl : list a) =
   assert (f hd /\ (forall (i:nat{i < length tl}). f (index tl i))
@@ -74,12 +74,22 @@ let test5 (p q : prop) =
     by (Tuq.(lbd_prf (`(_ /\ (_ ==> _) ==> _ /\ _)))
             (`(fun hp hq -> (hp, hq hp))))
 
+(*
 [@expect_failure 228] (* [tl] not found *)
 let test6 (a : Type) (f : a -> prop) (hd : a) (tl : list a) =
    assert ((forall (i:nat{i < length (hd :: tl)}) . f (index (hd :: tl) i))
            ==> f hd /\ (forall (i:nat{i < length tl}). f (index tl i)))
       by (Tuq.(lbd_prf (`((forall i._) ==> _ /\ (forall i._))))
               (`(fun h -> (h 0, (fun (i: nat{i < length tl}) -> h (i + 1))))))
+*)
+
+(* ASSERTION FAILURE 
+let test6' (a : Type) (f : a -> prop) (hd : a) (tl : list a) =
+   assert ((forall (i:nat{i < length (hd :: tl)}) . f (index (hd :: tl) i))
+           ==> f hd /\ (forall (i:nat{i < length tl}). f (index tl i)))
+      by (Tuq.(lbd_prf (`((forall i._) ==> _ /\ (forall i._))))
+              (quote (fun h -> (h 0, (fun (i: nat{b2t(i < length tl)}) -> h (i + 1))))))
+ *)
 
 let test7 (f : nat -> prop) (i : nat) =
   assert ((forall (j:nat) . f j) ==> f i)
@@ -94,6 +104,7 @@ let test8 (p q r : prop) =
     by (Tuq.(lbd_prf (`(_ ==> (_ ==> _ /\ _) ==> _)))
             (`(fun hp hqr  -> (hqr hp)._2)))
 
+(*
 [@expect_failure]
 let test9 (a : Type) (l : list a) : unit
   = match l with
@@ -112,3 +123,4 @@ let test9 (a : Type) (l : list a) : unit
           == {_ by T.(dump "test9.2"; smt (); qed ())} (* KO *)
             hd :: tl;
         }
+*)

@@ -1,5 +1,6 @@
 module Learn.LowStar.List.Prop
 
+module UL  = Learn.LowStar.Util
 module L   = FStar.List.Pure
 module Ll  = Learn.List
 module B   = LowStar.Buffer
@@ -111,10 +112,6 @@ let rec loc_seg_includes_cell (#a : Type) (sg : list_seg a) (i : nat)
           [SMTPat (sg_cell sg i); SMTPat (loc_seg sg)]
   = if i = 0 then () else loc_seg_includes_cell (tail_seg sg) (i - 1)
 
-let loc_union_comm12 (s0 s1 s2 : M.loc)
-  : Lemma M.(loc_union s0 (loc_union s1 s2) == loc_union s1 (loc_union s0 s2))
-  = M.(loc_union_assoc s0 s1 s2; loc_union_comm s0 s1; loc_union_assoc s1 s0 s2)
-
 let loc_seg_fold_f #a (c : B.pointer (cell a) & a) : M.loc -> GTot M.loc
   = M.(loc_union (loc_buffer c._1))
 
@@ -122,7 +119,7 @@ let loc_seg_fold_f_comm a :
   Lemma (ensures Ll.fold_right_gtot_f_comm (loc_seg_fold_f #a))
   = let f = loc_seg_fold_f #a in
     introduce forall x0 x1 y . f x0 (f x1 y) == f x1 (f x0 y)
-      with loc_union_comm12 M.(loc_buffer x0._1) M.(loc_buffer x1._1) y
+      with UL.loc_union_comm12 M.(loc_buffer x0._1) M.(loc_buffer x1._1) y
 
 let rec loc_seg_fold (#a : Type) (sg : list_seg a)
   : Lemma (ensures loc_seg sg == L.fold_right_gtot sg.segment loc_seg_fold_f M.loc_none)
@@ -262,7 +259,7 @@ let rec insert_seg_loc (#a : Type) (i : nat) (x : B.pointer (cell a) & a) (sg : 
   = if i = 0 then ()
     else begin let hd = (L.hd sg.segment)._1 in
          insert_seg_loc (i - 1) x (tail_seg sg);
-         M.(loc_union_comm12 (loc_buffer hd) (loc_buffer x._1) (loc_seg (tail_seg sg)))
+         M.(UL.loc_union_comm12 (loc_buffer hd) (loc_buffer x._1) (loc_seg (tail_seg sg)))
     end
 
 (* [splitAt_seg] *)

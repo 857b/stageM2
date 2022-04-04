@@ -380,3 +380,10 @@ let rec g_for_allP_rev' (#a : Type) (l : list a) (f : a -> GTot Type)
       <==> {}
         g_for_allP (hd :: tl) f;
       }
+
+(* [find_gtot] *)
+
+let rec find_gtot (#a:Type) (f:a -> GTot bool) (l:list a) : GTot (option (x:a{f x})) (decreases l)
+  = match l with
+  | [] -> None
+  | hd :: tl -> if f hd then Some #(x:a{f x}) hd else find_gtot f tl

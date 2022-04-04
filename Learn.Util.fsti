@@ -12,3 +12,5 @@ val prop_equal (#a : Type) (p : a -> Type) (x y : a)
   : Lemma (requires x == y /\ p x) (ensures p y)
 
 val assert_by (p : Type) (prf : unit -> Lemma (ensures p)) : Lemma (ensures p)
+
+unfold let alias (#t : Type) (x : t) : Type = y:t{y == x}
