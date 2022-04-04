@@ -1,6 +1,6 @@
 module Learn.Util
 
-(* TODO: [@opaque_to_smt] *)
+(* TODO? [@opaque_to_smt] *)
 let hide_prop p = p
 
 let hide_propI p = ()

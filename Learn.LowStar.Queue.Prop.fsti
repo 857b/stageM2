@@ -117,6 +117,12 @@ let mod_next_list (#a : Type) (h0 h1 : HS.mem) (cs : cell_list a)
   : GTot prop
   = Ll.g_for_allP cs (mod_next #a h0 h1)
 
+let mod_data (#a : Type) (h0 h1 : HS.mem) (c : B.pointer (cell a)) : GTot prop
+  = B.live h0 c /\ B.live h1 c /\ (B.deref h0 c).next == (B.deref h1 c).next
+
+let mod_data_list (#a : Type) (h0 h1 : HS.mem) (cs : cell_list a)
+  : GTot prop
+  = Ll.g_for_allP cs (mod_data #a h0 h1)
 
 (** Lemmas about the predicates *)
 
@@ -125,12 +131,21 @@ val loc_seg_live_in (#a : Type) (h : HS.mem) (sg : list_seg a)
           (decreases sg.segment)
     [SMTPat (live_seg h sg)]
 
+val live_seg_cell (#a : Type) (h : HS.mem) (sg : list_seg a) (c : B.pointer (cell a))
+  : Lemma (requires  live_seg h sg /\ L.memP c sg.segment)
+          (ensures   B.live h c)
+          (decreases sg.segment)
+
 val frame_seg (#a : Type) (h0 h1 : HS.mem) (sg : list_seg a) (r : B.loc)
   : Lemma (requires live_seg h0 sg /\ M.(modifies r h0 h1 /\ loc_disjoint r (loc_seg sg.segment)))
           (ensures  live_seg h1 sg)
           (decreases sg.segment)
     [SMTPat (live_seg #a h0 sg); SMTPat (M.modifies r h0 h1)]
 
+val frame_seg_mod_data (#a : Type) (h0 h1 : HS.mem) (sg : list_seg a)
+  : Lemma (requires live_seg h0 sg /\ mod_data_list h0 h1 sg.segment)
+          (ensures  live_seg h1 sg)
+          (decreases sg.segment)
 
 let disjoint_mod_next (#a : Type) (h0 h1 : HS.mem) (p : M.loc) (c : B.pointer (cell a))
   : Lemma (requires M.(loc_disjoint (loc_buffer c) p /\ live h0 c /\ modifies p h0 h1))

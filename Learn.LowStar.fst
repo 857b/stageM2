@@ -85,6 +85,12 @@ let test_rt_ghost_caller () : Stack U32.t (fun _ -> True) (fun _ _ _ -> True) =
   (*[@inline_let]*) let (v, gv) = test_rt_ghost_callee () in
   v
 
+let test_ghost_pair () : Stack unit (fun _ -> True) (fun _ _ _ -> True) =
+  push_frame ();
+  let x = B.alloca #(U32.t & G.erased nat) (0ul, G.hide 0) 1ul in
+  x.(0ul) <- (U32.((x.(0ul))._1 +^ 1ul), G.hide 1);
+  pop_frame ()
+
 
 inline_for_extraction
 let test_struct_arg_callee (p : test_struct) : Stack U32.t (fun _ -> True) (fun _ _ _ -> True)
@@ -102,4 +108,19 @@ let pointer_atomicity (#a : Type) (x y : B.pointer a) :
   = 
     if B.frameOf x = B.frameOf y && B.as_addr x = B.as_addr y then
        ()
+
+pointer_distinct_sel_disjoint
+Heap.lemma_sel_same_address
 *)
+
+
+let test_stateful_loop_guard (b : bool) : Stack unit (requires fun _ -> True) (ensures fun _ _ _ -> True)
+  =
+    push_frame ();
+    let x = B.alloca #U32.t 0ul 1ul in
+    let test () : Stack bool (requires fun h -> B.live h x) (ensures fun _ b h -> B.live h x)
+      = x.(0ul) <- 1ul; b
+    in
+    C.Loops.while #(fun h -> B.live h x) #(fun _ h -> B.live h x)
+      test (fun () -> ());
+    pop_frame ()

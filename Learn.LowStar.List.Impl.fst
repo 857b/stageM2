@@ -509,7 +509,7 @@ let insert_loop_loop (#a : Type) (r : HS.rid) (i : U32.t) (x : a)
   : ST unit (requires fun h -> U32.v i > 0 /\ insert_loop_pre r x l_p l_sg (U32.v i) h)
             (ensures fun h0 () h1 -> (insert_loop_post r x l_p l_sg (U32.v i) h0 () h1))
   =
-    LLoops.rec_reverse_for i 1ul
+    LLoops.rec_reverse_for_st i 1ul
            (insert_loop_pre  r x l_p l_sg)
            (insert_loop_post r x l_p l_sg)
            (insert_loop_body r x l_p l_sg)

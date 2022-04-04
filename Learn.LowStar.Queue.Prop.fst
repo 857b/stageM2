@@ -9,10 +9,23 @@ let rec loc_seg_live_in #a h sg =
   | []    -> ()
   | _ :: _ -> loc_seg_live_in h (tail_seg sg)
 
+let rec live_seg_cell #a h sg c =
+  match sg.segment with
+  | [] -> ()
+  | hd :: tl -> eliminate c == hd \/ L.memP c tl
+                returns B.live h c
+                   with pf_hd. ()
+                    and pf_tl. live_seg_cell h (tail_seg sg) c
+
 let rec frame_seg #a h0 h1 sg r =
   match sg.segment with
   | []    -> ()
   | _ :: _ -> frame_seg h0 h1 (tail_seg sg) r
+
+let rec frame_seg_mod_data #a h0 h1 sg =
+  match sg.segment with
+  | []    -> ()
+  | _ :: _ -> frame_seg_mod_data h0 h1 (tail_seg sg)
 
 let rec disjoint_mod_next_seg #a h0 h1 p sg
   = match sg.segment with

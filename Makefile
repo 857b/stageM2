@@ -16,9 +16,9 @@ ifeq (3.81,$(MAKE_VERSION))
     install make, then invoke gmake instead of make)
 endif
 
-.PHONY:all .FORCE check extract
+.PHONY:.FORCE check check_all extract check_hints
 
-all:check
+check:check_all
 
 include Makefile.include
 
@@ -116,7 +116,17 @@ obj:
 	@echo FSTAR $(notdir $@)
 	@$(FSTAR) $< $(FSTAR_FLAGS) && touch -c $@
 
-check:$(ALL_CHECKED_FILES)
+check_all:$(ALL_CHECKED_FILES)
+
+check_hints:
+	@echo "========== Regenerating hints =========="
+	@rm -rf hints
+	@rm -f $(ALL_CHECKED_FILES)
+	@$(MAKE) -f Makefile check
+	@echo
+	@echo "==========   Checking hints   =========="
+	@rm -f $(ALL_CHECKED_FILES)
+	@$(MAKE) -f Makefile OTHERFLAGS=--hint_info check | tee _local/hint_info.txt
 
 # Extraction
 # ----------

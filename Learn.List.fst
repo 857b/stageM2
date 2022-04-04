@@ -73,7 +73,7 @@ let rec for_allP_index (#a : Type) (f : a -> prop) (l : list a)
         for_allP f l;
       <==> {for_allP_index f tl}
         f hd /\ (forall (i:nat{i < length tl}). f (index tl i));
-      <==> {_ by (Tuq.(lbd_prf (iff (And Nop (All Nop)) (All Nop)))
+      <==> {_ by (Tuq.(lbd_prfs (`(_ /\ (forall i._) <==> (forall i._))))
                [(`(fun h_hd h_tl i -> if i = 0 then h_hd else h_tl (i-1)));
                 (`(fun hi -> hi 0));
                 (`(fun hi i -> hi (i+1)))])}
@@ -115,20 +115,6 @@ let rec for_all_opairsP_index (#a : Type) (f : a -> a -> prop) (l : list a)
   = match l with
     | [] -> ()
     | hd :: tl ->
-         introduce
-              (forall (j:nat{j < length tl}). f hd (index tl j))
-           /\ (forall (i j : (x:nat{x < length tl})). i < j ==> f (index tl i) (index tl j))
-           ==>
-              (forall (i j : (x:nat{x < length l})). i < j ==> f (index l i) (index l j))
-         with h. introduce forall (i j : (x:nat{x < length l})). i < j ==> f (index l i) (index l j)
-         with introduce i < j ==> f (index l i) (index l j)
-         with lt.
-              if i = 0
-              then eliminate forall (j':nat{j' < length tl}). f hd (index tl j')
-                        with (j-1)
-              else eliminate forall (i j : (x:nat{x < length tl})). i < j ==> f (index tl i) (index tl j)
-                        with (i-1) (j-1)
-         ;
          calc (<==>) {
            for_all_opairsP f (hd :: tl);
          <==> {}
@@ -136,11 +122,11 @@ let rec for_all_opairsP_index (#a : Type) (f : a -> a -> prop) (l : list a)
          <==> {for_allP_index (f hd) tl; for_all_opairsP_index f tl}
               (forall (j:nat{j < length tl}). f hd (index tl j))
            /\ (forall (i j : (x:nat{x < length tl})). i < j ==> f (index tl i) (index tl j));
-         <==> { }
-              (forall (j:nat{j < length tl}). f (index l 0) (index l (j+1)))
-           /\ (forall (i j : (x:nat{x < length tl})). i < j ==> f (index l (i+1)) (index l (j+1)));
-         <==> {}
-           forall (i j : (x:nat{x < length l})).{:pattern (f (index l i) (index l j))} i < j ==> f (index l i) (index l j);
+         <==> { _ by (Tuq.(lbd_prfs (`((forall j._) /\ (forall i j. _ ==> _) <==> (forall i j. _ ==> _))))
+                        [(`(fun h_hd h_tl i j _ -> if i = 0 then h_hd (j-1) else h_tl (i-1) (j-1) ()));
+                         (`(fun h j -> h 0 (j+1) ()));
+                         (`(fun h i j _ -> h (i+1) (j+1) ()))])}
+           forall (i j : (x:nat{x < length (hd :: tl)})). i < j ==> f (index (hd :: tl) i) (index (hd :: tl) j);
          }
 
 let rec for_all_opairsP_append (#a : Type) (f : a -> a -> prop) (l1 l2 : list a)
@@ -163,13 +149,9 @@ let for_all_opairsP_rev' (#a : Type) (f : a -> a -> prop) (l : list a)
     <==> {introduce forall (i:nat{i < length l}). index (rev' l) i == index l (length l - 1 - i)
              with rev'_index l i}
       forall (i j : (x:nat{x < length l})). i < j ==> f (index l (length l - 1 - i)) (index l (length l - 1 - j));
-    <==> {
-      introduce (forall (i j : (x:nat{x < length l})). i < j ==> f (index l (length l - 1 - i)) (index l (length l - 1 - j)))
-                ==> (forall (i j : (x:nat{x < length l})). i < j ==> f (index l j) (index l i))
-       with h. introduce forall (i j : (x:nat{x < length l})). i < j ==> f (index l j) (index l i)
-       with eliminate forall (i j : (x:nat{x < length l})). i < j ==> f (index l (length l - 1 - i)) (index l (length l - 1 - j))
-                 with (length l - 1 - j) (length l - 1 - i)
-    }
+    <==> {_ by (Tuq.(lbd_prfs (`((forall i j. _ ==> _) <==> (forall i j. _ ==> _))))
+             [(`(fun h i j _ -> h (length (`@l) - 1 - j) (length (`@l) - 1 - i) ()));
+              (`(fun h i j _ -> h (length (`@l) - 1 - j) (length (`@l) - 1 - i) ()))])}
       forall (i j : (x:nat{x < length l})). i < j ==> f (index l j) (index l i);
     <==> { assert_norm(forall x y. flip_f x y == f y x) }
       forall (i j : (x:nat{x < length l})). i < j ==> flip_f (index l i) (index l j);
