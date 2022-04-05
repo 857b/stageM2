@@ -124,3 +124,16 @@ let test_stateful_loop_guard (b : bool) : Stack unit (requires fun _ -> True) (e
     C.Loops.while #(fun h -> B.live h x) #(fun _ h -> B.live h x)
       test (fun () -> ());
     pop_frame ()
+
+
+(* to be extracted with -ftail-calls *)
+(* noextract inline_for_extraction *)
+let rec tail_recursive (acc : U32.t) (i : U32.t) : Stack U32.t (requires fun _ -> True) (ensures fun _ _ _ -> True)
+  =
+    if U32.(i >^ 0ul)
+    then tail_recursive U32.(acc +%^ i) U32.(i -^ 1ul)
+    else acc
+
+let inline_tail_call (i : U32.t) : Stack U32.t (requires fun _ -> True) (ensures fun _ _ _ -> True)
+  =
+    U32.(tail_recursive 0ul i +%^ 1ul)

@@ -16,7 +16,10 @@ let wf_queue #c q l =
 let live_queue    = Prop.live_queue
 let freeable #c q = B.freeable q /\ True
 
-noextract inline_for_extraction let malloc   = Impl.malloc
+noextract inline_for_extraction let malloc #c a r =
+  assert (Prop.loc_seg #c [] == M.loc_none);
+  Impl.malloc #c a r
+
 noextract inline_for_extraction let free     = Impl.free
 noextract inline_for_extraction let is_empty = Impl.is_empty
 

@@ -134,10 +134,10 @@ let rec list_find_rec (#c : Type) (a : queue_param c) (get_next : U.alias a.get_
                     (requires fun h      -> h == h0 /\ B.live h x /\ L.memP x sg.segment)
                     (ensures  fun h b h' -> h' == h /\ b = spec_f x))
    : Stack (cell_ptr c)
-          (requires fun h       -> h == h0 /\ live_seg a h sg /\ p == sg_entry sg)
-          (ensures  fun h rt h' -> h' == h /\
-                                rt == (match Ll.find_gtot spec_f sg.segment with
-                                       | Some p -> p | None -> B.null))
+           (requires fun h       -> h == h0 /\ live_seg a h sg /\ p == sg_entry sg)
+           (ensures  fun h rt h' -> h' == h /\
+                                 rt == (match Ll.find_gtot spec_f sg.segment with
+                                        | Some p -> p | None -> B.null))
    =
      if B.is_null (sgn_entry a p sg) then B.null
      else begin
@@ -145,6 +145,13 @@ let rec list_find_rec (#c : Type) (a : queue_param c) (get_next : U.alias a.get_
        if f p then p
        else list_find_rec a get_next (sg_next a get_next p (G.reveal sg)) (G.reveal tl) h0 spec_f f
      end
+
+[@@"opaque_to_smt"]
+unfold
+let all_disjoint_live (h:HS.mem) (l:list M.buf_t) : prop =
+  BigOps.big_and #M.buf_t (fun (|_,_,_, b|) -> M.live h b) l /\
+  BigOps.pairwise_and #M.buf_t (fun (|_,_,_, b|) (|_,_,_, b'|) ->
+                                  M.(loc_disjoint (loc_buffer b) (loc_buffer b'))) l
 
 #push-options "--z3rlimit 20"
 inline_for_extraction
@@ -157,10 +164,10 @@ let list_find_loop (#c : Type) (a : queue_param c) (get_next : U.alias a.get_nex
                     (requires fun h -> M.(modifies loc_none h0 h) /\ B.live h x /\ L.memP x sg0.segment)
                     (ensures  fun h b h' -> M.(modifies loc_none h h') /\ b = spec_f x))
    : Stack (cell_ptr c)
-          (requires fun h       -> h == h0 /\ live_seg a h sg0 /\ p == sg_entry sg0)
-          (ensures  fun h rt h' -> M.(modifies loc_none h h') /\
-                                rt == (match Ll.find_gtot spec_f sg0.segment with
-                                       | Some p -> p | None -> B.null))
+           (requires fun h       -> h == h0 /\ live_seg a h sg0 /\ p == sg_entry sg0)
+           (ensures  fun h rt h' -> M.(modifies loc_none h h') /\
+                                 rt == (match Ll.find_gtot spec_f sg0.segment with
+                                        | Some p -> p | None -> B.null))
    =
      push_frame ();
        let h0' = ST.get () in
@@ -170,6 +177,7 @@ let list_find_loop (#c : Type) (a : queue_param c) (get_next : U.alias a.get_nex
      let pre h1 : prop =
          M.(let (p, sg) = deref h1 it in
          modifies loc_none h0 h1 /\
+         (*all_disjoint_live h1 M.([buf it; buf rt]) /\*)
          live h1 it /\ live h1 rt /\
          live_seg a h1 (deref h1 it)._2 /\
          loc_disjoint (loc_buffer it) (loc_seg sg.segment) /\
