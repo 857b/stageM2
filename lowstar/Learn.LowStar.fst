@@ -70,7 +70,7 @@ let buffer_copy_rec (#a : Type)
 
 let buffer_copy_uint32 = buffer_copy_rec #U32.t
 
-
+inline_for_extraction
 type test_struct = { fld_a : U32.t; fld_b : U32.t }
 
 let test_set_field (x : B.pointer test_struct)
@@ -100,6 +100,8 @@ let test_struct_arg_caller () : Stack U32.t (fun _ -> True) (fun _ _ _ -> True)
   = [@inline_let]let p = {fld_a = 0ul; fld_b = 1ul} in
     test_struct_arg_callee p
 
+let test_struct_arg () : Stack U32.t (fun _ -> True) (fun _ _ _ -> True)
+  = ({fld_a = 0ul; fld_b = 1ul}).fld_a
 
 
 (*
@@ -137,3 +139,18 @@ let rec tail_recursive (acc : U32.t) (i : U32.t) : Stack U32.t (requires fun _ -
 let inline_tail_call (i : U32.t) : Stack U32.t (requires fun _ -> True) (ensures fun _ _ _ -> True)
   =
     U32.(tail_recursive 0ul i +%^ 1ul)
+
+
+(* ---------- *)
+
+inline_for_extraction
+let ret_buf () : Stack bool (fun _ -> True) (fun _ _ _ -> True) =
+  push_frame ();
+  let b = B.alloca #bool true 1ul in
+  (* ... *)
+  let rt = b.(0ul) in
+  pop_frame ();
+  rt
+
+let ret_buf_caller () : Stack bool (fun _ -> True) (fun _ _ _ -> True) =
+  ret_buf ()

@@ -56,7 +56,6 @@ let is_empty (#c : Type) (a : queue_param c) (q : queue c) (l : G.erased (cell_l
 
 inline_for_extraction
 let enqueue (#c : Type) (a : queue_param c)
-  (get_next : U.alias a.get_next) (set_next : U.alias a.set_next)
   (x : B.pointer c) (q : queue c) (l : G.erased (cell_list c))
   : Stack  unit
           (requires fun h0       -> wf_queue q l /\ live_queue a h0 q l /\
@@ -69,7 +68,7 @@ let enqueue (#c : Type) (a : queue_param c)
       open_queue_param a;
       let h0 = ST.get () in
       let sg = G.hide (sg_of_cells l) in
-    x.(0ul) <- set_next (x.(0ul)) B.null;
+    x.(0ul) <- a.set_next (x.(0ul)) B.null;
     if B.is_null (sg_last a (q.(0ul)).q_entry sg) then begin
       q.(0ul) <- {q_exit = x; q_entry = x};
         let _ = sg_mksglt a x B.null in ()
@@ -80,7 +79,7 @@ let enqueue (#c : Type) (a : queue_param c)
         let tl = (sg_uncons a tls)._1 in
         assert (loc_seg tls.segment == B.loc_buffer tl);
         assert (loc_seg sg.segment  == M.(loc_union (loc_seg ini.segment) (B.loc_buffer tl)));
-      (q.(0ul)).q_entry.(0ul) <- set_next (q.(0ul)).q_entry.(0ul) x;
+      (q.(0ul)).q_entry.(0ul) <- a.set_next (q.(0ul)).q_entry.(0ul) x;
       q.(0ul) <- {q.(0ul) with q_entry = x};
         let h1 = ST.get () in
         let sg' = sg_mkapp a ini (sg_mkcons a tl (sg_mksglt a x B.null)) in
@@ -99,7 +98,7 @@ let enqueue (#c : Type) (a : queue_param c)
 (* [dequeue] *)
 
 inline_for_extraction
-let dequeue (#c : Type) (a : queue_param c) (get_next : U.alias a.get_next)
+let dequeue (#c : Type) (a : queue_param c)
             (q : queue c) (l : G.erased (cell_list c))
   : Stack (B.pointer c)
           (requires fun h0       -> wf_queue q l /\ live_queue a h0 q l /\
@@ -114,7 +113,7 @@ let dequeue (#c : Type) (a : queue_param c) (get_next : U.alias a.get_next)
       let sg = G.hide (sg_of_cells l) in
       let hd,sg' = sg_uncons a sg in
     let rt = (q.(0ul)).q_exit in
-    q.(0ul) <- { q.(0ul) with q_exit = sg_next a get_next rt sg };
+    q.(0ul) <- { q.(0ul) with q_exit = sg_next a rt sg };
     if B.is_null (sgn_entry a (q.(0ul)).q_exit (G.reveal sg')) then
       q.(0ul) <- { q.(0ul) with q_entry = B.null };
       let h1 = ST.get () in G.hide(
@@ -125,7 +124,7 @@ let dequeue (#c : Type) (a : queue_param c) (get_next : U.alias a.get_next)
 (* [find] *)
 
 inline_for_extraction
-let rec list_find_rec (#c : Type) (a : queue_param c) (get_next : U.alias a.get_next)
+let rec list_find_rec (#c : Type) (a : queue_param c)
          (p : cell_ptr c) (sg : G.erased (list_nil c))
          (h0 : HS.mem) (* needed to specify [f] *)
          (spec_f : (x : B.pointer c -> GTot bool))
@@ -143,7 +142,7 @@ let rec list_find_rec (#c : Type) (a : queue_param c) (get_next : U.alias a.get_
      else begin
          let tl = (sg_uncons a (G.reveal sg))._2 in
        if f p then p
-       else list_find_rec a get_next (sg_next a get_next p (G.reveal sg)) (G.reveal tl) h0 spec_f f
+       else list_find_rec a (sg_next a p (G.reveal sg)) (G.reveal tl) h0 spec_f f
      end
 
 [@@"opaque_to_smt"]
@@ -155,7 +154,7 @@ let all_disjoint_live (h:HS.mem) (l:list M.buf_t) : prop =
 
 #push-options "--z3rlimit 20"
 inline_for_extraction
-let list_find_loop (#c : Type) (a : queue_param c) (get_next : U.alias a.get_next)
+let list_find_loop (#c : Type) (a : queue_param c)
          (p : cell_ptr c) (sg0 : G.erased (list_nil c))
          (h0  : HS.mem)
          (spec_f : (x : B.pointer c -> GTot bool))
@@ -210,7 +209,7 @@ let list_find_loop (#c : Type) (a : queue_param c) (get_next : U.alias a.get_nex
            rt.(0ul) <- (it.(0ul))._1;
            it.(0ul) <- (B.null, G.hide (empty_list c))
          end else begin
-           it.(0ul) <- (sg_next a get_next (it.(0ul))._1 (G.hide (G.reveal sg)), (G.hide (G.reveal tl)))
+           it.(0ul) <- (sg_next a (it.(0ul))._1 (G.hide (G.reveal sg)), (G.hide (G.reveal tl)))
          end;
            let h2 = ST.get () in
            assert M.(modifies lloc h0 h2);
@@ -224,7 +223,7 @@ let list_find_loop (#c : Type) (a : queue_param c) (get_next : U.alias a.get_nex
 #pop-options
 
 inline_for_extraction
-let find (#c : Type) (a : queue_param c) (get_next : U.alias a.get_next)
+let find (#c : Type) (a : queue_param c)
          (q : queue c) (l : G.erased (cell_list c))
          (h0  : HS.mem)
          (spec_f : (x : B.pointer c -> GTot bool))
@@ -237,4 +236,4 @@ let find (#c : Type) (a : queue_param c) (get_next : U.alias a.get_next)
           (ensures  fun h rt h' -> M.(modifies loc_none h h') /\
                                 rt == (match Ll.find_gtot spec_f l with
                                        | Some p -> p | None -> B.null))
-  = list_find_loop a get_next ((q.(0ul)).q_exit) (sg_of_cells l) h0 spec_f f
+  = list_find_loop a ((q.(0ul)).q_exit) (sg_of_cells l) h0 spec_f f

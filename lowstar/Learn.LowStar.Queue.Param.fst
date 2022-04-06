@@ -11,7 +11,8 @@ type cell_ptr (c : Type) = B.pointer_or_null c
 
 type cell_list (c : Type) = list (B.pointer c)
 
-noeq type queue_param (c : Type) = {
+noeq inline_for_extraction
+type queue_param (c : Type) = {
   get_next : c -> cell_ptr c;
   set_next : c -> cell_ptr c -> c;
   mod_next : c -> c -> prop;

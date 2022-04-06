@@ -17,22 +17,22 @@ let live_queue    = Prop.live_queue
 let freeable #c q = B.freeable q /\ True
 
 noextract inline_for_extraction let malloc #c a r =
-  assert (Prop.loc_seg #c [] == M.loc_none);
+  (**) assert (Prop.loc_seg #c [] == M.loc_none);
   Impl.malloc #c a r
 
 noextract inline_for_extraction let free     = Impl.free
 noextract inline_for_extraction let is_empty = Impl.is_empty
 
-noextract inline_for_extraction let enqueue #c a get_next set_next x q l =
-  Impl.enqueue #c a get_next set_next x q l;
-  let l' = L.snoc (G.reveal l,x) in
-  Prop.append_seg_wf l [x];
-  Prop.append_seg_loc l [x];
-  M.loc_union_assoc (M.loc_addr_of_buffer q) (Prop.loc_seg l) (Prop.loc_seg [x])
+noextract inline_for_extraction let enqueue #c a x q l =
+  Impl.enqueue #c a x q l;
+  (**) let l' = L.snoc (G.reveal l,x) in
+  (**) Prop.append_seg_wf l [x];
+  (**) Prop.append_seg_loc l [x];
+  (**) M.loc_union_assoc (M.loc_addr_of_buffer q) (Prop.loc_seg l) (Prop.loc_seg [x])
 
-noextract inline_for_extraction let dequeue #c a get_next q l =
-  let rt = Impl.dequeue #c a get_next q l in
-  UL.loc_union_comm12 (M.loc_addr_of_buffer q) (M.loc_buffer rt) (Prop.loc_seg (L.tl l));
+noextract inline_for_extraction let dequeue #c a q l =
+  let rt = Impl.dequeue #c a q l in
+  (**) UL.loc_union_comm12 (M.loc_addr_of_buffer q) (M.loc_buffer rt) (Prop.loc_seg (L.tl l));
   rt
 
 noextract inline_for_extraction let find     = Impl.find

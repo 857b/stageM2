@@ -1,6 +1,5 @@
 module Learn.LowStar.Queue.Prop
 
-module U   = Learn.Util
 module L   = FStar.List.Pure
 module Ll  = Learn.List
 module B   = LowStar.Buffer
@@ -292,7 +291,7 @@ let sg_last (#c : Type) (a : queue_param c) (p : cell_ptr c) (sg : G.erased (lis
     p
 
 inline_for_extraction
-val sg_next (#c : Type) (a : queue_param c) (get_next : U.alias a.get_next)
+val sg_next (#c : Type) (a : queue_param c)
             (p : cell_ptr c) (sg : G.erased (list_seg c))
   : Stack (cell_ptr c)
           (requires fun h0       -> live_seg a h0 sg /\ p == sg_entry sg /\ Cons? sg.segment)

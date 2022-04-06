@@ -8,6 +8,9 @@ val hide_propI_by (p : prop) (prf : unit -> Lemma (ensures p)) : Lemma (ensures 
 
 val hide_propD (p : prop) : Lemma (requires hide_prop p) (ensures p)
 
+val f_equal (#a #b : Type) (f : a -> b) (x y : a)
+  : Lemma (requires x == y) (ensures f x == f y)
+
 val prop_equal (#a : Type) (p : a -> Type) (x y : a)
   : Lemma (requires x == y /\ p x) (ensures p y)
 

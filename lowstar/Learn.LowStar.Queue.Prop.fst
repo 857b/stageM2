@@ -68,4 +68,4 @@ inline_for_extraction
 let sgn_entry #c a p sg = p
 
 inline_for_extraction
-let sg_next #c a get_next p sg = get_next (p.(0ul))
+let sg_next #c a p sg = a.get_next (p.(0ul))

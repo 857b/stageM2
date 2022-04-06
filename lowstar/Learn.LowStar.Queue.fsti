@@ -2,7 +2,6 @@ module Learn.LowStar.Queue
 
 include Learn.LowStar.Queue.Param
 
-module U   = Learn.Util
 module L   = FStar.List.Pure
 module Ll  = Learn.List
 module B   = LowStar.Buffer
@@ -51,7 +50,7 @@ val is_empty (#c : Type) (a : queue_param c) (q : queue c) (l : G.erased (cell_l
           (ensures  fun h b h' -> h' == h /\ b = Nil? l)
 
 noextract inline_for_extraction
-val enqueue (#c : Type) (a : queue_param c) (get_next : U.alias a.get_next) (set_next : U.alias a.set_next)
+val enqueue (#c : Type) (a : queue_param c)
             (x : B.pointer c) (q : queue c) (l : G.erased (cell_list c))
   : Stack  unit
           (requires fun h0       -> wf_queue q l /\ live_queue a h0 q l /\
@@ -65,7 +64,7 @@ val enqueue (#c : Type) (a : queue_param c) (get_next : U.alias a.get_next) (set
                                  M.(loc_queue q l' == loc_union (loc_queue q l) (loc_buffer x))))
 
 noextract inline_for_extraction
-val dequeue (#c : Type) (a : queue_param c) (get_next : U.alias a.get_next)
+val dequeue (#c : Type) (a : queue_param c)
             (q : queue c) (l : G.erased (cell_list c))
   : Stack (B.pointer c)
           (requires fun h0       -> wf_queue q l /\ live_queue a h0 q l /\
@@ -80,7 +79,7 @@ val dequeue (#c : Type) (a : queue_param c) (get_next : U.alias a.get_next)
                                     loc_disjoint (loc_buffer rt) (loc_queue q l'))))
 
 noextract inline_for_extraction
-val find (#c : Type) (a : queue_param c) (get_next : U.alias a.get_next)
+val find (#c : Type) (a : queue_param c)
          (q : queue c) (l : G.erased (cell_list c))
          (h0  : HS.mem)
          (spec_f : (x : B.pointer c -> GTot bool))
