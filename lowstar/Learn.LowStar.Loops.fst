@@ -24,7 +24,7 @@ let reverse_for (start:U32.t) (finish:U32.t{U32.v finish <= U32.v start})
                 (fun h i -> i <= U32.(v start - v finish) /\ inv h (U32.v start - i))
                 (fun i -> f U32.(start -^ i))
   
-
+(* TODO: version Stack *)
 (* [tail_rec_post h1 post1 post0] expresses the fact that a tail-recursive call (in the exit state [h1] of the
    current step) establish (with its post-condition [post1]) the post-condition [post0] of the current step. *)
 

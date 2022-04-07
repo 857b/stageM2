@@ -45,7 +45,7 @@ FSTAR_EXTRACT = #--extract 'OCaml:-* +Spec'
 # - --cache_dir, to avoid polluting our generated build artifacts outside o
 FSTAR_NO_FLAGS = $(FSTAR_HOME)/bin/fstar.exe $(FSTAR_HINTS) \
   --odir obj --cache_checked_modules $(FSTAR_INCLUDES) --cmi \
-  --already_cached 'Prims FStar LowStar C Spec.Loops TestLib WasmSupport' --warn_error '+241@247+285' \
+  --already_cached 'Prims FStar LowStar C Spec.Loops TestLib WasmSupport Steel' --warn_error '+241@247+285' \
   --cache_dir obj --hint_dir hints
 
 # Initial dependency analysis
@@ -73,6 +73,8 @@ ifndef MAKE_RESTARTS
 endif
 
 include .depend
+
+ALL_KRML_FILES := $(filter-out $(IGNORE_KRML_FILES), $(ALL_KRML_FILES))
 
 # Verification
 # ------------
@@ -185,7 +187,7 @@ dist/Makefile.basic: $(ALL_KRML_FILES) c/*
 	  $(filter %.krml,$^) \
 	  -warn-error @4@5@18 \
 	  -fparentheses \
-	  -bundle 'LowStar.*,Prims,Learn.LowStar.Loops,C.Loops,FStar.*' \
+	  -bundle 'LowStar.*,Prims,Learn.LowStar.Loops,C.Loops,FStar.*,Steel.*' \
 	  -bundle 'Learn.Tactics.*' \
 	  -bundle 'Learn.LowStar.List+Learn.LowStar.List.Impl=Learn.LowStar.List.*'[rename=list] \
 	  -bundle 'Learn.LowStar.Queue.Test=Learn.LowStar.Queue,Learn.LowStar.Queue.*'[rename=queue] \

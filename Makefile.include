@@ -8,8 +8,9 @@ ifeq (,$(KRML_HOME))
   $(error KRML_HOME is not defined)
 endif
 
-SOURCE_DIRS = $(PROJECT_HOME)/pure/\
-			  $(PROJECT_HOME)/lowstar/
+SOURCE_DIRS = $(PROJECT_HOME)/pure/ \
+			  $(PROJECT_HOME)/lowstar/ \
+			  $(PROJECT_HOME)/steel/
 
 INCLUDE_DIRS = \
   $(SOURCE_DIRS) \
@@ -18,6 +19,10 @@ INCLUDE_DIRS = \
   $(KRML_HOME)/krmllib/obj \
   $(PROJECT_HOME)/obj
 
+IGNORE_KRML_FILES=\
+	obj/FStar_NMST.krml \
+	obj/Steel_Effect.krml \
+	obj/Steel_Effect_Atomic.krml
 
 FSTAR_INCLUDES = $(addprefix --include ,$(INCLUDE_DIRS))
 
