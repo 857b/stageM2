@@ -178,6 +178,9 @@ KRML=$(KRML_HOME)/krml
 #
 # See the advanced topics section for an in-depth explanation of how the -bundle
 # option works. We also use -minimal.
+
+NOEXTRACT='LowStar.*,Prims,Learn.LowStar.Loops,C.Loops,FStar.*,Steel.*,Learn.Steel.Util,Learn.Tactics.*'
+
 dist/Makefile.basic: $(ALL_KRML_FILES) c/*
 	@mkdir -p $(dir $@)
 	@cp c/* $(dir $@)
@@ -187,10 +190,10 @@ dist/Makefile.basic: $(ALL_KRML_FILES) c/*
 	  $(filter %.krml,$^) \
 	  -warn-error @4@5@18 \
 	  -fparentheses \
-	  -bundle 'LowStar.*,Prims,Learn.LowStar.Loops,C.Loops,FStar.*,Steel.*' \
-	  -bundle 'Learn.Tactics.*' \
+	  -bundle $(NOEXTRACT)\
 	  -bundle 'Learn.LowStar.List+Learn.LowStar.List.Impl=Learn.LowStar.List.*'[rename=list] \
 	  -bundle 'Learn.LowStar.Queue.Test=Learn.LowStar.Queue,Learn.LowStar.Queue.*'[rename=queue] \
+	  -bundle 'Learn.Steel.List.Impl=Learn.Steel.List.*'[rename=list_steel] \
 	  -minimal \
 	  -add-include '<stdint.h>' \
 	  -add-include '"krml/internal/target.h"'

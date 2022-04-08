@@ -21,8 +21,7 @@ INCLUDE_DIRS = \
 
 IGNORE_KRML_FILES=\
 	obj/FStar_NMST.krml \
-	obj/Steel_Effect.krml \
-	obj/Steel_Effect_Atomic.krml
+	obj/Steel_%.krml
 
 FSTAR_INCLUDES = $(addprefix --include ,$(INCLUDE_DIRS))
 

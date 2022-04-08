@@ -1,9 +1,9 @@
 module Learn.Steel.List.Data
 
-module L = FStar.List.Pure
-module G = FStar.Ghost
-module M = Steel.Memory
-module U = Learn.Util
+module L  = FStar.List.Pure
+module G  = FStar.Ghost
+module M  = Steel.Memory
+module US = Learn.Steel.Util
 open Steel.Memory
 open Steel.Effect
 open Steel.Effect.Atomic
@@ -84,15 +84,6 @@ let mlist_sel_S (#a : Type) (entry : ref (cell a)) (len : nat) (exit : ref (cell
     mlist_sel_def #a entry (len+1) exit m
 
 
-let pts_to_ref_injective_and
-      (#a:Type u#0) (r:ref a)
-      (p:perm)   (v0 v1:a) (m:mem)
-  : Lemma
-    (requires interp (pts_to_sl r p v0) m /\ interp (pts_to_sl r p v1) m)
-    (ensures  v0 == v1)
-  = pts_to_witinv r p;
-    M.elim_wi (pts_to_sl r p) v0 v1 m
-
 let rec mlist_sel_depends_only_on (#a : Type) entry len exit
         (m0 : M.hmem (mlist_sl #a entry len exit)) (m1 : M.mem{disjoint m0 m1})
   : Lemma (ensures mlist_sel' entry len exit m0 == mlist_sel' entry len exit (join m0 m1))
@@ -103,7 +94,7 @@ let rec mlist_sel_depends_only_on (#a : Type) entry len exit
       mlist_sl_def entry len exit;
       let c0 = G.reveal (M.id_elim_exists (mcell_sl entry (len - 1) exit) m0)           in
       let c1 = G.reveal (M.id_elim_exists (mcell_sl entry (len - 1) exit) (join m0 m1)) in
-      pts_to_ref_injective_and entry full_perm c0 c1 (join m0 m1);
+      US.pts_to_ref_injective_and entry full_perm c0 c1 (join m0 m1);
       calc (==) {
         mlist_sel' entry len exit m0;
       == {mlist_sel_def entry len exit m0}
@@ -125,7 +116,7 @@ let rec mlist_sel_depends_only_on_core(#a : Type) entry len exit
       mlist_sl_def entry len exit;
       let c0 = G.reveal (M.id_elim_exists (mcell_sl entry (len - 1) exit) m0)            in
       let c1 = G.reveal (M.id_elim_exists (mcell_sl entry (len - 1) exit) (core_mem m0)) in
-      pts_to_ref_injective_and entry full_perm c0 c1 (core_mem m0);
+      US.pts_to_ref_injective_and entry full_perm c0 c1 (core_mem m0);
       calc (==) {
         mlist_sel' entry len exit m0;
       == {mlist_sel_def entry len exit m0}
@@ -194,7 +185,7 @@ let intro_mlist_cons_lem (#a : Type) (r0 r1 : ref (cell a)) (x : a) (len : nat) 
     let c = {next = r1; data = x} in
     assert (interp (pts_to_sl r0 full_perm c) m);
     let c' = G.reveal (M.id_elim_exists (mcell_sl r0 len exit) m) in
-    pts_to_ref_injective_and r0 full_perm c c' m;
+    US.pts_to_ref_injective_and r0 full_perm c c' m;
     mlist_sel_S r0 len exit m
 #pop-options
 
@@ -259,6 +250,7 @@ let elim_mlist_cons (#a : Type) #opened (r0 : ref (cell a)) (len : nat) (exit : 
      (requires fun _ -> True)
      (ensures  fun h0 r1 h1 ->
       (let l = sel_list r0 (len+1) exit h0 in
+       G.reveal r1 == sg_entry (L.tl l) exit /\
        sel r0 h1 == {next = r1; data = (L.hd l)._2} /\
        sel_list r1 len exit h1 == L.tl l))
   =
