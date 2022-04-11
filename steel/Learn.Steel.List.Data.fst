@@ -10,8 +10,6 @@ open Steel.Effect.Atomic
 open Steel.FractionalPermission
 open Steel.Reference
 
-open Learn.Steel.List.DataD
-
 #set-options "--fuel 1 --ifuel 0 --ide_id_info_off"
 
 (* Separation logic predicate *)

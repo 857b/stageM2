@@ -154,3 +154,11 @@ let ret_buf () : Stack bool (fun _ -> True) (fun _ _ _ -> True) =
 
 let ret_buf_caller () : Stack bool (fun _ -> True) (fun _ _ _ -> True) =
   ret_buf ()
+
+(* ----------- *)
+
+let rec f_call_u32 (a : Type) (x : a) (b:bool) : Stack unit (fun _ -> True) (fun _ _ _ -> True) =
+  if b then f_call_u32 U32.t 0ul false
+
+let f_call_u32_caller () : Stack unit (fun _ -> True) (fun _ _ _ -> True) =
+  f_call_u32 bool false true

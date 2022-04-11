@@ -10,7 +10,6 @@ open Steel.Effect.Atomic
 open Steel.FractionalPermission
 open Steel.Reference
 
-open Learn.Steel.List.DataD
 open Learn.Steel.List.Data
 
 
@@ -88,21 +87,26 @@ let rec intro_mlist_append #a #opened r0 (len0 : nat) r1 (len1 : nat) r2
       (fun () -> mlist #a r0 (len0+len1) r2)
       (requires fun _ -> True)
       (ensures  fun h0 () h1 ->
-        sel_list r0 (len0+len1) r2 h1 == L.(sel_list r0 len0 r1 h0 @ sel_list r1 len1 r2 h0))
+          sel_list r0 (len0+len1) r2 h1 == L.(sel_list r0 len0 r1 h0 @ sel_list r1 len1 r2 h0))
       (decreases len0)
   =
+    let h0 = get () in
     if len0 = 0
     then begin
         mlist_rew_len r0 len0 0 r1;
       elim_mlist_nil r0 r1;
-      change_equal_slprop (mlist r1 len1 r2) (mlist r0 (len0+len1) r2)
+      change_equal_slprop (mlist r1 len1 r2) (mlist r0 (len0+len1) r2);
+      let h1 = get () in
+      assert (sel_list r0 (len0+len1) r2 h1 == L.(sel_list r0 len0 r1 h0 @ sel_list r1 len1 r2 h0))
     end else begin
       let len0' = len0 - 1 in
         mlist_rew_len r0 len0 (len0'+1) r1;
       let r0' = elim_mlist_cons r0 len0' r1 in
       intro_mlist_append r0' len0' r1 len1 r2;
       intro_mlist_cons r0 r0' (len0'+len1) r2;
-        mlist_rew_len r0 ((len0'+len1)+1) (len0+len1) r2
+        mlist_rew_len r0 ((len0'+len1)+1) (len0+len1) r2;
+      let h1 = get () in
+      assert (sel_list r0 (len0+len1) r2 h1 == L.(sel_list r0 len0 r1 h0 @ sel_list r1 len1 r2 h0))
     end
 
 let rec elim_mlist_append #a #opened r0 (len len0 len1 : nat) r2 (l0 l1 : list (ref (cell a) & a))
@@ -117,6 +121,16 @@ let rec elim_mlist_append #a #opened r0 (len len0 len1 : nat) r2 (l0 l1 : list (
         sel_list r1 len1 r2 h1 == l1)
       (decreases len0)
   =
+    let h0 = get () in
+    calc (==) {
+      len;
+    == {}
+      L.length (sel_list r0 len r2 h0);
+    == {}
+      L.(length (l0@l1));
+    == {}
+      len0 + len1;
+    };
     if len0 = 0
     then begin
       intro_mlist_nil r0;
@@ -124,11 +138,12 @@ let rec elim_mlist_append #a #opened r0 (len len0 len1 : nat) r2 (l0 l1 : list (
       change_equal_slprop (mlist r0 len r2) (mlist r0 len1 r2);
       r0
     end else begin
+      let hd0 :: tl0 = l0 in
       let len'  = len  - 1 in
       let len0' = len0 - 1 in
         mlist_rew_len r0 len (len'+1) r2;
       let r0' = elim_mlist_cons r0 len' r2 in
-      let r1  = elim_mlist_append r0' len' len0' len1 r2 (L.tl l0) l1 in
+      let r1  = elim_mlist_append r0' len' len0' len1 r2 tl0 l1 in
       intro_mlist_cons r0 r0' len0' r1;
         mlist_rew_len r0 (len0'+1) len0 r1;
       r1
@@ -138,7 +153,7 @@ let rec elim_mlist_append #a #opened r0 (len len0 len1 : nat) r2 (l0 l1 : list (
 (* [mlistN] *)
 
 type mlistN_sel_t (#a : Type) (entry : ref (cell a)) =
-  l : list (ref (cell a) & a) {sg_entry l null == entry}
+  l : list (ref (cell a) & a) {entry == sg_entry l null}
 
 val mlistN_sl (#a : Type0) (entry : ref (cell a)) : slprop u#1
 
@@ -177,13 +192,6 @@ let intro_mlistN_nil #a #opened (r0 : ref (cell a))
     intro_mlist_nil #a null;
     intro_mlistN #a null 0;
     change_equal_slprop (mlistN #a null) (mlistN #a r0)
-
-(* TODO: use? *)
-let slabsurd (#a : Type) (#opened:inames) (#p : vprop) (#q : a -> vprop) ()
-  : SteelGhost a opened p q (requires fun _ -> False) (ensures fun _ _ _ -> True)
-  = let rt : a = () in
-    change_equal_slprop p (q rt);
-    rt
 
 let elim_mlistN_nil #a #opened r0
   : SteelGhost unit opened

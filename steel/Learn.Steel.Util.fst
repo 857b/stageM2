@@ -6,6 +6,7 @@ module Mem = Steel.Memory
 open Steel.Memory
 open Steel.Effect.Common
 open Steel.Effect.Atomic
+open Steel.Effect
 open FStar.Classical.Sugar
 open Steel.FractionalPermission
 open Steel.Reference
@@ -21,17 +22,17 @@ let pts_to_ref_injective_and
   = pts_to_witinv r p;
     Mem.elim_wi (pts_to_sl r p) v0 v1 m
 
-let return_ghost (#a:Type u#a) (#opened:inames)
-  (#p:a -> vprop)
-  (x:a)
-  : SteelGhostBase a true opened Unobservable
-         (return_pre (p x)) p
-         (return_req (p x)) (return_ens a x p)
-  = SteelGhostBase?.reflect (return_ a x opened #p)
-
 let noop_p (#opened) (p : vprop)
   : SteelGhost unit opened p (fun () -> p) (fun _ -> True) (fun h0 () h1 -> frame_equalities p h0 h1)
   = noop ()
+
+(* TODO: use? *)
+let slabsurd (#a : Type) (#opened:inames) (#p : vprop) (#q : a -> vprop) ()
+  : SteelGhost a opened p q (requires fun _ -> False) (ensures fun _ _ _ -> False)
+  = let rt : a = () in
+    change_equal_slprop p (q rt);
+    rt
+
 
 (* [vexists] *)
 (* TODO? $args *)
@@ -208,3 +209,83 @@ let witness_vexists (#a : Type) #opened (v : a -> vprop)
     let x : G.erased a = witness_exists () in
     elim_vrefine (v x) (rfn x);
     x
+
+
+(* [aptr] : abstract references *)
+
+inline_for_extraction noextract noeq
+type aptr' (t : Type) = {
+  vp : vprop;
+  of_sel  : normal (t_of vp) -> GTot t;
+  set_sel : normal (t_of vp) -> (x : t) ->
+            Ghost (normal (t_of vp)) (requires True) (ensures fun rt -> of_sel rt == x);
+  read  : unit -> Steel t vp (fun _ -> vp) (requires fun _ -> True)
+                     (ensures fun h0 x h1 -> frame_equalities vp h0 h1 /\ x == of_sel (h0 vp));
+  write : (x : t) -> Steel unit vp (fun _ -> vp) (requires fun _ -> True)
+                     (ensures fun h0 () h1 -> h1 vp == set_sel (h0 vp) x)
+}
+
+inline_for_extraction noextract
+type aptr (t : Type) = p:aptr' t {
+     (forall (s : normal (t_of p.vp)) (x0 x1 : t) . {:pattern (p.set_sel (p.set_sel s x0) x1)}
+        p.set_sel (p.set_sel s x0) x1 == p.set_sel s x1) /\
+     (forall (s : normal (t_of p.vp)) . {:pattern (p.set_sel s (p.of_sel s))}
+        p.set_sel s (p.of_sel s) == s)
+  }
+
+[@@ __steel_reduce__]
+let sel_aptr (#t:Type) (#p:vprop) (x:aptr t)
+  (h:rmem p{FStar.Tactics.with_tactic selector_tactic (can_be_split p (x.vp) /\ True)})
+  : GTot (normal (t_of x.vp))
+  = h x.vp
+
+[@@ __steel_reduce__]
+let aptr_val (#t:Type) (#p:vprop) (x:aptr t)
+  (h:rmem p{FStar.Tactics.with_tactic selector_tactic (can_be_split p (x.vp) /\ True)})
+  : GTot t
+  = x.of_sel (h x.vp)
+
+[@@ __steel_reduce__]
+let aptr_updt (#t:Type) (#p #q:vprop) (x:aptr t) (v:t)
+  (h0:rmem p{FStar.Tactics.with_tactic selector_tactic (can_be_split p (x.vp) /\ True)})
+  (h1:rmem q{FStar.Tactics.with_tactic selector_tactic (can_be_split q (x.vp) /\ True)})
+  : prop
+  = h1 x.vp == x.set_sel (h0 x.vp) v
+
+
+[@@ __steel_reduce__]
+inline_for_extraction noextract
+let aptr_of_vptr (#t : Type) (r : ref t) : Tot (aptr t) = {
+  vp      = vptr r;
+  of_sel  = (fun x   -> (x <: t));
+  set_sel = (fun _ x -> x);
+  read    = (fun () -> read r);
+  write   = (fun x  -> write r x)
+}
+
+
+inline_for_extraction noextract noeq
+type get_set_t' (c t : Type) = {
+  get : c -> Tot t;
+  set : c -> t -> Tot c;
+}
+
+inline_for_extraction noextract
+type get_set_t (c t : Type) = p:get_set_t' c t {
+     (forall (s : c) (x : t) . {:pattern (p.get (p.set s x))}
+        p.get (p.set s x) == x) /\
+     (forall (s : c) (x0 x1 : t) . {:pattern (p.set (p.set s x0) x1)}
+        p.set (p.set s x0) x1 == p.set s x1) /\
+      (forall (s : c) . {:pattern (p.set s (p.get s))}
+        p.set s (p.get s) == s)
+  }
+
+[@@ __steel_reduce__]
+inline_for_extraction noextract
+let aptr_of_get_set (#c #t : Type) ($p : get_set_t c t) (r : ref c) : Tot (aptr t) = {
+  vp      = vptr r;
+  of_sel  = (fun x   -> p.get x);
+  set_sel = (fun s x -> p.set s x);
+  read    = (fun () -> let s = read r in p.get s);
+  write   = (fun x  -> let s = read r in write r (p.set s x))
+}

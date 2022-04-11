@@ -128,7 +128,7 @@ check_hints:
 	@echo
 	@echo "==========   Checking hints   =========="
 	@rm -f $(ALL_CHECKED_FILES)
-	@$(MAKE) -f Makefile OTHERFLAGS=--hint_info check | tee _local/hint_info.txt
+	@($(MAKE) -f Makefile OTHERFLAGS=--hint_info check 2>&1) | tee _local/hint_info.txt
 
 # Extraction
 # ----------

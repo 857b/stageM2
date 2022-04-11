@@ -1,8 +1,9 @@
 module Learn.Steel.List.Data
 
-module L = FStar.List.Pure
-module M = Steel.Memory
-module G = FStar.Ghost
+module L  = FStar.List.Pure
+module M  = Steel.Memory
+module G  = FStar.Ghost
+module US = Learn.Steel.Util
 
 open Steel.Memory
 open Steel.Effect
@@ -10,7 +11,20 @@ open Steel.Effect.Atomic
 open Steel.FractionalPermission
 open Steel.Reference
 
-open Learn.Steel.List.DataD
+
+#push-options "--__no_positivity"
+noeq
+type cell (a: Type0) = {
+  next: ref (cell a);
+  data: a;
+}
+#pop-options
+
+inline_for_extraction noextract
+let cell_gs_next (#a : Type) : US.get_set_t (cell a) (ref (cell a)) = {
+  get = (fun c -> c.next);
+  set = (fun c x -> {c with next = x})
+}
 
 
 (* Separation logic predicate *)
@@ -33,7 +47,7 @@ val __end_sg_entry : unit
 
 
 type mlist_sel_t (#a : Type) (entry : ref (cell a)) (len : nat) (exit : ref (cell a)) =
-  l : list (ref (cell a) & a){L.length l = len /\ sg_entry l exit == entry}
+  l : list (ref (cell a) & a){len = L.length l /\ entry == sg_entry l exit}
 
 val mlist_sel (#a : Type) (entry : ref (cell a)) (len : nat) (exit : ref (cell a))
   : selector (mlist_sel_t entry len exit) (mlist_sl #a entry len exit)
