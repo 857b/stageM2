@@ -33,6 +33,14 @@ let slabsurd (#a : Type) (#opened:inames) (#p : vprop) (#q : a -> vprop) ()
     change_equal_slprop p (q rt);
     rt
 
+let rewrite_vprop #opened (#p #q : vprop) ($rw : squash (p == q))
+  : SteelGhost unit opened p (fun _ -> q)
+               (requires fun _ -> True)
+               (ensures fun h0 () h1 -> h1 q == h0 p)
+  = change_equal_slprop p q
+
+let eq_sym (#a : Type) (#x #y : a) ($p : squash (x == y)) : squash (y == x) = ()
+
 
 (* [pure] with a selector that gives a squash of the proposition *)
 

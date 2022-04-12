@@ -4,6 +4,7 @@ module US  = Learn.Steel.Util
 module Mem = Steel.Memory
 open Steel.Effect.Common
 open Steel.Effect
+open Steel.FractionalPermission
 open Steel.Reference
 
 
@@ -62,3 +63,26 @@ let g_data (#q:vprop) (p:list_param) (x:ref p.r)
   (h:rmem q{FStar.Tactics.with_tactic selector_tactic (can_be_split q (p.cell x).vp /\ True)})
   : GTot ((p.cell x).data_t)
   = (p.cell x).get_data (h (p.cell x).vp)
+
+
+inline_for_extraction noextract
+let list_param_of_vptr (c data_t : Type)
+    (gs_next : US.get_set_t c (ref c)) (get_data : c -> data_t)
+  : Pure list_param
+    (requires forall (s : c) (x:ref c) . {:pattern (get_data (gs_next.set s x))}
+                get_data (gs_next.set s x) == get_data s)
+    (ensures fun _ -> True)
+  = {
+    r    = c;
+    cell = (fun (r : ref c) -> {
+              vp = vptr r;
+              data_t;
+              get_next = gs_next.get;
+              set_next = (fun s x -> gs_next.set s x);
+              get_data;
+              read_next  = (fun () -> let s = read r in gs_next.get s);
+              write_next = (fun x  -> let s = read r in write r (gs_next.set s x))
+           });
+    nnull = (fun r m -> ptrp_sel_interp r full_perm m;
+                     pts_to_not_null r full_perm (ptrp_sel r full_perm m) m)
+  }

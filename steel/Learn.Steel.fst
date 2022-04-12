@@ -1,6 +1,8 @@
 module Learn.Steel
 
+module L   = FStar.List.Pure
 module U32 = FStar.UInt32
+module Mem = Steel.Memory
 
 open Steel.Effect.Atomic
 open Steel.Effect
@@ -137,3 +139,43 @@ let test_set_ptr_caller () : SteelT unit emp (fun () -> emp)
       assert (i == {fld_a = 42ul; fld_b = false});
     free x;
     free ys
+
+(* ----------------------- *)
+(*
+assume
+val int_sl ([@@@smt_fallback] n:int) : vprop
+
+assume val int_f (n:int) : SteelT unit (int_sl n) (fun _ -> int_sl n)
+
+let test_subcomp_dep (n:int) : SteelT unit (int_sl n) (fun _ -> int_sl n) =
+  int_f (n - 1 + 1);
+  int_f n
+
+
+assume
+val int_sl (n : nat) : Mem.slprop u#1
+
+type int_sel_t (n : nat) : Type
+  = m : nat { m <= n }
+
+assume
+val int_sel (n : nat)
+  : selector (int_sel_t n) (int_sl n)
+
+[@@__steel_reduce__]
+let vint' ([@@@smt_fallback] n : nat) : vprop' =
+  {
+    hp  = int_sl    n;
+    t   = int_sel_t n;
+    sel = int_sel   n
+  }
+
+unfold let vint ([@@@smt_fallback] n : nat) : vprop =
+  VUnit (vint' n)
+
+let test_smt_fallback (n:nat)
+  : SteelT unit (vint n) (fun _ -> vint (n+1-1))
+  = noop ()
+  
+  //change_equal_slprop (vint n) (vint (n+1-1))
+*)
