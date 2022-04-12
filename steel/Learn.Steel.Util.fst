@@ -34,6 +34,24 @@ let slabsurd (#a : Type) (#opened:inames) (#p : vprop) (#q : a -> vprop) ()
     rt
 
 
+(* [pure] with a selector that gives a squash of the proposition *)
+
+let pure (p : prop) : vprop
+  = vrefine emp (fun _ -> p)
+
+let intro_pure_lem (p : prop) (m : mem)
+  : Lemma (requires p) (ensures interp (hp_of (pure p)) m)
+  =
+    Mem.intro_emp m;
+    reveal_emp ();
+    interp_vrefine_hp emp (fun _ -> p) m
+
+let elim_pure_lem (p : prop) (m : mem)
+  : Lemma (requires Mem.interp (hp_of (pure p)) m) (ensures p)
+  =
+    interp_vrefine_hp emp (fun _ -> p) m
+
+
 (* [vexists] *)
 (* TODO? $args *)
 
@@ -215,14 +233,14 @@ let witness_vexists (#a : Type) #opened (v : a -> vprop)
 
 inline_for_extraction noextract noeq
 type aptr' (t : Type) = {
-  vp : vprop;
+  vp      : vprop;
   of_sel  : normal (t_of vp) -> GTot t;
   set_sel : normal (t_of vp) -> (x : t) ->
             Ghost (normal (t_of vp)) (requires True) (ensures fun rt -> of_sel rt == x);
-  read  : unit -> Steel t vp (fun _ -> vp) (requires fun _ -> True)
-                     (ensures fun h0 x h1 -> frame_equalities vp h0 h1 /\ x == of_sel (h0 vp));
-  write : (x : t) -> Steel unit vp (fun _ -> vp) (requires fun _ -> True)
-                     (ensures fun h0 () h1 -> h1 vp == set_sel (h0 vp) x)
+  read    : unit -> Steel t vp (fun _ -> vp) (requires fun _ -> True)
+                   (ensures fun h0 x h1 -> frame_equalities vp h0 h1 /\ x == of_sel (h0 vp));
+  write   : (x : t) -> Steel unit vp (fun _ -> vp) (requires fun _ -> True)
+                   (ensures fun h0 () h1 -> h1 vp == set_sel (h0 vp) x)
 }
 
 inline_for_extraction noextract
