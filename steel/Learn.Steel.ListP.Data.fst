@@ -93,6 +93,7 @@ let mlist_eq0 (p : list_param) (entry : ref p.r) (len : nat) (exit : ref p.r)
   = let VUnit _ = mlist0 p entry len exit in ()
 
 (* intro/elim lemmas *)
+(* Here those lemmas are typed with mlist0, but in the interface, we expose mlist (which is equal) *)
 
 let intro_mlist_nil_lem (p : list_param) (r0 : ref p.r) (m : Mem.mem)
   : Lemma (ensures Mem.interp (hp_of (mlist0 p r0 0 r0)) m /\

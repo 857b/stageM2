@@ -194,7 +194,8 @@ dist/Makefile.basic: $(ALL_KRML_FILES) c/*
 	  -bundle 'Learn.LowStar.List+Learn.LowStar.List.Impl=Learn.LowStar.List.*'[rename=list] \
 	  -bundle 'Learn.LowStar.Queue.Test=Learn.LowStar.Queue,Learn.LowStar.Queue.*'[rename=queue] \
 	  -bundle 'Learn.Steel.List.Impl=Learn.Steel.List.*'[rename=list_steel] \
-	  -bundle 'Learn.Steel.ListP.Impl=Learn.Steel.ListP.*'[rename=list_param] \
+	  -bundle 'Learn.Steel.ListP.Test=Learn.Steel.ListP.*'[rename=list_param] \
+	  -bundle 'Learn.Steel.QueueP.Test=Learn.Steel.QueueP.*'[rename=queue_steel] \
 	  -minimal \
 	  -add-include '<stdint.h>' \
 	  -add-include '"krml/internal/target.h"'

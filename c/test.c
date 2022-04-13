@@ -2,6 +2,7 @@
 
 #include "list.h"
 #include "queue.h"
+#include "queue_steel.h"
 
 typedef Learn_LowStar_List_Data_cell__uint32_t* list;
 
@@ -65,8 +66,9 @@ void test_queue() {
 }
 
 int main() {
-	test_list();
-	Learn_LowStar_Queue_Test_test_queue_spec();
-	test_queue();
+	//test_list();
+	//Learn_LowStar_Queue_Test_test_queue_spec();
+	//test_queue();
+	Learn_Steel_QueueP_Test_test_p0();
 	return 0;
 }

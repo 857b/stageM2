@@ -105,7 +105,6 @@ let entry_not_null #opened p entry len exit
     extract_info_raw (mlist p entry len exit) (is_null entry == false)
                      (entry_not_null_lem p entry len exit)
 
-
 (** Intro/Elim for [mlist]*)
 
 let intro_mlist_nil #opened (p : list_param) (r0 : ref p.r)
@@ -316,9 +315,37 @@ let mlistN_entry_null_iff #opened (p : list_param) entry
     | [] -> US.noop_p (mlistN p entry)
     | hd :: tl ->
       let r1 = elim_mlistN_cons p entry hd tl in
-      extract_info_raw (p.cell entry).vp (is_null entry == false) (p.nnull entry);
+      list_cell_not_null p entry;
       intro_mlistN_cons p entry r1
 
+let rec mlist_cells_not_null #opened p entry len exit
+  : SteelGhost unit opened
+      (mlist p entry len exit) (fun () -> mlist p entry len exit)
+      (requires fun _ -> True)
+      (ensures fun h0 () h1 -> frame_equalities (mlist p entry len exit) h0 h1 /\
+         L.for_all #(cell_t p) (fun c -> not (is_null c._1)) (sel_list p entry len exit h0))
+      (decreases len)
+  =
+    if len = 0 then noop ()
+    else begin
+      let len' = len - 1 in
+      mlist_rew_len p entry len (len'+1) exit;
+      let entry' = elim_mlist_cons p entry len' exit in
+      list_cell_not_null p entry;
+      mlist_cells_not_null p entry' len' exit;
+      intro_mlist_cons p entry entry' len' exit;
+      mlist_rew_len p entry (len'+1) len exit
+    end
+
+let mlistN_cells_not_null #opened p entry
+  : SteelGhost unit opened
+      (mlistN p entry) (fun () -> mlistN p entry)
+      (requires fun _ -> True)
+      (ensures fun h0 () h1 -> frame_equalities (mlistN p entry) h0 h1 /\
+         L.for_all #(cell_t p) (fun c -> not (is_null c._1)) (sel_listN p entry h0))
+  = let len = elim_mlistN p entry in
+    mlist_cells_not_null p entry len null;
+    intro_mlistN p entry len
 
 (*** non-ghost functions *)
 
@@ -342,11 +369,9 @@ let list_next (p : list_param) (r0 : ref p.r) (len : G.erased nat) (exit : G.era
           (mlist p r0 (len + 1) exit) (fun r1 -> (p.cell r0).vp `star` mlist p r1 len exit)
           (requires fun _ -> True)
           (ensures  fun h0 r1 h1 ->
-                   (let l = sel_list p r0 (len+1) exit h0 in
-                    r1 == sg_entry (L.tl l) exit /\
-                    g_next p r0 h1 == r1 /\
-                    g_data p r0 h1 == (L.hd l)._2 /\
-                    sel_list p r1 len exit h1 == L.tl l))
+                    let l1 = sel_list p r1 len exit h1 in
+                    sel_list p r0 (len + 1) exit h0 == (|r0, g_data p r0 h1|) :: l1 /\
+                    g_next p r0 h1 == r1)
   =
     (**) let g_r1 : G.erased (ref p.r) = elim_mlist_cons p r0 len exit in
     let nxt = (p.cell r0).read_next () in
@@ -360,12 +385,9 @@ let listN_next (p : list_param) (r0 : ref p.r)
           (mlistN p r0) (fun r1 -> (p.cell r0).vp `star` mlistN p r1)
           (requires fun h0       -> Cons? (sel_listN p r0 h0))
           (ensures  fun h0 r1 h1 ->
-                   (let l = sel_listN p r0 h0 in 
-                    Cons? l /\ (* ?need to recall the requires *)
-                    r1 == sg_entry (L.tl l) null /\
-                    g_next p r0 h1 == r1 /\
-                    g_data p r0 h1 == (L.hd l)._2 /\
-                    sel_listN p r1 h1 == L.tl l))
+                    let l1 = sel_listN p r1 h1 in
+                    sel_listN p r0 h0 == (|r0, g_data p r0 h1|) :: l1 /\
+                    g_next p r0 h1 == r1)
   = 
     (**) let l : G.erased (mlistN_sel_t p r0) = gget (mlistN p r0) in
     (**) let g_r1 = elim_mlistN_cons p r0 (L.hd l) (L.tl l) in

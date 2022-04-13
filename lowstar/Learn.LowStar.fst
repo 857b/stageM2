@@ -75,7 +75,8 @@ type test_struct = { fld_a : U32.t; fld_b : U32.t }
 
 let test_set_field (x : B.pointer test_struct)
   : Stack unit (fun h -> B.live h x) (fun _ _ _ -> True) =
-  x *= { !*x with fld_a = 1ul }
+  let xv = x.(0ul) in
+  x.(0ul) <- { xv with fld_a = 1ul }
 
 
 let test_rt_ghost_callee () : Stack (U32.t & G.erased U32.t) (fun _ -> True) (fun _ _ _ -> True) =

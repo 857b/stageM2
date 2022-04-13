@@ -4,6 +4,7 @@ module US  = Learn.Steel.Util
 module Mem = Steel.Memory
 open Steel.Effect.Common
 open Steel.Effect
+open Steel.Effect.Atomic
 open Steel.FractionalPermission
 open Steel.Reference
 
@@ -63,6 +64,13 @@ let g_data (#q:vprop) (p:list_param) (x:ref p.r)
   (h:rmem q{FStar.Tactics.with_tactic selector_tactic (can_be_split q (p.cell x).vp /\ True)})
   : GTot ((p.cell x).data_t)
   = (p.cell x).get_data (h (p.cell x).vp)
+
+let list_cell_not_null #opened (p : list_param) (x:ref p.r)
+  : SteelGhost unit opened (p.cell x).vp (fun () -> (p.cell x).vp)
+              (requires fun _ -> True)
+              (ensures fun h0 () h1 -> frame_equalities (p.cell x).vp h0 h1 /\
+                                    is_null x = false)
+  = extract_info_raw (p.cell x).vp (is_null x == false) (p.nnull x)
 
 
 inline_for_extraction noextract

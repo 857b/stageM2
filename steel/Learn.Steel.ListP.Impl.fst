@@ -54,11 +54,6 @@ let reverse_inv (p : list_param) (trg : list (cell_t p)) (it_f it_r : ref (ref p
   vrefine ((vptr it_f `star` vptr it_r) `vdep` reverse_inv_vp1 p)
           (reverse_inv_ref p trg b)
 
-let reverse_inv_def (p : list_param) (trg : list (cell_t p)) (it_f it_r : ref (ref p.r)) (b : G.erased bool)
-  : squash (reverse_inv p trg it_f it_r b ==
-            vrefine ((vptr it_f `star` vptr it_r) `vdep` reverse_inv_vp1 p) (reverse_inv_ref p trg b))
-  = ()
-
 let intro_reverse_inv #opened (p : list_param) trg it_f it_r (b : G.erased bool) (r_f r_r : ref p.r)
   : SteelGhost unit opened
               (vptr it_f `star` vptr it_r `star` mlistN p r_f `star` mlistN p r_r)
@@ -98,11 +93,11 @@ let elim_reverse_inv_vp1 #opened (p : list_param) (rs : ref p.r & ref p.r) (r_f 
                (ensures fun h0 () h1 -> rs == (r_f, r_r) /\
                                      h0 (reverse_inv_vp1 p rs) == (sel_listN p r_f h1, sel_listN p r_r h1))
   =
-    change_equal_slprop (reverse_inv_vp1 p rs) (reverse_inv_vp1 p rs); (*TODO: why is it necessary?*)
+    noop (); (*TODO: why is it necessary? ALT:noop_p*)
     change_equal_slprop (reverse_inv_vp1 p rs)
                         (mlistN p r_f `star` mlistN p r_r)
 
-inline_for_extraction noextract
+inline_for_extraction
 let reverse_loop_cond (p : list_param) (trg : G.erased (list (cell_t p))) it_f it_r ()
   : SteelT bool (h_exists (reverse_inv p trg it_f it_r)) (fun b -> reverse_inv p trg it_f it_r b)
   =
@@ -118,7 +113,7 @@ let reverse_loop_cond (p : list_param) (trg : G.erased (list (cell_t p))) it_f i
     (**) intro_reverse_inv p trg it_f it_r (not (is_null r_f)) r_f gr_r;
     return (not (is_null r_f))
 
-inline_for_extraction noextract
+inline_for_extraction
 let reverse_loop_body (p : list_param) (trg : G.erased (list (cell_t p))) (it_f it_r : ref (ref p.r)) ()
   : SteelT unit (reverse_inv p trg it_f it_r true)
                 (fun () -> h_exists (reverse_inv p trg it_f it_r))
@@ -136,7 +131,7 @@ let reverse_loop_body (p : list_param) (trg : G.erased (list (cell_t p))) (it_f 
     (**) intro_reverse_inv p trg it_f it_r (not (is_null r_f')) r_f' r_f;
     (**) intro_exists (G.hide (not (is_null r_f'))) (reverse_inv p trg it_f it_r)
 
-inline_for_extraction noextract
+inline_for_extraction
 let reverse (p : list_param) (r : ref p.r)
   : Steel (ref p.r)
           (mlistN p r) (fun rt -> mlistN p rt)
@@ -160,36 +155,3 @@ let reverse (p : list_param) (r : ref p.r)
     free it_f;
     free it_r;
     r_r
-
-(* ------------------------------------------------- *)
-
-#push-options "--__no_positivity"
-noeq
-type cell = {
-  next: ref cell;
-  data_x: U32.t;
-  data_y: bool
-}
-#pop-options
-
-inline_for_extraction noextract
-let p : list_param =
-  list_param_of_vptr cell (U32.t & bool)
-    ({get = (fun c -> c.next); set = (fun c x -> {c with next = x})})
-    (fun c   -> (c.data_x, c.data_y))
-
-let rec p_length (r : ref cell)
-  : Steel  U32.t
-          (mlistN p r) (fun _ -> mlistN p r)
-          (requires fun h0        -> L.length (sel_listN p r h0) <= FStar.UInt.max_int U32.n)
-          (ensures  fun h0 len h1 -> frame_equalities (mlistN p r) h0 h1 /\
-                                  U32.v len = L.length (sel_listN p r h0))
-  = length_body p p_length r
-
-noextract
-let p_reverse (r : ref cell)
-  : Steel (ref cell)
-          (mlistN p r) (fun rt -> mlistN p rt)
-          (requires fun _ -> True)
-          (ensures fun h0 rt h1 -> sel_listN p rt h1 == L.rev (sel_listN p r h0))
-  = reverse p r
