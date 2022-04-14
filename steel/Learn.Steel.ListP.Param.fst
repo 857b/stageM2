@@ -53,24 +53,34 @@ let aptr_next (p : list_param) (x : ref p.r) : US.aptr (ref p.r) = {
   write   = (p.cell x).write_next
 }
 
+unfold let vcell (p:list_param) (x:ref p.r)
+  : vprop
+  = (p.cell x).vp
+
 [@@ __steel_reduce__]
 let g_next (#q:vprop) (p:list_param) (x:ref p.r)
-  (h:rmem q{FStar.Tactics.with_tactic selector_tactic (can_be_split q (p.cell x).vp /\ True)})
+  (h:rmem q{FStar.Tactics.with_tactic selector_tactic (can_be_split q (vcell p x) /\ True)})
   : GTot (ref p.r)
-  = (p.cell x).get_next (h (p.cell x).vp)
+  = (p.cell x).get_next (h (vcell p x))
 
 [@@ __steel_reduce__]
 let g_data (#q:vprop) (p:list_param) (x:ref p.r)
-  (h:rmem q{FStar.Tactics.with_tactic selector_tactic (can_be_split q (p.cell x).vp /\ True)})
+  (h:rmem q{FStar.Tactics.with_tactic selector_tactic (can_be_split q (vcell p x) /\ True)})
   : GTot ((p.cell x).data_t)
-  = (p.cell x).get_data (h (p.cell x).vp)
+  = (p.cell x).get_data (h (vcell p x))
+
+[@@ __steel_reduce__]
+let g_cell (#q:vprop) (p:list_param) (x:ref p.r)
+  (h:rmem q{FStar.Tactics.with_tactic selector_tactic (can_be_split q (vcell p x) /\ True)})
+  : GTot (cell_t p)
+  = (|x, g_data p x h|)
 
 let list_cell_not_null #opened (p : list_param) (x:ref p.r)
-  : SteelGhost unit opened (p.cell x).vp (fun () -> (p.cell x).vp)
+  : SteelGhost unit opened (vcell p x) (fun () -> (vcell p x))
               (requires fun _ -> True)
-              (ensures fun h0 () h1 -> frame_equalities (p.cell x).vp h0 h1 /\
+              (ensures fun h0 () h1 -> frame_equalities (vcell p x) h0 h1 /\
                                     is_null x = false)
-  = extract_info_raw (p.cell x).vp (is_null x == false) (p.nnull x)
+  = extract_info_raw (vcell p x) (is_null x == false) (p.nnull x)
 
 
 inline_for_extraction noextract
@@ -94,3 +104,39 @@ let list_param_of_vptr (c data_t : Type)
     nnull = (fun r m -> ptrp_sel_interp r full_perm m;
                      pts_to_not_null r full_perm (ptrp_sel r full_perm m) m)
   }
+
+
+(* extending the vprop of a list_param *)
+
+let extend_list_param_vp1 (#r : Type) (p : list_param_r r) (ext : p.data_t -> vprop) (x : t_of (p.vp))
+  : vprop
+  = ext (p.get_data x)
+
+inline_for_extraction noextract
+let extend_list_param_r (r : Type) (p : list_param_r r) (ext : p.data_t -> vprop) : list_param_r r = {
+  vp         = p.vp `vdep` extend_list_param_vp1 p ext;
+  data_t     = x:p.data_t & (t_of (ext x));
+  get_next   = (fun (|x, y|) -> p.get_next x);
+  set_next   = (fun (|x, y|) nxt -> (|p.set_next x nxt, y|));
+  get_data   = (fun (|x, y|) -> (|p.get_data x, y|));
+  read_next  = (fun () ->
+                  (**) let sl = elim_vdep p.vp (extend_list_param_vp1 p ext) in
+                  let rt = p.read_next () in
+                  (**) intro_vdep p.vp (ext (p.get_data sl)) (extend_list_param_vp1 p ext);
+                  return rt);
+  write_next = (fun nxt ->
+                  (**) let sl = elim_vdep p.vp (extend_list_param_vp1 p ext) in
+                  p.write_next nxt;
+                  (**) intro_vdep p.vp (ext (p.get_data sl)) (extend_list_param_vp1 p ext));
+}
+
+inline_for_extraction noextract
+let extend_list_param (p : list_param) (ext : (r:ref p.r) -> (p.cell r).data_t -> vprop) : list_param = {
+  r     = p.r;
+  cell  = (fun (x : ref p.r) -> extend_list_param_r p.r (p.cell x) (ext x));
+  nnull = (fun (x : ref p.r) (m : Mem.mem) ->
+             interp_vdep_hp (p.cell x).vp (extend_list_param_vp1 (p.cell x) (ext x)) m;
+             p.nnull x m)
+}
+
+(* TODO: intro / elim *)

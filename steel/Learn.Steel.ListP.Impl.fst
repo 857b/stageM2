@@ -22,6 +22,7 @@ open Learn.Steel.ListP.Derived
 let length_ty (p : list_param) : Type = (r : ref p.r) ->
   Steel  U32.t
         (mlistN p r) (fun _ -> mlistN p r)
+        (* TODO? move as ==> in ensures *)
         (requires fun h0        -> L.length (sel_listN p r h0) <= FStar.UInt.max_int U32.n)
         (ensures  fun h0 len h1 -> frame_equalities (mlistN p r) h0 h1 /\
                                 U32.v len = L.length (sel_listN p r h0))
@@ -93,7 +94,7 @@ let elim_reverse_inv_vp1 #opened (p : list_param) (rs : ref p.r & ref p.r) (r_f 
                (ensures fun h0 () h1 -> rs == (r_f, r_r) /\
                                      h0 (reverse_inv_vp1 p rs) == (sel_listN p r_f h1, sel_listN p r_r h1))
   =
-    noop (); (*TODO: why is it necessary? ALT:noop_p*)
+    noop ();
     change_equal_slprop (reverse_inv_vp1 p rs)
                         (mlistN p r_f `star` mlistN p r_r)
 

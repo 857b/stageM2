@@ -1,6 +1,7 @@
 module Learn.Steel.ListP.Derived
 
 module L  = FStar.List.Pure
+module Ll = Learn.List
 module G  = FStar.Ghost
 module US = Learn.Steel.Util
 module Mem=Steel.Memory
@@ -126,13 +127,13 @@ let elim_mlist_nil #opened (p : list_param)(r0 r1 : ref p.r)
 
 let intro_mlist_cons #opened (p : list_param) (r0 r1 : ref p.r) (len : nat) (exit : ref p.r)
   : SteelGhost unit opened
-     ((p.cell r0).vp `star` mlist p r1 len exit)
+     (vcell p r0 `star` mlist p r1 len exit)
      (fun () -> mlist p r0 (len + 1) exit)
      (requires fun h0       -> g_next p r0 h0 == r1)
      (ensures  fun h0 () h1 -> sel_list p r0 (len + 1) exit h1
-                            == (|r0, g_data p r0 h0|) :: sel_list p r1 len exit h0)
+                            == g_cell p r0 h0 :: sel_list p r1 len exit h0)
   = change_slprop_rel_with_cond
-      ((p.cell r0).vp `star` mlist p r1 len exit) (mlist p r0 (len + 1) exit)
+      (vcell p r0 `star` mlist p r1 len exit) (mlist p r0 (len + 1) exit)
       (fun (c, _) -> (p.cell r0).get_next c == r1)
       (fun (c, l0) l1 -> l1 == (|r0, (p.cell r0).get_data c|) :: (l0 <: mlist_sel_t p r1 len exit))
       (intro_mlist_cons_lem p r0 r1 len exit)
@@ -140,22 +141,20 @@ let intro_mlist_cons #opened (p : list_param) (r0 r1 : ref p.r) (len : nat) (exi
 let elim_mlist_cons #opened (p : list_param) (r0 : ref p.r) (len : nat) (exit : ref p.r)
   : SteelGhost (G.erased (ref p.r)) opened
      (mlist p r0 (len + 1) exit)
-     (fun r1 -> (p.cell r0).vp `star` mlist p r1 len exit)
+     (fun r1 -> vcell p r0 `star` mlist p r1 len exit)
      (requires fun _ -> True)
      (ensures  fun h0 r1 h1 ->
-      (let l  = sel_list p r0 (len+1) exit h0 in
-       G.reveal r1 == sg_entry (L.tl l) exit /\
-       g_next p r0 h1 == G.reveal r1 /\
-       g_data p r0 h1 == (L.hd l)._2 /\
-       sel_list p r1 len exit h1 == L.tl l))
+       sel_list p r0 (len + 1) exit h0
+         == g_cell p r0 h1 :: sel_list p r1 len exit h1 /\
+       g_next p r0 h1 == G.reveal r1)
   =
     let (l : G.erased (mlist_sel_t p r0 (len+1) exit)) = gget (mlist p r0 (len+1) exit) in
     let hd :: tl = G.reveal l in
     let r1 = sg_entry tl exit in
     change_slprop_rel_with_cond
-      (mlist p r0 (len + 1) exit) ((p.cell r0).vp `star` mlist p r1 len exit)
+      (mlist p r0 (len + 1) exit) (vcell p r0 `star` mlist p r1 len exit)
       (fun l0 -> l0 == hd :: tl)
-      (fun l0 (c0, l1) ->
+      (fun _ (c0, l1) ->
         (p.cell r0).get_next c0 == r1 /\
         (p.cell r0).get_data c0 == hd._2 /\
         l1 == tl)
@@ -165,7 +164,7 @@ let elim_mlist_cons #opened (p : list_param) (r0 : ref p.r) (len : nat) (exit : 
 
 let intro_mlist_sglt #opened p r0 exit
   : SteelGhost unit opened
-      (p.cell r0).vp (fun () -> mlist p r0 1 exit)
+      (vcell p r0) (fun () -> mlist p r0 1 exit)
       (requires fun h0       -> g_next p r0 h0 == exit)
       (ensures  fun h0 () h1 -> sel_list p r0 1 exit h1 == [(|r0, g_data p r0 h0|)])
   =
@@ -187,7 +186,6 @@ let intro_mlistN_nil #opened (p : list_param) (r0 : ref p.r)
 let elim_mlistN_nil #opened (p : list_param) r0
   : SteelGhost unit opened
       (mlistN p r0) (fun () -> emp)
-      (* ?requires sel == [], ensures r0 == null *)
       (requires fun _ -> r0 == null) (ensures fun h0 () _ -> sel_listN p r0 h0 == [])
   = let len = elim_mlistN p r0 in
     if len > 0 then entry_not_null p r0 len null else noop ();
@@ -196,11 +194,11 @@ let elim_mlistN_nil #opened (p : list_param) r0
 
 let intro_mlistN_cons #opened (p : list_param) r0 r1
   : SteelGhost unit opened
-     ((p.cell r0).vp `star` mlistN p r1)
+     (vcell p r0 `star` mlistN p r1)
      (fun () -> mlistN p r0)
      (requires fun h0       -> g_next p r0 h0 == r1)
      (ensures  fun h0 () h1 -> sel_listN p r0 h1
-                            == (|r0, g_data p r0 h0|) :: sel_listN p r1 h0)
+                            == g_cell p r0 h0 :: sel_listN p r1 h0)
   = let len = elim_mlistN p r1 in
     intro_mlist_cons p r0 r1 len null;
     intro_mlistN p r0 (len+1)
@@ -208,7 +206,7 @@ let intro_mlistN_cons #opened (p : list_param) r0 r1
 let elim_mlistN_cons #opened (p : list_param) r0 hd tl
   : SteelGhost (G.erased (ref p.r)) opened
      (mlistN p r0)
-     (fun r1 -> (p.cell r0).vp `star` mlistN p r1)
+     (fun r1 -> vcell p r0 `star` mlistN p r1)
      (requires fun h0 -> sel_listN p r0 h0 == hd :: tl)
      (ensures  fun h0 r1 h1 ->
        r0 == hd._1 /\
@@ -225,8 +223,8 @@ let elim_mlistN_cons #opened (p : list_param) r0 hd tl
 
 (** append *)
 
-#push-options "--z3rlimit 10 --fuel 2 --ifuel 1" (* LONG *)
-let rec intro_mlist_append #opened p r0 (len0 : nat) r1 (len1 : nat) r2
+val intro_mlist_append (#opened:Mem.inames) (p : list_param)
+                       (r0 : ref p.r) (len0 : nat) (r1 : ref p.r) (len1 : nat) (r2 : ref p.r)
   : SteelGhost unit opened
       (mlist p r0 len0 r1 `star` mlist p r1 len1 r2)
       (fun () -> mlist p r0 (len0+len1) r2)
@@ -234,34 +232,9 @@ let rec intro_mlist_append #opened p r0 (len0 : nat) r1 (len1 : nat) r2
       (ensures  fun h0 () h1 ->
           sel_list p r0 (len0+len1) r2 h1 == L.(sel_list p r0 len0 r1 h0 @ sel_list p r1 len1 r2 h0))
       (decreases len0)
-  =
-    let h0 = get () in
-    if len0 = 0
-    then begin
-        mlist_rew_len p r0 len0 0 r1;
-      elim_mlist_nil p r0 r1;
-      change_equal_slprop (mlist p r1 len1 r2) (mlist p r0 (len0+len1) r2);
-      let h1 = get () in
-      calc (==) {
-        sel_list p r0 (len0+len1) r2 h1
-          <: list (cell_t p);
-      == {}
-        sel_list p r1 len1 r2 h0;
-      == {}
-        L.(sel_list p r0 len0 r1 h0 @ sel_list p r1 len1 r2 h0);
-      }
-    end else begin
-      let len0' = len0 - 1 in
-        mlist_rew_len p r0 len0 (len0'+1) r1;
-      let r0' = elim_mlist_cons p r0 len0' r1 in
-      intro_mlist_append p r0' len0' r1 len1 r2;
-      intro_mlist_cons   p r0 r0' (len0'+len1) r2;
-        mlist_rew_len p r0 ((len0'+len1)+1) (len0+len1) r2;
-      let h1 = get () in
-      assert (sel_list p r0 (len0+len1) r2 h1 == L.(sel_list p r0 len0 r1 h0 @ sel_list p r1 len1 r2 h0))
-    end
 
-let rec elim_mlist_append #opened (p : list_param) r0 (len len0 len1 : nat) r2 (l0 l1 : list (cell_t p))
+val elim_mlist_append (#opened:Mem.inames) (p : list_param)
+                      (r0 : ref p.r) (len len0 len1 : nat) (r2 : ref p.r) (l0 l1 : list (cell_t p))
   : SteelGhost (G.erased (ref p.r)) opened
       (mlist p r0 len r2)
       (fun r1 -> mlist p r0 len0 r1 `star` mlist p r1 len1 r2)
@@ -272,35 +245,6 @@ let rec elim_mlist_append #opened (p : list_param) r0 (len len0 len1 : nat) r2 (
         sel_list p r0 len0 r1 h1 == l0 /\
         sel_list p r1 len1 r2 h1 == l1)
       (decreases len0)
-  =
-    let h0 = get () in
-    calc (==) {
-      len;
-    == {}
-      L.length (sel_list p r0 len r2 h0);
-    == {}
-      L.(length (l0@l1));
-    == {}
-      len0 + len1;
-    };
-    if len0 = 0
-    then begin
-      intro_mlist_nil p r0;
-        mlist_rew_len p r0 0 len0 r0;
-        mlist_rew_len p r0 len len1 r2;
-      r0
-    end else begin
-      let hd0 :: tl0 = l0 in
-      let len'  = len  - 1 in
-      let len0' = len0 - 1 in
-        mlist_rew_len p r0 len (len'+1) r2;
-      let r0' = elim_mlist_cons p r0 len' r2 in
-      let r1  = elim_mlist_append p r0' len' len0' len1 r2 tl0 l1 in
-      intro_mlist_cons p r0 r0' len0' r1;
-        mlist_rew_len p r0 (len0'+1) len0 r1;
-      r1
-    end
-#pop-options
 
 
 let mlistN_entry_null_iff #opened (p : list_param) entry
@@ -347,6 +291,70 @@ let mlistN_cells_not_null #opened p entry
     mlist_cells_not_null p entry len null;
     intro_mlistN p entry len
 
+
+(** applying ghost operations on the cells *)
+
+noeq
+type mlist_extract_rt (p : list_param) entry len exit (i : nat) = {
+  r     : ref p.r;
+  c_vp  : vprop;
+  c_sl  : t_of c_vp;
+  nxt   : ref p.r;
+  sl    : sl : list (cell_t p) {i < L.length sl};
+  close : (#opened:Mem.inames) -> unit ->
+          SteelGhost unit opened
+            (vcell p r `star` c_vp) (fun () -> mlist p entry len exit)
+            (requires fun h0 -> g_next p r h0 == nxt /\ h0 c_vp == c_sl)
+            (ensures  fun h0 () h1 ->
+               sel_list p entry len exit h1 == Ll.set i (|r, g_data p r h0|) sl)
+}
+
+unfold let mlist_extract_ens (p : list_param) entry len exit (i : nat)
+  : ens_t (mlist p entry len exit) (mlist_extract_rt p entry len exit i) (fun rt -> vcell p rt.r `star` rt.c_vp)
+  = fun h0 rt h1 ->
+    let l0 = sel_list p entry len exit h0 in
+    i < L.length l0 /\
+    L.index l0 i == (|rt.r, g_data p rt.r h1|) /\
+    rt.c_sl == h1 rt.c_vp /\
+    rt.nxt  == g_next p rt.r h1 /\
+    rt.sl   == l0
+
+val mlist_extract (#opened:Mem.inames) (p : list_param) (entry : ref p.r) (len : nat) (exit : ref p.r) (i : nat)
+  : SteelGhost (G.erased (mlist_extract_rt p entry len exit i)) opened
+      (mlist p entry len exit) (fun rt -> vcell p rt.r `star` rt.c_vp)
+      (requires fun h0       -> i < L.length (sel_list p entry len exit h0))
+      (ensures  fun h0 rt h1 -> mlist_extract_ens p entry len exit i h0 rt h1)
+
+let mlist_gmap_at #opened (p : list_param) entry len exit (i : nat)
+      (ri : ref p.r) (d0 d1 : (p.cell ri).data_t)
+      (v0 v1 : vprop) (p_sl0 : t_of v0 -> prop) (p_sl1 : t_of v1 -> prop)
+      (f : unit -> SteelGhost unit opened
+           (vcell p ri `star` v0) (fun () -> vcell p ri `star` v1)
+           (requires fun h0       -> g_data p ri h0 == d0 /\
+                                  p_sl0 (h0 v0))
+           (ensures  fun h0 () h1 -> g_next p ri h1 == g_next p ri h0 /\
+                                  g_data p ri h1 == d1 /\
+                                  p_sl1 (h1 v1)))
+   : SteelGhost unit opened
+       (mlist p entry len exit `star` v0) (fun () -> mlist p entry len exit `star` v1)
+       (requires fun h0 ->
+                 let l = sel_list p entry len exit h0 in
+                 i < L.length l /\
+                 L.index l i == (|ri, d0|) /\
+                 p_sl0 (h0 v0))
+       (ensures  fun h0 () h1 ->
+                 let l0 = sel_list p entry len exit h0 in
+                 i < L.length l0 /\
+                 sel_list p entry len exit h1 == Ll.set i (|ri, d1|) l0 /\
+                 p_sl1 (h1 v1))
+   =
+     let ex = mlist_extract p entry len exit i in
+     change_equal_slprop (vcell p ex.r) (vcell p ri);
+     f ();
+     change_equal_slprop (vcell p ri) (vcell p ex.r);
+     ex.close ()
+
+
 (*** non-ghost functions *)
 
 inline_for_extraction
@@ -366,11 +374,11 @@ let listN_is_nil (p : list_param) (r0 : ref p.r)
 inline_for_extraction
 let list_next (p : list_param) (r0 : ref p.r) (len : G.erased nat) (exit : G.erased (ref p.r))
   : Steel (ref p.r)
-          (mlist p r0 (len + 1) exit) (fun r1 -> (p.cell r0).vp `star` mlist p r1 len exit)
+          (mlist p r0 (len + 1) exit) (fun r1 -> vcell p r0 `star` mlist p r1 len exit)
           (requires fun _ -> True)
           (ensures  fun h0 r1 h1 ->
-                    let l1 = sel_list p r1 len exit h1 in
-                    sel_list p r0 (len + 1) exit h0 == (|r0, g_data p r0 h1|) :: l1 /\
+                    sel_list p r0 (len + 1) exit h0
+                      == (|r0, g_data p r0 h1|) :: sel_list p r1 len exit h1 /\
                     g_next p r0 h1 == r1)
   =
     (**) let g_r1 : G.erased (ref p.r) = elim_mlist_cons p r0 len exit in
@@ -382,11 +390,11 @@ let list_next (p : list_param) (r0 : ref p.r) (len : G.erased nat) (exit : G.era
 inline_for_extraction
 let listN_next (p : list_param) (r0 : ref p.r)
   : Steel (ref p.r)
-          (mlistN p r0) (fun r1 -> (p.cell r0).vp `star` mlistN p r1)
+          (mlistN p r0) (fun r1 -> vcell p r0 `star` mlistN p r1)
           (requires fun h0       -> Cons? (sel_listN p r0 h0))
           (ensures  fun h0 r1 h1 ->
-                    let l1 = sel_listN p r1 h1 in
-                    sel_listN p r0 h0 == (|r0, g_data p r0 h1|) :: l1 /\
+                    sel_listN p r0 h0
+                      == (|r0, g_data p r0 h1|) :: sel_listN p r1 h1 /\
                     g_next p r0 h1 == r1)
   = 
     (**) let l : G.erased (mlistN_sel_t p r0) = gget (mlistN p r0) in

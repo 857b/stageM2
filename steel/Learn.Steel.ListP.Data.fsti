@@ -48,11 +48,11 @@ val elim_mlist_nil_lem (p : list_param) (r0 r1 : ref p.r) (m : Mem.mem)
           (ensures  r0 == r1)
 
 val intro_mlist_cons_lem (p : list_param) (r0 r1 : ref p.r) (len : nat) (exit : ref p.r) (m : Mem.mem)
-  : Lemma (requires Mem.interp (hp_of ((p.cell r0).vp `star` mlist p r1 len exit)) m /\
-                    (p.cell r0).get_next (sel_of (p.cell r0).vp m) == r1)
+  : Lemma (requires Mem.interp (hp_of (vcell p r0 `star` mlist p r1 len exit)) m /\
+                    (p.cell r0).get_next (sel_of (vcell p r0) m) == r1)
           (ensures  Mem.interp (hp_of (mlist p r0 (len+1) exit)) m /\
                     sel_of (mlist p r0 (len+1) exit) m ==
-                      (|r0, (p.cell r0).get_data (sel_of (p.cell r0).vp m)|)
+                      (|r0, (p.cell r0).get_data (sel_of (vcell p r0) m)|)
                       :: (sel_of (mlist p r1 len exit) m <: mlist_sel_t p r1 len exit))
 
 val elim_mlist_cons_lem (p : list_param) (r0 : ref p.r)
@@ -62,8 +62,8 @@ val elim_mlist_cons_lem (p : list_param) (r0 : ref p.r)
                     (sel_of (mlist p r0 (len + 1) exit) m
                       <: mlist_sel_t p r0 (len+1) exit) == hd :: tl)
           (ensures (let r1 = sg_entry tl exit in
-                    Mem.interp (hp_of ((p.cell r0).vp `star` mlist p r1 len exit)) m /\
-                   (let c0 = sel_of (p.cell r0).vp m in
+                    Mem.interp (hp_of (vcell p r0 `star` mlist p r1 len exit)) m /\
+                   (let c0 = sel_of (vcell p r0) m in
                     (p.cell r0).get_next c0 == r1 /\
                     (p.cell r0).get_data c0 == hd._2 /\
                     sel_of (mlist p r1 len exit) m == tl)))

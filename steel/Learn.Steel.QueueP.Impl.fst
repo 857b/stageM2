@@ -70,7 +70,7 @@ let rec unsnoc_queue (p : list_param) (l : list (cell_t p))
 inline_for_extraction
 let enqueue (p : list_param) (x : ref p.r) (q : queue_t p)
   : Steel  unit
-          ((p.cell x).vp `star` mqueue p q) (fun () -> mqueue p q)
+          (vcell p x `star` mqueue p q) (fun () -> mqueue p q)
           (requires fun _ -> True)
           (ensures fun h0 () h1 -> sel_queue p q h1 == L.snoc (sel_queue p q h0, (|x, g_data p x h0|)))
   =
@@ -98,8 +98,8 @@ let enqueue (p : list_param) (x : ref p.r) (q : queue_t p)
       (**) assert ((G.reveal lt)._1 == G.reveal lt');
       (**) let nil = elim_mlist_cons p lt' 0 null in
       (**) elim_mlist_nil p nil null;
-      (**) change_equal_slprop (mlist p l_entry (len-1) lt'          `star` (p.cell          lt').vp)
-      (**)                     (mlist p l_entry (len-1) q_st.q_entry `star` (p.cell q_st.q_entry).vp);
+      (**) change_equal_slprop (mlist p l_entry (len-1) lt'          `star` vcell p          lt')
+      (**)                     (mlist p l_entry (len-1) q_st.q_entry `star` vcell p q_st.q_entry);
       (p.cell q_st.q_entry).write_next x;
       (**) intro_mlist_cons p q_st.q_entry x 1 null;
       (**) intro_mlist_append p l_entry (len-1) q_st.q_entry (1+1) null;
@@ -117,7 +117,7 @@ let enqueue (p : list_param) (x : ref p.r) (q : queue_t p)
 inline_for_extraction
 let dequeue (p : list_param) (q : queue_t p)
   : Steel (ref p.r)
-          (mqueue p q) (fun x -> (p.cell x).vp `star` mqueue p q)
+          (mqueue p q) (fun x -> vcell p x `star` mqueue p q)
           (requires fun h0 -> Cons? (sel_queue p q h0))
           (ensures fun h0 x h1 -> sel_queue p q h0 == (|x, g_data p x h1|) :: sel_queue p q h1)
   =
