@@ -311,6 +311,11 @@ let p2_extract_index (l : ref cell2) (len : G.erased nat) (exit : G.erased (ref 
     return r_p
 #pop-options
 
+
+let test_p2_write (r : ref U32.t) (x : U32.t) ()
+  : SteelT unit (vptr r) (fun () -> vptr r)
+  = write r x
+
 let test_p2 (l : ref cell2) (len : G.erased nat) (exit : G.erased (ref cell2)) (i0 i1 : U32.t)
   : Steel unit
       (mlist p2 l len exit) (fun () -> mlist p2 l len exit)
@@ -328,10 +333,7 @@ let test_p2 (l : ref cell2) (len : G.erased nat) (exit : G.erased (ref cell2)) (
     let r1 = p2_extract_index l len exit i1 in
     write r0 0ul;
     write r1 1ul;
-    (* TODO: extract
-    let _ = par
-      (fun () -> (write r0 0ul <: SteelT unit (vptr r0) (fun () -> vptr r0)))
-      (fun () -> (write r1 1ul <: SteelT unit (vptr r1) (fun () -> vptr r1))) in
-     *)
+    //TODO: extract
+    //let _ = par (test_p2_write r0 0ul) (test_p2_write r1 1ul) in
     (**) p2_data_insert_nth l len exit (U32.v i0) r0;
     (**) p2_data_insert_nth l len exit (U32.v i1) r1

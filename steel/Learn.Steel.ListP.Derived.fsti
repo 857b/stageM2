@@ -377,6 +377,43 @@ let mlist_gmap_at #opened (p : list_param) entry len exit (i : nat)
      wd.elim_wand ()
 
 
+let rec mlist_gmap #opened (p p' : list_param) entry len exit
+      (l : list (cell_t p))
+      (f_r    : ref p.r -> GTot (ref p'.r))
+      (f_data : (r : ref p.r) -> (d : data_t p r) -> GTot (data_t p' (f_r r)))
+      (f : (r : ref p.r) -> SteelGhost unit opened
+              (vcell p r) (fun () -> vcell p' (f_r r))
+              (requires fun _ -> L.memP r (L.map dfst l))
+              (ensures  fun h0 () h1 ->
+                 g_next p' (f_r r) h1 == f_r (g_next p r h0) /\
+                 g_data p' (f_r r) h1 == f_data r (g_data p r h0)))
+  : SteelGhost unit opened
+      (mlist p entry len exit) (fun () -> mlist p' (f_r entry) len (f_r exit))
+      (requires fun h0 -> l == sel_list p entry len exit h0)
+      (ensures  fun h0 () h1 ->
+         sel_list p' (f_r entry) len (f_r exit) h1
+           == L.map_gtot (fun ((|r, d|) : cell_t p) -> (|f_r r, f_data r d|) <: cell_t p')
+                    (sel_list p entry len exit h0))
+      (decreases len)
+  =
+    if len = 0
+    then begin
+      mlist_rew_len p entry len 0 exit;
+      elim_mlist_nil p entry exit;
+      intro_mlist_nil p' (f_r exit);
+      change_equal_slprop (mlist p' (f_r  exit)  0  (f_r exit))
+                          (mlist p' (f_r entry) len (f_r exit))
+    end else begin
+      let len' = len - 1 in
+      mlist_rew_len p entry len (len'+1) exit;
+      let r1 = elim_mlist_cons p entry len' exit in
+      f entry;
+      mlist_gmap p p' r1 len' exit (L.tl l) f_r f_data f;
+      intro_mlist_cons p' (f_r entry) (f_r r1) len' (f_r exit);
+      mlist_rew_len p' (f_r entry) (len'+1) len (f_r exit)
+    end
+
+
 (*** non-ghost functions *)
 
 inline_for_extraction

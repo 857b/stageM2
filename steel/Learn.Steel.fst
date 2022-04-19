@@ -179,3 +179,189 @@ let test_smt_fallback (n:nat)
   
   //change_equal_slprop (vint n) (vint (n+1-1))
 *)
+
+(* ------------------------- *)
+
+module DInv = Steel.DisposableInvariant
+open Steel.FractionalPermission
+
+[@@__reduce__]
+let half = half_perm full_perm
+
+type st_glb =
+  | GIni
+  | GFirst of bool
+
+type st_loc =
+  | LIni
+  | LWtd of bool
+
+#push-options "--ifuel 1"
+let st_compat (gl : st_glb) (lc : bool -> st_loc) (rs : bool -> U32.t) : prop =
+  (forall (p : bool) . match lc p with
+                 | LIni   -> gl <> GFirst p
+                 | LWtd f -> rs p <> 0ul /\ gl = GFirst (if f then p else not p)
+                                       /\ (not f ==> rs (not p) <> 0ul))
+#pop-options
+
+[@@__reduce__]
+unfold let entry_CS_inv_vp (r0 r1 : ref U32.t) (gl : ghost_ref st_glb) (lc0 lc1 : ghost_ref st_loc) : vprop =
+  (vptrp r0 half `star` vptrp r1 half) `star`
+   ghost_vptr gl `star`
+  (ghost_vptrp lc0 half `star` ghost_vptrp lc1 half)
+
+let entry_CS_inv_rfn (((f0, f1), gl), (lc0, lc1) : ((U32.t & U32.t) & st_glb) & (st_loc & st_loc)) : prop =
+  st_compat gl (fun b -> if b then lc0 else lc1) (fun b -> if b then  f0  else  f1 )
+
+[@@__reduce__]
+unfold let entry_CS_inv (r0 r1 : ref U32.t) (gl : ghost_ref st_glb) (lc0 lc1 : ghost_ref st_loc) : vprop =
+  entry_CS_inv_vp r0 r1 gl lc0 lc1 `vrefine` entry_CS_inv_rfn
+
+[@@__reduce__]
+unfold let entry_CS_p_vp (r : ref U32.t) (lc : ghost_ref st_loc) : vprop =
+  vptrp r half `star` ghost_vptrp lc half
+
+(* process 1 *)
+
+[@@__reduce__]
+unfold let entry_CS_p1_vp (r0 r1 : ref U32.t) (gl : ghost_ref st_glb) (lc0 lc1 : ghost_ref st_loc) =
+  (vptr r0 `star` vptrp r1 half) `star` ghost_vptr gl `star` (ghost_vptr lc0 `star` ghost_vptrp lc1 half)
+
+noextract
+let entry_CS_p1_g0 #opened r0 r1 gl lc0 lc1
+  : SteelAtomic unit opened
+      (entry_CS_p1_vp r0 r1 gl lc0 lc1) (fun () -> entry_CS_p1_vp r0 r1 gl lc0 lc1)
+      (requires fun h0      -> entry_CS_inv_rfn  (h0 (entry_CS_p1_vp r0 r1 gl lc0 lc1)))
+      (ensures  fun _ () h1 -> entry_CS_inv_rfn  (h1 (entry_CS_p1_vp r0 r1 gl lc0 lc1)) /\
+                            LWtd? (ghost_sel lc0 h1))
+  =
+    let _ = elim_vptr r0 full_perm in
+    atomic_write_pt_u32 r0 1ul;
+    intro_vptr r0 full_perm 1ul;
+
+    let st_v = ghost_read gl in
+    if Ghost.reveal st_v = GFirst false
+    then begin
+      ghost_write lc0 (LWtd   false);
+      let sl1 = gget (entry_CS_p1_vp r0 r1 gl lc0 lc1) in
+      assert (entry_CS_inv_rfn sl1)
+    end else begin
+      ghost_write gl  (GFirst true);
+      ghost_write lc0 (LWtd   true);
+      let sl1 = gget (entry_CS_p1_vp r0 r1 gl lc0 lc1) in
+      assert (entry_CS_inv_rfn sl1)
+    end
+
+
+(* TODO: ALT ? *)
+[@@ __steel_reduce__]
+let sel_entry_CS_p_vp (#q:vprop) r lc
+  (h:rmem q{FStar.Tactics.with_tactic selector_tactic (can_be_split q (entry_CS_p_vp r lc) /\ True)})
+  : GTot (U32.t & st_loc)
+  = h (entry_CS_p_vp r lc)
+
+noextract
+let entry_CS_p1_with_inv r0 r1 gl lc0 lc1 (iv : DInv.inv (entry_CS_inv r0 r1 gl lc0 lc1))
+    (r : Type) (req : (U32.t & st_loc) -> prop) (ens : r -> (U32.t & st_loc) -> prop)
+    (f : unit -> SteelAtomic r (DInv.add_inv Set.empty iv)
+                   (entry_CS_p1_vp r0 r1 gl lc0 lc1)
+             (fun _ -> entry_CS_p1_vp r0 r1 gl lc0 lc1)
+             (requires fun h      -> entry_CS_inv_rfn (h (entry_CS_p1_vp r0 r1 gl lc0 lc1)) /\
+                                  req ((sel r0 h, ghost_sel lc0 h)))
+             (ensures  fun _ rt h -> entry_CS_inv_rfn (h (entry_CS_p1_vp r0 r1 gl lc0 lc1)) /\
+                                  ens rt (sel r0 h, ghost_sel lc0 h)))
+  : Steel r (DInv.active half iv `star` entry_CS_p_vp r0 lc0)
+      (fun _ -> DInv.active half iv `star` entry_CS_p_vp r0 lc0)
+      (requires fun h      -> req (sel_entry_CS_p_vp r0 lc0 h))
+      (ensures  fun _ rt h -> ens rt (sel_entry_CS_p_vp r0 lc0 h))
+  =
+    intro_vrefine (entry_CS_p_vp r0 lc0) req;
+    Set.mem_empty (Ghost.reveal (DInv.name iv));
+    let res = DInv.with_invariant iv begin fun () -> (
+      elim_vrefine   (entry_CS_inv_vp r0 r1 gl lc0 lc1) entry_CS_inv_rfn;
+      elim_vrefine (entry_CS_p_vp r0 lc0) req;
+      gather r0; ghost_gather lc0;
+      let res = f () in
+      share r0; ghost_share lc0;
+      intro_vrefine (entry_CS_p_vp r0 lc0) (ens res);
+      intro_vrefine (entry_CS_inv_vp r0 r1 gl lc0 lc1) entry_CS_inv_rfn;
+      return res
+      )<: SteelAtomicT r (DInv.add_inv Set.empty iv)
+                   (entry_CS_inv r0 r1 gl lc0 lc1 `star`
+                   (entry_CS_p_vp r0 lc0 `vrefine` req))
+           (fun res -> entry_CS_inv r0 r1 gl lc0 lc1 `star`
+                   (entry_CS_p_vp r0 lc0 `vrefine` (ens res)))
+    end in
+    elim_vrefine (entry_CS_p_vp r0 lc0) (ens res);
+    return res
+
+let entry_CS_proc_ens (res : bool) (_,lc : U32.t & st_loc) : prop
+  = res ==> lc == LWtd true
+
+noextract
+let entry_CS_p0 (r0 r1 : ref U32.t) (gl : ghost_ref st_glb) (lc0 lc1 : ghost_ref st_loc)
+                (iv : DInv.inv (entry_CS_inv r0 r1 gl lc0 lc1)) ()
+  : SteelT  bool (DInv.active half iv `star` entry_CS_p_vp r0 lc0)
+         (fun res -> DInv.active half iv `star`
+                 (entry_CS_p_vp r0 lc0 `vrefine` entry_CS_proc_ens res))
+  =
+    entry_CS_p1_with_inv r0 r1 gl lc0 lc1 iv
+      unit (fun _ -> True) (fun _ (_, lcv) -> squash (LWtd? lcv))
+    begin fun () ->
+      entry_CS_p1_g0 r0 r1 gl lc0 lc1
+    end;
+    let res = entry_CS_p1_with_inv r0 r1 gl lc0 lc1 iv
+      bool (fun (_, lcv) -> squash (LWtd? lcv)) (fun b (_, lcv) -> b ==> Ghost.reveal lcv == LWtd true)
+    begin fun () ->
+      let g_v1 = elim_vptr r1 half in
+      let v1 = atomic_read_pt_u32 r1 in
+      intro_vptr r1 half g_v1;
+      return (v1 = 0ul)
+    end in
+    intro_vrefine (entry_CS_p_vp r0 lc0) (fun (_, lcv) -> res ==> lcv == LWtd true);
+    return res
+
+(* process 2 : TODO *)
+
+assume
+val entry_CS_p1 (r0 r1 : ref U32.t) (gl : ghost_ref st_glb) (lc0 lc1 : ghost_ref st_loc)
+                (iv : DInv.inv (entry_CS_inv r0 r1 gl lc0 lc1)) (_ : unit)
+  : SteelT  bool (DInv.active half iv `star` entry_CS_p_vp r1 lc1)
+         (fun res -> DInv.active half iv `star`
+                 (entry_CS_p_vp r1 lc1 `vrefine` entry_CS_proc_ens res))
+
+
+noextract
+let entry_CS (r0 r1 : ref U32.t)
+  : SteelT unit (vptr r0 `star` vptr r1) (fun () -> vptr r0 `star` vptr r1)
+  =
+    write r0 0ul;
+    write r1 0ul;
+    let gl  : ghost_ref st_glb = ghost_alloc GIni in
+    let lc0 : ghost_ref st_loc = ghost_alloc LIni in
+    let lc1 : ghost_ref st_loc = ghost_alloc LIni in
+    share r0; share r1;
+    ghost_share lc0; ghost_share lc1;
+    intro_vrefine (entry_CS_inv_vp r0 r1 gl lc0 lc1) entry_CS_inv_rfn;
+    let iv = DInv.new_inv (entry_CS_inv r0 r1 gl lc0 lc1) in
+    DInv.share iv;
+
+    let bs = par (entry_CS_p0 r0 r1 gl lc0 lc1 iv) (entry_CS_p1 r0 r1 gl lc0 lc1 iv) in
+    elim_vrefine (entry_CS_p_vp r0 lc0) (entry_CS_proc_ens bs._1);
+    elim_vrefine (entry_CS_p_vp r1 lc1) (entry_CS_proc_ens bs._2);
+
+    DInv.gather iv;
+    Set.mem_empty (Ghost.reveal (DInv.name iv));//TODO: Why is it necessary ?
+    assert (not (DInv.mem_inv Set.empty iv));
+    //assert_norm (DInv.mem_inv Set.empty iv == Set.mem (Ghost.reveal (DInv.name iv)) Set.empty);
+    //assert (not (Set.mem (Ghost.reveal (DInv.name iv)) Set.empty));
+    DInv.dispose iv;
+    elim_vrefine (entry_CS_inv_vp r0 r1 gl lc0 lc1) entry_CS_inv_rfn;
+    gather r0; gather r1;
+    ghost_gather lc0; ghost_gather lc1;
+
+    assert (not (bs._1 && bs._2)); // Mutual exclusion
+
+    ghost_free gl;
+    ghost_free lc0; ghost_free lc1
+
