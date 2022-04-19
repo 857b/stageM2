@@ -294,36 +294,59 @@ let mlistN_cells_not_null #opened p entry
 
 (** applying ghost operations on the cells *)
 
-noeq
-type mlist_extract_rt (p : list_param) entry len exit (i : nat) = {
-  r     : ref p.r;
-  c_vp  : vprop;
-  c_sl  : t_of c_vp;
-  nxt   : ref p.r;
-  sl    : sl : list (cell_t p) {i < L.length sl};
-  close : (#opened:Mem.inames) -> unit ->
-          SteelGhost unit opened
-            (vcell p r `star` c_vp) (fun () -> mlist p entry len exit)
-            (requires fun h0 -> g_next p r h0 == nxt /\ h0 c_vp == c_sl)
-            (ensures  fun h0 () h1 ->
-               sel_list p entry len exit h1 == Ll.set i (|r, g_data p r h0|) sl)
-}
-
-unfold let mlist_extract_ens (p : list_param) entry len exit (i : nat)
-  : ens_t (mlist p entry len exit) (mlist_extract_rt p entry len exit i) (fun rt -> vcell p rt.r `star` rt.c_vp)
-  = fun h0 rt h1 ->
+unfold let mlist_extract_req (p : list_param) entry len exit (i : nat) (ri : ref p.r)
+  : req_t (mlist p entry len exit)
+  = fun h0 ->
     let l0 = sel_list p entry len exit h0 in
-    i < L.length l0 /\
-    L.index l0 i == (|rt.r, g_data p rt.r h1|) /\
-    rt.c_sl == h1 rt.c_vp /\
-    rt.nxt  == g_next p rt.r h1 /\
-    rt.sl   == l0
+    i < len /\ (L.index l0 i)._1 == ri
 
-val mlist_extract (#opened:Mem.inames) (p : list_param) (entry : ref p.r) (len : nat) (exit : ref p.r) (i : nat)
-  : SteelGhost (G.erased (mlist_extract_rt p entry len exit i)) opened
-      (mlist p entry len exit) (fun rt -> vcell p rt.r `star` rt.c_vp)
-      (requires fun h0       -> i < L.length (sel_list p entry len exit h0))
-      (ensures  fun h0 rt h1 -> mlist_extract_ens p entry len exit i h0 rt h1)
+let mlist_extract_wd_req (p : list_param) (ri : ref p.r) (nxt : ref p.r) (ci : normal (t_of (vcell p ri)))
+  : prop
+  = (p.cell ri).get_next ci == nxt
+
+let mlist_extract_wd_ens (p : list_param) entry len exit (i : nat) (ri : ref p.r) (l0 : mlist_sel_t p entry len exit)
+                         (ci : normal (t_of (vcell p ri))) (l1 : normal (t_of (mlist p entry len exit)))
+  : Pure prop (requires i < len) (ensures fun _ -> True)
+  = l1 == Ll.set i (|ri, (p.cell ri).get_data ci|) l0
+
+unfold let mlist_extract_ens (p : list_param) entry len exit (i : nat) (ri : ref p.r)
+  : ens_t (mlist p entry len exit)
+          (US.gwand (vcell p ri) (mlist p entry len exit))
+          (fun wd -> vcell p ri `star` wd.vp)
+  = fun h0 wd h1 ->
+    let l0 = sel_list p entry len exit h0 in
+    i < len /\
+    L.index l0 i == (|ri, g_data p ri h1|) /\
+    wd.req == mlist_extract_wd_req p ri (g_next p ri h1) /\
+    wd.ens == mlist_extract_wd_ens p entry len exit i ri l0
+
+val mlist_extract (#opened:Mem.inames)
+  (p : list_param) (entry : ref p.r) (len : nat) (exit : ref p.r) (i : nat) (ri : ref p.r)
+  : SteelGhost (US.gwand (vcell p ri) (mlist p entry len exit)) opened
+      (mlist p entry len exit) (fun wd -> vcell p ri `star` wd.vp)
+      (mlist_extract_req p entry len exit i ri)
+      (mlist_extract_ens p entry len exit i ri)
+
+
+let mlistN_extract_wd_ens (p : list_param) entry (i : nat) (ri : ref p.r) (l0 : mlistN_sel_t p entry)
+                          (ci : normal (t_of (vcell p ri))) (l1 : normal (t_of (mlistN p entry)))
+  : Pure prop (requires i < L.length l0) (ensures fun _ -> True)
+  = l1 == Ll.set i (|ri, (p.cell ri).get_data ci|) l0
+
+val mlistN_extract (#opened:Mem.inames)
+  (p : list_param) (entry : ref p.r) (i : nat) (ri : ref p.r)
+  : SteelGhost (US.gwand (vcell p ri) (mlistN p entry)) opened
+      (mlistN p entry) (fun wd -> vcell p ri `star` wd.vp)
+      (requires fun h0 ->
+         let l0 = sel_listN p entry h0 in
+         i < L.length l0 /\ (L.index l0 i)._1 == ri)
+      (ensures  fun h0 wd h1 ->
+         let l0 = sel_listN p entry h0 in
+         i < L.length l0 /\
+         L.index l0 i == (|ri, g_data p ri h1|) /\
+         wd.req == mlist_extract_wd_req p ri (g_next p ri h1) /\
+         wd.ens == mlistN_extract_wd_ens p entry i ri l0)
+
 
 let mlist_gmap_at #opened (p : list_param) entry len exit (i : nat)
       (ri : ref p.r) (d0 d1 : data_t p ri)
@@ -349,11 +372,9 @@ let mlist_gmap_at #opened (p : list_param) entry len exit (i : nat)
                  sel_list p entry len exit h1 == Ll.set i (|ri, d1|) l0 /\
                  rel (h0 v0) (h1 v1))
    =
-     let ex = mlist_extract p entry len exit i in
-     change_equal_slprop (vcell p ex.r) (vcell p ri);
+     let wd = mlist_extract p entry len exit i ri in
      f ();
-     change_equal_slprop (vcell p ri) (vcell p ex.r);
-     ex.close ()
+     wd.elim_wand ()
 
 
 (*** non-ghost functions *)

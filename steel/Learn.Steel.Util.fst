@@ -286,3 +286,27 @@ let elim_vdept (#opened:inames) (v: vprop) (#dt : t_of v -> Type) ($p : (x:t_of 
              vdept_sel_eq v #dt p m);
     res
 
+
+(* [gwand] *)
+
+let intro_gwand #opened vp0 sl src trg req ens func
+  =
+    let rfn (sl' : normal (t_of vp0)) : prop = sl' == sl in
+    intro_vrefine vp0 rfn;
+    let rt = {
+      vp = vp0 `vrefine` rfn;
+      req; ens;
+      elim_wand = (fun () ->
+        elim_vrefine vp0 rfn;
+        func _
+      )
+    }
+    in
+    change_equal_slprop (vp0 `vrefine` rfn) rt.vp;
+    rt
+
+let elim_gwand #opened #src0 #trg0 wd src trg
+  =
+    change_equal_slprop src src0;
+    wd.elim_wand ();
+    change_equal_slprop trg0 trg

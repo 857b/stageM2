@@ -96,62 +96,76 @@ let rec elim_mlist_append #opened (p : list_param) r0 (len len0 len1 : nat) r2 (
 
 (** applying ghost operations on the cells *)
 
-let mlist_extract_case_0 #opened (p : list_param) entry len exit (i : nat)
-  : SteelGhost (mlist_extract_rt p entry len exit i) opened
-      (mlist p entry len exit) (fun rt -> vcell p rt.r `star` rt.c_vp)
-      (requires fun h0 -> i = 0 /\ i < L.length (sel_list p entry len exit h0))
-      (ensures  mlist_extract_ens p entry len exit i)
+let mlist_extract_case_0 #opened (p : list_param) entry len exit (i : nat) (ri : ref p.r)
+  : SteelGhost (US.gwand (vcell p ri) (mlist p entry len exit)) opened
+      (mlist p entry len exit) (fun wd -> vcell p ri `star` wd.vp)
+      (fun h0 -> i == 0 /\ mlist_extract_req p entry len exit i ri h0)
+      (mlist_extract_ens p entry len exit i ri)
   =
-    let sl = gget (mlist p entry len exit) in
-    let len' = len - 1 in
-    mlist_rew_len p entry len (len'+1) exit;
-    let r1 = elim_mlist_cons p entry len' exit in (* TODO?: factorize with case_S *)
-    let c_sl = gget (mlist p r1 len' exit) in
-    let rt = {
-      r = entry;
-      c_vp = mlist p r1 len' exit;
-      c_sl; nxt = r1; sl;
-      close = (fun () ->
-        intro_mlist_cons p entry r1 len' exit;
-        mlist_rew_len p entry (len'+1) len exit)
-    } in
-    change_equal_slprop (vcell p entry `star` mlist p r1 len' exit)
-                        (vcell p rt.r `star` rt.c_vp);
-    rt
+    let l0 = gget (mlist p entry len exit) in
+    let len' = len - 1 in 
+    change_equal_slprop (mlist p entry   len    exit)
+                        (mlist p   ri  (len'+1) exit);
+    let r1 = elim_mlist_cons p ri len' exit in
+    let sl = gget (mlist p r1 len' exit) in
+    US.intro_gwand (mlist p r1 len' exit) sl
+                   (vcell p ri) (mlist p entry len exit)
+                   (mlist_extract_wd_req p ri r1)
+                   (mlist_extract_wd_ens p entry len exit i ri l0)
+    begin fun _ ->
+      intro_mlist_cons p ri r1 len' exit;
+      change_equal_slprop (mlist p   ri  (len'+1) exit)
+                          (mlist p entry   len    exit)
+    end
 
 #push-options "--z3rlimit 15"
-let rec mlist_extract_case_S #opened (p : list_param) entry len exit (i : nat)
-  : SteelGhost (mlist_extract_rt p entry len exit i) opened
-      (mlist p entry len exit) (fun rt -> vcell p rt.r `star` rt.c_vp)
-      (requires fun h0 -> i > 0 /\ i < L.length (sel_list p entry len exit h0))
-      (ensures  mlist_extract_ens p entry len exit i)
+let rec mlist_extract_case_S #opened (p : list_param) entry len exit (i : nat) (ri : ref p.r)
+  : SteelGhost (US.gwand (vcell p ri) (mlist p entry len exit)) opened
+      (mlist p entry len exit) (fun wd -> vcell p ri `star` wd.vp)
+      (fun h0 -> i > 0 /\ mlist_extract_req p entry len exit i ri h0)
+      (mlist_extract_ens p entry len exit i ri)
       (decreases %[i; 0])
-  =
-    let sl = gget (mlist p entry len exit) in
+  = 
+    let l0   = gget (mlist p entry len exit) in
     let len' = len - 1 in
     mlist_rew_len p entry len (len'+1) exit;
-    let r1 = elim_mlist_cons p entry len' exit in
-    let c0_sl = gget (vcell p entry) in
-    let rt' = mlist_extract p r1 len' exit (i-1) in
-    let rt  = {rt' with
-      c_vp = vcell p entry `star` rt'.c_vp;
-      c_sl = (G.reveal c0_sl, rt'.c_sl); sl;
-      close = (fun () ->
-        rt'.close ();
-        intro_mlist_cons p entry r1 len' exit;
-        mlist_rew_len p entry (len'+1) len exit)
-    } in
-    change_equal_slprop (vcell p rt'.r `star` (vcell p entry `star` rt'.c_vp))
-                        (vcell p rt.r  `star` rt.c_vp);
-    rt
+    let r1  = elim_mlist_cons p entry len' exit in
+    let wd' = mlist_extract p r1 len' exit (i-1) ri in
+    let h   = get () in
+    let sl  = gget (vcell p entry `star` wd'.vp) in
+    US.intro_gwand (vcell p entry `star` wd'.vp) sl
+                   (vcell p ri) (mlist p entry len exit)
+                   (mlist_extract_wd_req p ri (g_next p ri h))
+                   (mlist_extract_wd_ens p entry len exit i ri l0)
+    begin fun _ ->
+      wd'.elim_wand ();
+      intro_mlist_cons p entry r1 len' exit;
+      mlist_rew_len p entry (len'+1) len exit
+    end
 
-and mlist_extract #opened (p : list_param) entry len exit (i : nat)
-  : SteelGhost (G.erased (mlist_extract_rt p entry len exit i)) opened
-      (mlist p entry len exit) (fun rt -> vcell p rt.r `star` rt.c_vp)
-      (requires fun h0 -> i < L.length (sel_list p entry len exit h0))
-      (ensures  fun h0 rt h1 -> mlist_extract_ens p entry len exit i h0 rt h1)
+and mlist_extract #opened (p : list_param) entry len exit (i : nat) (ri : ref p.r)
+  : SteelGhost (US.gwand (vcell p ri) (mlist p entry len exit)) opened
+      (mlist p entry len exit) (fun wd -> vcell p ri `star` wd.vp)
+      (mlist_extract_req p entry len exit i ri)
+      (mlist_extract_ens p entry len exit i ri)
       (decreases %[i; 1])
   = if i = 0 
-    then let rt = mlist_extract_case_0 p entry len exit i in G.hide rt
-    else let rt = mlist_extract_case_S p entry len exit i in G.hide rt
+    then mlist_extract_case_0 p entry len exit i ri
+    else mlist_extract_case_S p entry len exit i ri
 #pop-options
+
+let mlistN_extract #opened p entry i ri
+  =
+    let l0  = gget (mlistN p entry) in
+    let len = elim_mlistN p entry in
+    let wd  = mlist_extract p entry len null i ri in
+    let h   = get () in
+    let sl  = gget wd.vp in
+    US.intro_gwand wd.vp sl
+                   (vcell p ri) (mlistN p entry)
+                   (mlist_extract_wd_req p ri (g_next p ri h))
+                   (mlistN_extract_wd_ens p entry i ri l0)
+    begin fun _ ->
+      wd.elim_wand ();
+      intro_mlistN p entry len
+    end

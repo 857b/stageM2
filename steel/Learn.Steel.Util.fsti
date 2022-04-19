@@ -283,6 +283,47 @@ val elim_vdept (#opened:inames) (v: vprop) (#dt : t_of v -> Type) ($p : (x:t_of 
   )
 
 
+(* [gwand] : Magic wand implemented with a SteelGhost function *)
+
+[@@erasable]
+noeq type gwand (src : vprop) (trg : vprop) : Type = {
+  vp  : vprop;
+  req : normal (t_of src) -> GTot prop;
+  ens : normal (t_of src) -> normal (t_of trg) -> GTot prop;
+  elim_wand : (#opened : Mem.inames) -> unit -> (* TODO? req on opened *)
+              SteelGhost unit opened
+                (vp `star` src) (fun () -> trg)
+                (fun h0 -> req (h0 src)) (fun h0 () h1 -> ens (h0 src) (h1 trg))
+}
+
+val intro_gwand (#opened : Mem.inames)
+  (vp : vprop) (sl : normal (t_of vp)) (* ALT?: h0 vp *)
+  (src trg : vprop)
+  (req : normal (t_of src) -> GTot prop)
+  (ens : normal (t_of src) -> normal (t_of trg) -> GTot prop)
+  (func : (opened' : Mem.inames) ->
+    SteelGhost unit opened'
+      (vp `star` src) (fun () -> trg)
+      (fun h0 -> h0 vp == sl /\ req (h0 src))
+      (fun h0 () h1 -> ens (h0 src) (h1 trg)))
+  : SteelGhost (gwand src trg) opened
+      vp (fun wd -> wd.vp)
+      (requires fun h0 -> h0 vp == sl)
+      (ensures  fun _ wd h1 ->
+        wd.req == req /\ wd.ens == ens)
+
+val elim_gwand (#opened : Mem.inames) (#src0 #trg0 : vprop) (wd : gwand src0 trg0)
+               (src trg : vprop)
+  : SteelGhost unit opened
+      (wd.vp `star` src) (fun () -> trg)
+      (requires fun h0 ->
+         src0 == src /\ trg0 == trg /\
+         wd.req (h0 src))
+      (ensures  fun h0 () h1 ->
+         src0 == src /\ trg0 == trg /\
+         wd.ens (h0 src) (h1 trg))
+
+
 (* [aptr] : abstract references *)
 
 inline_for_extraction noextract noeq

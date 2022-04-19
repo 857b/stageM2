@@ -301,15 +301,13 @@ let p2_extract_index (l : ref cell2) (len : G.erased nat) (exit : G.erased (ref 
                        sel r_p h1 == Some?.v d0.p_val))
   =
     let r  = p2_index l len exit i in
-    (**) let ex = mlist_extract p2 l len exit (U32.v i) in
-    (**) change_equal_slprop (vcell p2 ex.r) (vcell p2 r);
+    (**) let wd = mlist_extract p2 l len exit (U32.v i) r in
     (**) let g_rs = elim_ext_cell #p2_0 (fun _ -> p2_ext) r in
     let cl  = read r in
     let r_p = cl.data_p in
     (**) intro_ext_cell #p2_0 (fun _ -> p2_ext) r (p2_ext.ext_vp g_rs);
     (**) p2_data_extract r r_p;
-    (**) change_equal_slprop (vcell p2 r) (vcell p2 ex.r);
-    (**) ex.close ();
+    (**) wd.elim_wand ();
     return r_p
 #pop-options
 
