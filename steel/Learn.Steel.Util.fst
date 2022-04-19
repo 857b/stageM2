@@ -37,8 +37,9 @@ let elim_pure_lem (p : prop) (m : mem)
 (* [vopt] *)
 
 let vopt0 (b : bool) (v : vprop) : vprop
-  = if b then vrewrite v #(option (t_of v)) Some
-    else vrewrite emp #(option (t_of v)) (fun _ -> None)
+  = if b
+    then vrewrite  v  #(vopt_sel_t b v) (fun x -> Some x)
+    else vrewrite emp #(vopt_sel_t b v) (fun _ -> None)
 
 let vopt_sl  b v = hp_of  (vopt0 b v)
 let vopt_sel b v = sel_of (vopt0 b v)
@@ -49,7 +50,9 @@ let vopt_intro_t #opened (v : vprop)
       v (fun () -> vopt true v)
       (requires fun _ -> True) (ensures fun h0 () h1 -> h1 (vopt true v) == Some (h0 v))
   =
-    intro_vrewrite v #(option (t_of v)) Some;
+    intro_vrewrite v #(vopt_sel_t true v) (fun x -> Some x);
+    assert_norm (vopt0 true v == vrewrite v #(vopt_sel_t true v) (fun x -> Some x));
+    change_equal_slprop (vrewrite v #(vopt_sel_t true v) (fun x -> Some x)) (vopt0 true v);
     intro_expanded_vprop (vopt0 true v);
     rewrite_vprop (eq_sym (vopt_eq true v))
 
@@ -58,9 +61,9 @@ let vopt_intro_f #opened (v : vprop)
       emp (fun () -> vopt false v)
       (requires fun _ -> True) (ensures fun h0 () h1 -> h1 (vopt false v) == None)
   =
-    intro_vrewrite emp #(option (t_of v)) (fun _ -> None);
-    assert_norm (vopt0 false v == vrewrite emp #(option (t_of v)) (fun _ -> None));
-    change_equal_slprop (vrewrite emp #(option (t_of v)) (fun _ -> None)) (vopt0 false v);
+    intro_vrewrite emp #(vopt_sel_t false v) (fun _ -> None);
+    assert_norm (vopt0 false v == vrewrite emp #(vopt_sel_t false v) (fun _ -> None));
+    change_equal_slprop (vrewrite emp #(vopt_sel_t false v) (fun _ -> None)) (vopt0 false v);
     intro_expanded_vprop (vopt0 false v);
     rewrite_vprop (eq_sym (vopt_eq false v))
 
@@ -71,7 +74,9 @@ let vopt_elim_t #opened (v : vprop)
   =
     rewrite_vprop (vopt_eq true v);
     elim_expanded_vprop (vopt0 true v);
-    elim_vrewrite v #(option (t_of v)) Some
+    assert_norm (vopt0 true v == vrewrite v #(vopt_sel_t true v) (fun x -> Some x));
+    change_equal_slprop (vopt0 true v) (vrewrite v #(vopt_sel_t true v) (fun x -> Some x));
+    elim_vrewrite v #(vopt_sel_t true v) (fun x -> Some x)
 
 let vopt_elim_f #opened (v : vprop)
   : SteelGhost unit opened
@@ -80,9 +85,9 @@ let vopt_elim_f #opened (v : vprop)
   =
     rewrite_vprop (vopt_eq false v);
     elim_expanded_vprop (vopt0 false v);
-    assert_norm (vopt0 false v == vrewrite emp #(option (t_of v)) (fun _ -> None));
-    change_equal_slprop (vopt0 false v) (vrewrite emp #(option (t_of v)) (fun _ -> None));
-    elim_vrewrite emp #(option (t_of v)) (fun _ -> None)
+    assert_norm (vopt0 false v == vrewrite emp #(vopt_sel_t false v) (fun _ -> None));
+    change_equal_slprop (vopt0 false v) (vrewrite emp #(vopt_sel_t false v) (fun _ -> None));
+    elim_vrewrite emp #(vopt_sel_t false v) (fun _ -> None)
 
 
 (* [vexists] *)

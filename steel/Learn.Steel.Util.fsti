@@ -101,14 +101,15 @@ val elim_pure_lem (p : prop) (m : mem)
 
 (* [vopt] *)
 
-val vopt_sl  (b : bool) (v : vprop) : Mem.slprop u#1
-val vopt_sel (b : bool) (v : vprop) : selector (option (t_of v)) (vopt_sl b v)
+let vopt_sel_t (b : bool) (v : vprop) : Type = x : option (t_of v) {Some? x <==> b}
+val vopt_sl    (b : bool) (v : vprop) : Mem.slprop u#1
+val vopt_sel   (b : bool) (v : vprop) : selector (vopt_sel_t b v) (vopt_sl b v)
 
 [@@__steel_reduce__]
 let vopt' ([@@@smt_fallback] b : bool) (v : vprop) : vprop' = {
-  hp  = vopt_sl  b v;
-  t   = option (t_of v);
-  sel = vopt_sel b v
+  hp  = vopt_sl    b v;
+  t   = vopt_sel_t b v;
+  sel = vopt_sel   b v
 }
 unfold let vopt ([@@@smt_fallback] b : bool) (v : vprop) : vprop = VUnit (vopt' b v)
 

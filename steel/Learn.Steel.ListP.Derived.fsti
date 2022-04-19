@@ -326,27 +326,28 @@ val mlist_extract (#opened:Mem.inames) (p : list_param) (entry : ref p.r) (len :
       (ensures  fun h0 rt h1 -> mlist_extract_ens p entry len exit i h0 rt h1)
 
 let mlist_gmap_at #opened (p : list_param) entry len exit (i : nat)
-      (ri : ref p.r) (d0 d1 : (p.cell ri).data_t)
-      (v0 v1 : vprop) (p_sl0 : t_of v0 -> prop) (p_sl1 : t_of v1 -> prop)
+      (ri : ref p.r) (d0 d1 : data_t p ri)
+      (v0 v1 : vprop) (cond : t_of v0 -> prop) (rel : t_of v0 -> t_of v1 -> prop)
       (f : unit -> SteelGhost unit opened
            (vcell p ri `star` v0) (fun () -> vcell p ri `star` v1)
            (requires fun h0       -> g_data p ri h0 == d0 /\
-                                  p_sl0 (h0 v0))
+                                  cond (h0 v0))
            (ensures  fun h0 () h1 -> g_next p ri h1 == g_next p ri h0 /\
                                   g_data p ri h1 == d1 /\
-                                  p_sl1 (h1 v1)))
+                                  rel (h0 v0) (h1 v1)))
    : SteelGhost unit opened
        (mlist p entry len exit `star` v0) (fun () -> mlist p entry len exit `star` v1)
        (requires fun h0 ->
                  let l = sel_list p entry len exit h0 in
                  i < L.length l /\
-                 L.index l i == (|ri, d0|) /\
-                 p_sl0 (h0 v0))
+                 (L.index l i)._1 == ri /\
+                 (L.index l i)._2 == d0 /\
+                 cond (h0 v0))
        (ensures  fun h0 () h1 ->
                  let l0 = sel_list p entry len exit h0 in
                  i < L.length l0 /\
                  sel_list p entry len exit h1 == Ll.set i (|ri, d1|) l0 /\
-                 p_sl1 (h1 v1))
+                 rel (h0 v0) (h1 v1))
    =
      let ex = mlist_extract p entry len exit i in
      change_equal_slprop (vcell p ex.r) (vcell p ri);

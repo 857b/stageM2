@@ -17,3 +17,6 @@ val prop_equal (#a : Type) (p : a -> Type) (x y : a)
 val assert_by (p : Type) (prf : unit -> Lemma (ensures p)) : Lemma (ensures p)
 
 unfold let alias (#t : Type) (x : t) : Type = y:t{y == x}
+
+let cast (#a b : Type) (x : a) : Pure b (requires a == b) (ensures fun y -> y == x)
+  = x

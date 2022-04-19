@@ -198,6 +198,13 @@ let rec set (#a : Type) (i : nat) (x : a) (l : list a)
     if i = 0 then x :: tl
     else hd :: set (i - 1) x tl
 
+let rec set_index (#a : Type) (i : nat) (x : a) (l : list a) (j : nat)
+  : Lemma (requires i < length l /\ j < length l)
+          (ensures  index (set i x l) j == (if j = i then x else index l j))
+          (decreases j)
+          [SMTPat (index (set i x l) j)]
+  = if i = 0 || j = 0 then () else set_index (i-1) x (tl l) (j-1)
+
 (* [map_index] *)
 
 let rec map_index (#a : Type) (i : nat) (f : a -> a) (l : list a)

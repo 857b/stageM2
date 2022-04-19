@@ -19,13 +19,14 @@ open Learn.Steel.ListP.Derived
 
 (* [length] *)
 
-let length_ty (p : list_param) : Type = (r : ref p.r) ->
+let length_ty (p : list_param) : Type =
+  (r : ref p.r) ->
   Steel  U32.t
-        (mlistN p r) (fun _ -> mlistN p r)
-        (* TODO? move as ==> in ensures *)
-        (requires fun h0        -> L.length (sel_listN p r h0) <= FStar.UInt.max_int U32.n)
-        (ensures  fun h0 len h1 -> frame_equalities (mlistN p r) h0 h1 /\
-                                U32.v len = L.length (sel_listN p r h0))
+    (mlistN p r) (fun _ -> mlistN p r)
+    (* TODO? move as ==> in ensures *)
+    (requires fun h0        -> L.length (sel_listN p r h0) <= FStar.UInt.max_int U32.n)
+    (ensures  fun h0 len h1 -> frame_equalities (mlistN p r) h0 h1 /\
+                            U32.v len = L.length (sel_listN p r h0))
 
 inline_for_extraction noextract
 let length_body (p : list_param) ($rec_f : length_ty p) : length_ty p
@@ -39,6 +40,32 @@ let length_body (p : list_param) ($rec_f : length_ty p) : length_ty p
       (**) intro_mlistN_cons p r r';
       return U32.(len' +^ 1ul)
     end
+
+(* [index] *)
+
+let index_ty (p : list_param) : Type =
+  (r : ref p.r) -> (len : G.erased nat) -> (exit : G.erased (ref p.r)) -> (i : U32.t) ->
+  Steel (ref p.r)
+    (mlist p r len exit) (fun _ -> mlist p r len exit)
+    (requires fun h -> U32.v i < len)
+    (ensures  fun h rt h' -> U32.v i < len /\
+                          frame_equalities (mlist p r len exit) h h' /\
+                          rt == (L.index (sel_list p r len exit h) (U32.v i))._1)
+
+inline_for_extraction noextract
+let index_body (p : list_param) ($rec_f : index_ty p) : index_ty p
+  = fun r len exit i ->
+    if i = 0ul then return r
+    else begin
+      (**) let len' = G.hide (len - 1) in
+      (**) mlist_rew_len p r len (len' + 1) exit;
+      let r' = list_next p r len' exit in
+      let rt = rec_f r' len' exit U32.(i -^ 1ul) in
+      (**) intro_mlist_cons p r r' len' exit;
+      (**) mlist_rew_len p r (len' + 1) len exit;
+      return rt
+    end
+
 
 (* [reverse] *)
 
