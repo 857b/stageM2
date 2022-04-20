@@ -11,7 +11,8 @@ open FStar.Classical.Sugar
 open Steel.FractionalPermission
 open Steel.Reference
 
-
+/// A lemma similar to [Steel.Reference.pts_to_ref_injective] but stronger since it requires an [h_and] instead of
+/// a [star]. However we (can?) only prove a version where the two permissions are equals.
 let pts_to_ref_injective_and
       (#a:Type u#0) (r:ref a)
       (p:perm)   (v0 v1:a) (m:mem)
@@ -41,7 +42,10 @@ let rewrite_vprop #opened (#p #q : vprop) ($rw : squash (p == q))
 let eq_sym (#a : Type) (#x #y : a) ($p : squash (x == y)) : squash (y == x) = ()
 
 
-(* expansion of a vprop *)
+(** expansion of a vprop *)
+
+/// Those utilities allow to expend a vprop as a [VUnit] with explicit fields. This transformation allows F* to
+/// determine the type of the selector by normalisation.
 
 let expanded_vprop (v : vprop) : v':vprop{t_of v' == t_of v}
   = VUnit ({
@@ -79,7 +83,10 @@ let elim_expanded_vprop #opened (v : vprop)
                       (elim_expanded_vprop_lem v)
 
 
-(* [pure] with a selector that gives a squash of the proposition *)
+(** [pure] with a selector that gives a squash of the proposition *)
+
+/// This vprop is equivalent to [Steel.Effect.Common.pure] but provides an informative selector.
+/// It is useful when used with vprop combiners.
 
 val pure_sl  (p : prop) : Mem.slprop u#1
 val pure_sel (p : prop) : selector (squash p) (pure_sl p)
@@ -99,7 +106,9 @@ val elim_pure_lem (p : prop) (m : mem)
   : Lemma (requires Mem.interp (hp_of (pure p)) m) (ensures p)
 
 
-(* [vopt] *)
+(** [vopt] *)
+
+/// [vopt b v] is [if b then v else emp] but with a selector that returns an option.
 
 let vopt_sel_t (b : bool) (v : vprop) : Type = x : option (t_of v) {Some? x <==> b}
 val vopt_sl    (b : bool) (v : vprop) : Mem.slprop u#1
@@ -134,8 +143,14 @@ val vopt_elim_f (#opened:Mem.inames) (v : vprop)
       (requires fun _ -> True) (ensures fun h0 () h1 -> h0 (vopt false v) == None)
 
 
-(* [vexists] *)
+(** [vexists] *)
 (* TODO? $args *)
+
+/// [vexists] allows to give a selector to an existentially quantified vprop if the value of this selector is
+/// unique on any memory satisfying the existential.
+/// This uniqueness is expressed by [vexists_indep]. A sufficient condition for it to hold is the uniqueness of the
+/// quantified variable ([vexists_indepI_unique]). It is also satisfied by a non informative selector (f constant)
+/// hence [vexists] is a generalization of [Steel.Effect.Atomic.h_exists].
 
 let vexists_indep (#a : Type) (v : a -> vprop) (#t : Type) (f : (x:a) -> normal (t_of (v x)) -> GTot t)
   : Tot prop
@@ -225,7 +240,7 @@ val witness_vexists (#a : Type) (#opened:Mem.inames) (v : a -> vprop)
                (fun _ -> True)    (fun h0 x h1 -> h0 (vexists v f) == f x (h1 (v x)))
 
 
-(* [vdept] : [vdep] with a cast on the second component *)
+(** [vdept] : [vdep] with a cast on the second component *)
 (* TODO ? use on_dom / restricted_t *)
 
 val vdept_sl (v : vprop) (#dt : t_of v -> Type) ($p : (x:t_of v) -> (v' : vprop {t_of v' == dt x}))
@@ -283,7 +298,16 @@ val elim_vdept (#opened:inames) (v: vprop) (#dt : t_of v -> Type) ($p : (x:t_of 
   )
 
 
-(* [gwand] : Magic wand implemented with a SteelGhost function *)
+(** [gwand] : Magic wand implemented with a SteelGhost function *)
+
+/// [gwand] represents a Magic wand implemented with a SteelGhost function.
+/// It is a record that contains a vprop with an irrelevant selector and an elimination function that refers to the
+/// selectors of the source and target of the wand. The classical separation logic wand [A -* B] is represented here
+/// as [wd.vp] for some [wd : gwand A B].
+/// Since the eliminator is a SteelGhost function, it can be introduced with a SteelGhost function that can change their
+/// ghost state (for example by writing ghost references). The drawback is that a wand cannot be eliminated directly on
+/// [Steel.Memory.interp], that is, the following does not hold for [wd : gwand A B]:
+///   [Mem.interp (hp_of (A `star` wd.vp)) h ==> Mem.interp (hp_of B) h]
 
 [@@erasable]
 noeq type gwand (src : vprop) (trg : vprop) : Type = {
@@ -296,6 +320,7 @@ noeq type gwand (src : vprop) (trg : vprop) : Type = {
                 (fun h0 -> req (h0 src)) (fun h0 () h1 -> ens (h0 src) (h1 trg))
 }
 
+/// [intro_gwand] introduces a wand with a vprop with an informative selector.
 val intro_gwand (#opened : Mem.inames)
   (vp : vprop) (sl : normal (t_of vp)) (* ALT?: h0 vp *)
   (src trg : vprop)
@@ -324,7 +349,13 @@ val elim_gwand (#opened : Mem.inames) (#src0 #trg0 : vprop) (wd : gwand src0 trg
          wd.ens (h0 src) (h1 trg))
 
 
-(* [aptr] : abstract references *)
+(** [aptr] : abstract references *)
+
+/// [aptr] defines an abstract notion of a reference and can be used to mimic the ability to take a reference to a
+/// field of a structure in C.
+/// However it is not extractable, one need to specialize enough the functions that use [aptr] in order to extract them.
+/// Another issue is that a pointer to a field of a structure keeps the ownership of the whole structure, so one cannot
+/// obtain simultaneously pointers to disjoints fields of a same structure.
 
 inline_for_extraction noextract noeq
 type aptr' (t : Type) = {

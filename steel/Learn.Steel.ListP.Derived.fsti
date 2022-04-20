@@ -27,7 +27,6 @@ let entry_not_null_lem (p : list_param) (entry : ref p.r) len exit m
     elim_mlist_cons_lem p entry hd tl (len - 1) exit m;
     p.nnull entry m
 
-
 (* Not true if the exit is non-null (if there is a loop) *)
 let rec mlistN_length_unique (p : list_param) entry len0 len1 m
   : Lemma (requires Mem.interp (hp_of (mlist p entry len0 null)) m /\
@@ -52,6 +51,11 @@ let rec mlistN_length_unique (p : list_param) entry len0 len1 m
 
 (*** [mlistN] *)
 
+/// Thanks to the [mlistN_length_unique] property, one can use a [vexists] to remove the [len] index from the vprop
+/// in the case of null-terminated lists.
+/// We need to have this uniqueness property as a pure lemma on memories rather than a SteelGhost lemma. This is thei
+/// reason why we expose pure lemmas in [Learn.Steel.ListP.Data].
+
 type mlistN_sel_t (p : list_param) (entry : ref p.r) =
   l : list (cell_t p) {entry == sg_entry l null}
 
@@ -73,6 +77,8 @@ let sel_listN (#q:vprop) (p:list_param) (entry:ref p.r)
   (h:rmem q{FStar.Tactics.with_tactic selector_tactic (can_be_split q (mlistN p entry) /\ True)})
   : GTot (mlistN_sel_t p entry)
   = h (mlistN p entry)
+
+/// One can freely switch between the [mlist] and [mlistN] using the following lemmas:
 
 val intro_mlistN (#opened:Mem.inames) (p:list_param) (entry:ref p.r) (len : nat)
   : SteelGhost unit opened
@@ -450,13 +456,15 @@ inline_for_extraction
 let listN_next (p : list_param) (r0 : ref p.r)
   : Steel (ref p.r)
           (mlistN p r0) (fun r1 -> vcell p r0 `star` mlistN p r1)
-          (requires fun h0       -> Cons? (sel_listN p r0 h0))
+          (requires fun h0       -> not (is_null r0) \/ Cons? (sel_listN p r0 h0))
           (ensures  fun h0 r1 h1 ->
                     sel_listN p r0 h0
                       == (|r0, g_data p r0 h1|) :: sel_listN p r1 h1 /\
                     g_next p r0 h1 == r1)
-  = 
+  =
     (**) let l : G.erased (mlistN_sel_t p r0) = gget (mlistN p r0) in
+    (**) mlistN_entry_null_iff p r0;
+    (**) assert (Cons? l);
     (**) let g_r1 = elim_mlistN_cons p r0 (L.hd l) (L.tl l) in
     let nxt = (p.cell r0).read_next () in
     (**) change_equal_slprop (mlistN p (G.reveal g_r1))

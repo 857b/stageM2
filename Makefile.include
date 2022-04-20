@@ -10,7 +10,8 @@ endif
 
 SOURCE_DIRS = $(PROJECT_HOME)/pure/ \
 			  $(PROJECT_HOME)/lowstar/ \
-			  $(PROJECT_HOME)/steel/
+			  $(PROJECT_HOME)/steel/ \
+			  $(PROJECT_HOME)/misc/
 
 INCLUDE_DIRS = \
   $(SOURCE_DIRS) \
@@ -23,7 +24,8 @@ IGNORE_KRML_FILES=\
 	obj/FStar_NMST.krml \
 	obj/Steel_%.krml
 
-FSTAR_INCLUDES = $(addprefix --include ,$(INCLUDE_DIRS))
+FSTAR_INCLUDES  = $(addprefix --include ,$(INCLUDE_DIRS))
+FSTAR_USE_HINTS = --hint_dir $(PROJECT_HOME)/hints --use_hints
 
 %.fst-in %.fsti-in:
 	@echo $(FSTAR_INCLUDES)

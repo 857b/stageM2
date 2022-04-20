@@ -7,6 +7,16 @@ open Steel.Reference
 
 open Learn.Steel.ListP.Param
 
+/// This module defines a parametrized linked list structure.
+/// The vprop [mlist p entry len exit] represents a list segment `[entry, exit)` and is indexed by:
+/// - the abstract parameter used for the cells of the list
+/// - the entry of the list, that is, the address of the first cell
+/// - the length of the segment that is represented by the vprop
+/// - the exit of the segment, that is, the address the `next` field of the last cell points to
+/// The associated selector is a list of [cell_t p], that is a list of references and data.
+/// Thanks to the refinement on the selector type, it is guaranted that the list has length [len] and is related to
+/// [entry] and [exit].
+
 let sg_entry (#r : Type) (#a : r -> Type) (l : list (x:r & a x)) (exit : r) : r =
   match l with
   | [] -> exit
@@ -37,7 +47,10 @@ let sel_list (#q:vprop) (p : list_param) (entry : ref p.r) (len : nat) (exit : r
   : GTot (mlist_sel_t p entry len exit)
   = h (mlist p entry len exit)
 
-(* intro/elim lemmas *)
+(** intro/elim lemmas *)
+
+/// We only define here the minimal set of intro/elim lemmas. They are defined as pure lemmas that operate on memories.
+/// Their stateful SteelGhost equivalents are derived in [Learn.Steel.ListP.Derived].
 
 val intro_mlist_nil_lem (p : list_param) (r0 : ref p.r) (m : Mem.mem)
   : Lemma (ensures Mem.interp (hp_of (mlist p r0 0 r0)) m /\

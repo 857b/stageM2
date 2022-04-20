@@ -14,6 +14,14 @@ open Steel.Reference
 (* TODO *)
 irreducible let __ty_reduce__ : unit = ()
 
+/// [list_param] is a parameter used to represent the cells of a linked list.
+/// It is a collection of vprop indexed by a reference type. Each vprop has a selector that can be decomposed
+/// into two part:
+/// - A next field that is used by the linked-list. An instance must provide a getter and a setter for this field
+///   on the selector type and Steel functions to read and change its value.
+/// - A data field that is unchanged by the functions operating on abstract linked list. We only require a getter
+///   and that it is not affected by updates of the next field.
+
 noeq inline_for_extraction noextract
 type list_param_r' (r : Type) = {
   vp        : vprop;
@@ -91,6 +99,7 @@ let list_cell_not_null #opened (p : list_param) (x:ref p.r)
   = extract_info_raw (vcell p x) (is_null x == false) (p.nnull x)
 
 
+/// [list_param_of_vptr] builds a [list_param] for the common case where the cells are [vptr].
 inline_for_extraction noextract
 let list_param_of_vptr (c cdata_t : Type)
     (gs_next : US.get_set_t c (ref c)) (get_data : c -> cdata_t)
@@ -114,9 +123,12 @@ let list_param_of_vptr (c cdata_t : Type)
   }
 
 
-(* [extend_list_param] : extending the vprop of a list_param *)
-
+(** [extend_list_param] : extending the vprop of a list_param *)
 (* TODO? hide *)
+
+/// [extend_list_param] allows to extends the cells of a [list_param] with vprops that depends only on the abstract
+/// data field of the cell. This extension is erasable so a function that operate on linked lists with parameter
+/// [extend_list_param p e] need to be extracted only once for each [p].
 
 [@@erasable]
 noeq inline_for_extraction

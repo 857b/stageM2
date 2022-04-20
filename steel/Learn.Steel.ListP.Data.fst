@@ -9,6 +9,8 @@ open Steel.Reference
 
 open Learn.Steel.ListP.Param
 
+/// We define [mlist p entry len exit] by induction on [len].
+/// We use vprop combiners instead of defining manually the selector.
 
 let mlist_cons_sel (p : list_param) (entry : ref p.r) (len' : nat) (exit : ref p.r)
                    (sels : (c : t_of (vcell p entry)
