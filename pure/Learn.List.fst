@@ -4,16 +4,42 @@ open FStar.Calc
 open FStar.Classical.Sugar
 open FStar.List.Pure
 
-module U = Learn.Util
-module T  = FStar.Tactics
-module Cl = FStar.Classical
-module Tuq = Learn.Tactics.Unsquash
+module U    = Learn.Util
+module T    = FStar.Tactics
+module Tuq  = Learn.Tactics.Unsquash
+
+(* [map] *)
+
+let rec map_index (#a #b : Type) (f : a -> b) (l : list a) (i : nat {i < length l})
+  : Lemma (ensures index (map f l) i == f (index l i)) (decreases i)
+          [SMTPat (index (map f l) i)]
+  = let x :: xs = l in
+    if i = 0 then () else map_index f xs (i-1)
+
+let rec map_map (#a #b #c : Type) (f : b -> c) (g : a -> b) (h : a -> c) (l : list a)
+  : Lemma (requires forall (x : a) . h x == f (g x))
+          (ensures map f (map g l) == map h l)
+          (decreases l)
+  = match l with
+    | [] -> ()
+    | _ :: tl -> map_map f g h tl
+
+let rec map_append #a #b (f : a -> b) l0 l1
+  : Lemma (ensures map f (l0@l1) == map f l0 @ map f l1)
+          (decreases l0)
+  = match l0 with
+    | [] -> ()
+    | _ :: tl -> map_append f tl l1
+
+
+(* [append] *)
 
 let rec append_index (#a:Type) (l1 l2 : list a) (i : nat{i < length l1 + length l2}):
   Lemma (index (l1@l2) i == (if i < length l1 then index l1 i else index l2 (i - length l1)))
   = match l1 with
     | [] -> ()
     | _ :: tl -> if i = 0 then () else append_index tl l2 (i-1)
+
 
 (* [rev'] *)
 
@@ -166,6 +192,19 @@ let rec initi (#a : Type) (lb ub : nat) (f : (i:nat{lb <= i /\ i < ub}) -> Tot a
   : Tot (list a) (decreases ub - lb)
   = if lb < ub then f lb :: initi (lb + 1) ub f else []
 
+let rec initi_length (#a : Type) (lb ub : nat) (f : (i:nat{lb <= i /\ i < ub}) -> Tot a)
+  : Lemma (ensures length (initi lb ub f) = (if ub >= lb then ub - lb else 0)) (decreases ub - lb)
+          [SMTPat (length (initi lb ub f))]
+  = if lb < ub then initi_length (lb + 1) ub f else ()
+
+let rec initi_index (#a : Type) (lb ub : nat) (f : (i:nat{lb <= i /\ i < ub}) -> Tot a)
+                    (i : nat{i < length (initi lb ub f)})
+  : Lemma (ensures index (initi lb ub f) i == f (lb+i)) (decreases i)
+          [SMTPat (index (initi lb ub f) i)]
+  = if i = 0 then ()
+    else initi_index (lb+1) ub f (i-1)
+
+
 (* [insert] *)
 
 let rec insert (#a : Type) (i : nat) (x : a) (l : list a)
@@ -189,6 +228,7 @@ let rec map_insert (#a #b : Type) (f : a -> b) (i : nat) (x : a) (l : list a)
   = if i = 0 then ()
     else map_insert f (i - 1) x (tail l)
 
+
 (* [set] *)
 
 let rec set (#a : Type) (i : nat) (x : a) (l : list a)
@@ -205,23 +245,26 @@ let rec set_index (#a : Type) (i : nat) (x : a) (l : list a) (j : nat)
           [SMTPat (index (set i x l) j)]
   = if i = 0 || j = 0 then () else set_index (i-1) x (tl l) (j-1)
 
-(* [map_index] *)
 
-let rec map_index (#a : Type) (i : nat) (f : a -> a) (l : list a)
+(* [map_nth] *)
+
+let rec map_nth (#a : Type) (i : nat) (f : a -> a) (l : list a)
   : Pure (list a) (requires i < length l) (ensures fun r -> length r = length l)
          (decreases i)
   = let hd :: tl = l in
     if i = 0 then f hd :: tl
-    else hd :: map_index (i - 1) f tl
+    else hd :: map_nth (i - 1) f tl
 
-let rec set_is_map_index (#a : Type) (i : nat) (x : a) (l : list a)
+let rec set_is_map_nth (#a : Type) (i : nat) (x : a) (l : list a)
   : Lemma (requires  i < length l)
-          (ensures   set i x l == map_index i (fun _ -> x) l)
+          (ensures   set i x l == map_nth i (fun _ -> x) l)
           (decreases i)
-  = if i = 0 then () else set_is_map_index (i-1) x (tail l)
+  = if i = 0 then () else set_is_map_nth (i-1) x (tail l)
+
 
 (* [splitAt] *)
 
+/// same conclusion as [FStar.List.Pure.Properties.lemma_splitAt_append] but without the requirement on [n]
 let rec lemma_splitAt_append (#a:Type) (n:nat) (l:list a) :
   Lemma (ensures (let l1, l2 = splitAt n l in append l1 l2 == l)) =
   match n with
@@ -231,83 +274,16 @@ let rec lemma_splitAt_append (#a:Type) (n:nat) (l:list a) :
     | [] -> ()
     | x :: xs -> lemma_splitAt_append (n-1) xs
 
-(* [permutation] *)
 
-noeq type permutation_t (#a : Type) : list a -> list a -> Type =
-  | Perm_swap : l0 : list a -> x : a -> y : a -> l1 : list a ->
-              permutation_t (l0 @ x :: y :: l1) (l0 @ y :: x :: l1)
-  | Perm_refl  : l : list a -> permutation_t l l
-  | Perm_trans : l0 : list a -> l1 : list a -> l2 : list a ->
-              permutation_t l0 l1 -> permutation_t l1 l2 ->
-              permutation_t l0 l2
+(* [fold_right] *)
 
-type permutation #a l0 l1 = squash (permutation_t #a l0 l1)
+let rec fold_right_append #a #b f l0 l1 x
+  : Lemma (ensures fold_right #a #b f (l0@l1) x == fold_right f l0 (fold_right f l1 x))
+          (decreases l0)
+  = match l0 with
+    | [] -> ()
+    | hd :: tl -> fold_right_append f tl l1 x
 
-module Mnd = FStar.Algebra.Monoid
-
-let append_monoid (a : Type) : Mnd.monoid (list a) =
-  U.assert_by (Mnd.right_unitality_lemma (list a) [] (append #a) /\ True)
-    (fun () -> assert (forall (l : list a) . l @ [] == l));
-  assert (Mnd.left_unitality_lemma (list a) [] (append #a));
-  U.assert_by (Mnd.associativity_lemma (list a) (append #a) /\ True)
-    (fun () -> assert (Mnd.associativity_lemma (list a) (append #a) ==
-                       (forall (x y z : list a) . (x @ y) @ z == x @ (y @ z)))
-                by T.(norm [delta]; trefl ());
-            introduce forall (x y z : list a) . x @ (y @ z) == (x @ y) @ z
-                 with append_assoc x y z);
-  Mnd.intro_monoid (list a) [] (append #a)
-
-
-let rec permutation_t_sym #a l0 l1 (p : permutation_t #a l0 l1)
-  : Tot (permutation_t #a l1 l0)
-        (decreases p)
-  = match p with
-    | Perm_refl l -> Perm_refl l
-    | Perm_swap l0 x y l1 -> Perm_swap l0 y x l1
-    | Perm_trans l0 l1 l2 p0 p1 -> Perm_trans l2 l1 l0 (permutation_t_sym _ _ p1) (permutation_t_sym _ _ p0)
-
-let rec permutation_t_append (#a : Type) (pre l0 l1 sfx : list a) (p : permutation_t l0 l1)
-  : Tot (permutation_t (pre @ l0 @ sfx) (pre @ l1 @ sfx))
-        (decreases p)
-  = match p with
-    | Perm_swap l0 x y l1 ->
-                introduce forall x y . (pre @ l0) @ x :: y :: (l1 @ sfx) == pre @ (l0 @ x :: y :: l1) @ sfx
-                  with calc ( == ) {
-                    (pre @ l0) @ x :: y :: (l1 @ sfx);
-                  == {append_assoc pre l0 (x :: y :: (l1 @ sfx))}
-                    pre @ (l0 @ [x; y] @ (l1 @ sfx));
-                  == {append_assoc l0 [x; y] (l1 @ sfx)}
-                    pre @ ((l0 @ [x; y]) @ (l1 @ sfx));
-                  == {append_assoc (l0@[x; y]) l1 sfx}
-                    pre @ (((l0 @ [x; y]) @ l1) @ sfx);
-                  == {append_assoc l0 [x; y] l1}
-                    pre @ (l0 @ x :: y :: l1) @ sfx;
-                  };
-                Perm_swap (pre @ l0) x y (l1 @ sfx)
-    | Perm_refl l0 -> Perm_refl _
-    | Perm_trans l0 l1 l2 p0 p1 ->
-                 Perm_trans _ _ _ (permutation_t_append pre l0 l1 sfx p0)
-                                  (permutation_t_append pre l1 l2 sfx p1)
-
-let rec permutation_t_cons_snoc #a x l
-  : Tot (permutation_t #a (x :: l) (snoc (l,x)))
-        (decreases l)
-  = match l with
-    | [] -> Perm_refl _
-    | hd :: tl ->
-      Perm_trans _ _ _ (Perm_swap [] x hd tl)
-                       (permutation_t_append [hd] (x :: tl) (snoc (tl,x)) []
-                         (permutation_t_cons_snoc #a x tl))
-        
-let rec permutation_t_rev' #a l
-  : Tot (permutation_t #a l (rev' l))
-        (decreases l)
-  = match l with
-    | [] -> Perm_refl _
-    | hd :: tl ->
-      Perm_trans _ _ _ (permutation_t_cons_snoc hd tl)
-                       (permutation_t_append [] tl (rev' tl) [hd]
-                         (permutation_t_rev' tl))
 
 (* [fold_right_gtot] *)
 
@@ -321,18 +297,6 @@ let rec fold_right_gtot_append #a #b l0 l1 f x
 let fold_right_gtot_f_comm #a #b (f : a -> b -> GTot b) : prop =
   forall (x0 x1 : a) (y : b) . f x0 (f x1 y) == f x1 (f x0 y)
 
-let rec fold_right_gtot_comm_permutation_t #a #b l0 l1 f x (p : permutation_t l0 l1)
-  : Lemma (requires fold_right_gtot_f_comm #a #b f)
-          (ensures fold_right_gtot l0 f x == fold_right_gtot l1 f x)
-          (decreases p)
-  = match p with
-    | Perm_refl _ -> ()
-    | Perm_swap l0 x0 x1 l1 ->
-                fold_right_gtot_append l0 (x0 :: x1 :: l1) f x;
-                fold_right_gtot_append l0 (x1 :: x0 :: l1) f x
-    | Perm_trans l0 l1 l2 p0 p1 ->
-                fold_right_gtot_comm_permutation_t l0 l1 f x p0;
-                fold_right_gtot_comm_permutation_t l1 l2 f x p1
 
 (* [g_for_all] *)
 

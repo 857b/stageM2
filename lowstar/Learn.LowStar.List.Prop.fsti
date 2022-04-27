@@ -1,13 +1,14 @@
 module Learn.LowStar.List.Prop
 
-module UL  = Learn.LowStar.Util
-module L   = FStar.List.Pure
-module Ll  = Learn.List
-module B   = LowStar.Buffer
-module M   = LowStar.Modifies
-module G   = FStar.Ghost
-module HS  = FStar.HyperStack
-module ST  = FStar.HyperStack.ST
+module UL   = Learn.LowStar.Util
+module L    = FStar.List.Pure
+module Ll   = Learn.List
+module Perm = Learn.Permutation
+module B    = LowStar.Buffer
+module M    = LowStar.Modifies
+module G    = FStar.Ghost
+module HS   = FStar.HyperStack
+module ST   = FStar.HyperStack.ST
 
 open LowStar.BufferOps
 open FStar.HyperStack.ST
@@ -321,7 +322,7 @@ let rec splitAt_next_live (#a : Type) (i : nat) (sg : list_seg a) (h : HS.mem)
 
 let set_seg (#a : Type) (i : nat) (x : a) (sg : list_seg a)
   : Pure (list_seg a) (requires i < sg_length sg) (ensures fun sg' -> sg_length sg' = sg_length sg)
-  = { sg with segment = Ll.map_index i (fun (c, _) -> (c, x)) sg.segment }
+  = { sg with segment = Ll.map_nth i (fun (c, _) -> (c, x)) sg.segment }
 
 let rec set_seg_splitAt (#a : Type) (i j : nat) (x : a) (sg : list_seg a)
   : Lemma (requires i + j < sg_length sg)
@@ -345,6 +346,6 @@ let reverse_seg_loc (#a : Type) (sg : list_seg a)
     loc_seg_fold (reverse_seg sg);
     loc_seg_fold sg;
     loc_seg_fold_f_comm a;
-    Ll.fold_right_gtot_comm_permutation_t _ _ (loc_seg_fold_f #a)
-                 M.loc_none (Ll.permutation_t_rev' sg.segment);
+    Perm.fold_right_gtot_comm_permutation_p _ _ (loc_seg_fold_f #a)
+                 M.loc_none (Perm.permutation_p_rev' sg.segment);
     L.rev_rev' sg.segment

@@ -79,7 +79,8 @@ let enqueue (#c : Type) (a : queue_param c)
         let tl = (sg_uncons a tls)._1 in
         assert (loc_seg tls.segment == B.loc_buffer tl);
         assert (loc_seg sg.segment  == M.(loc_union (loc_seg ini.segment) (B.loc_buffer tl)));
-      (q.(0ul)).q_entry.(0ul) <- a.set_next (q.(0ul)).q_entry.(0ul) x;
+      let q_ent = (q.(0ul)).q_entry in
+      q_ent.(0ul) <- a.set_next q_ent.(0ul) x;
       q.(0ul) <- {q.(0ul) with q_entry = x};
         let h1 = ST.get () in
         let sg' = sg_mkapp a ini (sg_mkcons a tl (sg_mksglt a x B.null)) in

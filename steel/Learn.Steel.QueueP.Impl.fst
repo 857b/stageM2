@@ -98,11 +98,12 @@ let enqueue (p : list_param) (x : ref p.r) (q : queue_t p)
       (**) assert ((G.reveal lt)._1 == G.reveal lt');
       (**) let nil = elim_mlist_cons p lt' 0 null in
       (**) elim_mlist_nil p nil null;
-      (**) change_equal_slprop (mlist p l_entry (len-1) lt'          `star` vcell p          lt')
-      (**)                     (mlist p l_entry (len-1) q_st.q_entry `star` vcell p q_st.q_entry);
-      (p.cell q_st.q_entry).write_next x;
-      (**) intro_mlist_cons p q_st.q_entry x 1 null;
-      (**) intro_mlist_append p l_entry (len-1) q_st.q_entry (1+1) null;
+      let q_ent = q_st.q_entry in
+      (**) change_equal_slprop (mlist p l_entry (len-1) lt'   `star` vcell p   lt')
+      (**)                     (mlist p l_entry (len-1) q_ent `star` vcell p q_ent);
+      (p.cell q_ent).write_next x;
+      (**) intro_mlist_cons p q_ent x 1 null;
+      (**) intro_mlist_append p l_entry (len-1) q_ent (1+1) null;
       (**) intro_mlistN p l_entry ((len-1)+(1+1));
       (**) append_last_cell p ini [G.reveal lt; G.reveal x_cell];
       (**) L.append_assoc ini [G.reveal lt] [G.reveal x_cell];
