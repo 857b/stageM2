@@ -219,9 +219,9 @@ let rec vprop_equiv_flat (vp : vprop)
                               (vprop_of_list (flatten_vprop v0) `star` vprop_of_list (flatten_vprop v1))
                               (v0 `star` v1)
 
-
+[@@ __tree_reduce__]
 let vprop_list_sels_t : vprop_list -> ty_list =
-  L.map (fun (vp:vprop') -> vp.t) 
+  L.map Mkvprop'?.t
 
 unfold
 let sl_t (vs : vprop_list) : Type = var_list (vprop_list_sels_t vs)
@@ -243,46 +243,13 @@ let rmem_sels (#p:vprop) (vs : vprop_list)
   : GTot (sl_t vs)
   = vpl_sels vs (h (vprop_of_list vs))
 
-(*
-let rec rmem_sels (vs : vprop_list) (h : rmem (vprop_of_list vs))
-  : GTot (var_list (vprop_list_sels_t vs)) (decreases vs)
-  = match vs with
-  | []     -> VLNil
-  | v :: vs -> let _ : (can_be_split (vprop_of_list (v :: vs)) (VUnit v) /\ True) = _
-                 by (T.norm [iota; zeta; delta_only [`%vprop_of_list]]; selector_tactic ()) in
-              let _ : (can_be_split (vprop_of_list (v :: vs)) (vprop_of_list vs) /\ True) = _
-                 by (T.norm [iota; zeta; delta_only [`%vprop_of_list]]; selector_tactic ()) in
-              VLCons v.t (h (VUnit v)) _ (rmem_sels vs (focus_rmem h (vprop_of_list vs)))
-
-let focus_rmem_feq (p q r : vprop) (h : rmem p)
-  : Lemma (requires can_be_split p q /\ can_be_split q r)
-          (ensures  can_be_split p r /\ focus_rmem h q r == h r)
-  = can_be_split_trans p q r
-
-let rec rmem_sels_eq (vs : vprop_list) (h : rmem (vprop_of_list vs)) (i : nat {i < L.length vs})
-  : Lemma (ensures vprop_of_list_can_be_split vs i;
-                  (var_at (rmem_sels vs h) i == h (VUnit (L.index vs i))))
-  = let v :: vs' = vs in
-    if i = 0 then ()
-    else begin
-      let _ : (can_be_split (vprop_of_list (v :: vs')) (vprop_of_list vs') /\ True) = _
-         by (T.norm [iota; zeta; delta_only [`%vprop_of_list]]; selector_tactic ()) in
-      U.f_equal (fun vs -> rmem (vprop_of_list vs)) vs (v :: vs');
-      vprop_of_list_can_be_split vs' (i-1);
-      focus_rmem_feq (vprop_of_list (v :: vs')) (vprop_of_list vs') (VUnit (L.index vs' (i-1)))
-                     (U.cast (rmem (vprop_of_list (v :: vs'))) h);
-      rmem_sels_eq vs' (focus_rmem h (vprop_of_list vs')) (i-1)
-  end
-*)
-
 unfold
 let split_vars (vs0 vs1 : vprop_list) (xs : sl_t (vs0@vs1))
   : sl_t vs0 & sl_t vs1
   =
-    Ll.map_append (fun (vp:vprop') -> vp.t) vs0 vs1;
+    Ll.map_append Mkvprop'?.t vs0 vs1;
     L.lemma_append_splitAt (vprop_list_sels_t vs0) (vprop_list_sels_t vs1);
     var_splitAt (L.length vs0) xs
- 
 
 let rec steel_elim_vprop_of_list_append #opened (vs0 vs1 : vprop_list)
   : SteelGhost unit opened
@@ -320,7 +287,7 @@ let vequiv (vs0 vs1 : vprop_list) : Type
 
 let vequiv_sels_t (#vs0 #vs1 : vprop_list) (f : vequiv vs0 vs1)
   : Lemma (vprop_list_sels_t vs1 == Perm.apply_perm_r f (vprop_list_sels_t vs0))
-  = Perm.map_apply_r f (fun (vp:vprop') -> vp.t) vs0
+  = Perm.map_apply_r f Mkvprop'?.t vs0
 
 unfold
 let extract_vars (#src #dst : vprop_list)
@@ -426,8 +393,8 @@ let steel_change_vequiv (#vs0 #vs1 : vprop_list) (#opened:Mem.inames) (f : vequi
 
 (*** [prog_tree] *)
 
-let pre_t = vprop_list
-let post_t (a : Type) = a -> vprop_list
+type pre_t = vprop_list
+type post_t (a : Type) = a -> vprop_list
 type req_t (pre : pre_t) = sl_t pre -> prop
 type ens_t (pre : pre_t) (a : Type) (post : post_t a) = sl_t pre -> (x : a) -> sl_t (post x) -> prop
 
@@ -459,20 +426,27 @@ type prog_tree : (a : Type u#a) -> Type u#(max (a+1) 2) =
    - ? equalities vs vequiv
       + Tspec : post x == post' x @ frame, allow shuffle at the end
    - ~pr ! allow assumptions -> VC
-   - ALT: datatype indexed by t *)
+   - ALT: recursively defined type *)
 
-let rec tree_cond (#a : Type u#a ) (t : prog_tree a) (pre : pre_t) (post : post_t a)
-  : Tot (Type u#(max a 2)) (decreases t)
-  = match t with
-  | Tspec a pre' post' _ _ ->
-          frame : vprop_list & vequiv pre L.(pre' @ frame)
-                             & ((x:a) -> vequiv (post' x @ frame) (post x))
-  | Tret  a x ->
-          Uv.raise_t u#0 u#(max a 2) (vequiv pre (post x))
-  | Tbind a b f g ->
-          itm : (a -> vprop_list) & tree_cond f pre itm & ((x:a) -> tree_cond (g x) (itm x) post)
-  | TbindP a b _ _ g ->
-          (x:a) -> tree_cond (g x) pre post
+noeq
+type tree_cond : (#a : Type u#a) -> (t : prog_tree a) -> (pre : pre_t) -> (post : post_t a) -> Type u#(max (a+1) 2) =
+  | TCspec  : (#a : Type u#a) -> (#pre : pre_t) -> (#post : post_t a) -> (#req : req_t pre) -> (#ens : ens_t pre a post) ->
+              (pre' : pre_t) -> (post' : post_t a) -> (frame : vprop_list) ->
+              (p0 : vequiv pre' L.(pre @ frame)) -> (p1 : ((x : a) -> vequiv (post x @ frame) (post' x))) ->
+              tree_cond (Tspec a pre post req ens) pre' post'
+  | TCret   : (#a : Type u#a) -> (#x : a) ->
+              (pre : pre_t) -> (post : post_t a) ->
+              (p : vequiv pre (post x)) ->
+              tree_cond (Tret a x) pre post
+  | TCbind  : (#a : Type u#a) -> (#b : Type u#a) -> (#f : prog_tree a) -> (#g : (a -> prog_tree b)) ->
+              (pre : pre_t) -> (itm : (a -> vprop_list)) -> (post : post_t b) ->
+              (cf : tree_cond f pre itm) -> (cg : ((x : a) -> tree_cond (g x) (itm x) post)) ->
+              tree_cond (Tbind a b f g) pre post
+  | TCbindP : (#a : Type u#a) -> (#b : Type u#a) ->
+              (#wp : pure_wp a) -> (#x : (unit -> PURE a wp)) -> (#g : (a -> prog_tree b)) ->
+              (pre : pre_t) -> (post : post_t b) ->
+              (cg : ((x : a) -> tree_cond (g x) pre post)) ->
+              tree_cond (TbindP a b wp x g) pre post
 
 (*** requires / ensures *)
 
@@ -534,35 +508,33 @@ let bind_pure_ens (#a : Type) (#b : Type)
 let rec tree_req (#a : Type u#a) (t : prog_tree a)
                  (#pre : pre_t) (#post : post_t a) (c : tree_cond t pre post)
   : Tot (req_t pre) (decreases t) =
-  let tc : (t : prog_tree a & tree_cond t pre post) = (|t, c|) in
-  match tc with
-  | (|Tspec  _ pre' _ req _, (|frame, p0, _|)|) ->
-             (fun sl0 -> req (extract_vars_f pre pre' frame p0 sl0)._1)
-  | (|Tret   _ _, _|) ->
+  match c with
+  | TCspec #_ #pre #_ #req #_  pre' _ frame  p0 _ ->
+             (fun sl0 -> req (extract_vars_f pre' pre frame p0 sl0)._1)
+  | TCret #_ #_  pre _  _ ->
              return_req pre
-  | (|Tbind  _ _ f g, (|itm, cf, cg|)|) ->
+  | TCbind #_ #_ #f #g  pre itm _  cf cg ->
              bind_req (tree_req f cf) (tree_ens f cf) (fun x -> tree_req (g x) (cg x))
-  | (|TbindP _ _ wp _ g, cg|) ->
+  | TCbindP #_ #_ #wp #_ #g  pre _  cg ->
              bind_pure_req wp (fun x -> tree_req (g x) (cg x))
 
 and tree_ens (#a : Type u#a) (t : prog_tree a)
              (#pre : pre_t) (#post : post_t a) (c : tree_cond t pre post)
   : Tot (ens_t pre a post) (decreases t) =
-  let tc : (t : prog_tree a & tree_cond t pre post) = (|t, c|) in
-  match tc with
-  | (|Tspec  a pre' post' req ens, (|frame, p0, p1|)|) ->
-             (fun sl0 x sl1 ->
-                let sl0', frame0 = extract_vars_f pre  pre'  frame p0 sl0 in
-                let sl1', frame1 = extract_vars_f (post x) (post' x) frame (vequiv_sym (p1 x)) sl1 in
-                frame1 == frame0 /\ ens sl0' x sl1')
-  | (|Tret   _ x, p|) ->
+  match c with
+  | TCspec #a #pre #post #req #ens  pre' post' frame  p0 p1 ->
+             (fun sl0' x sl1' ->
+                let sl0, frame0 = extract_vars_f pre' pre frame p0 sl0' in
+                let sl1, frame1 = extract_vars_f (post' x) (post x) frame (vequiv_sym (p1 x)) sl1' in
+                frame1 == frame0 /\ ens sl0 x sl1)
+  | TCret #a #x  pre post  p ->
              (fun sl0 x' sl1 ->
                 x' == x /\
-               (let sl0' = extract_vars #pre #(post x) (Uv.downgrade_val u#0 u#(max a 2) p) sl0 in
+               (let sl0' = extract_vars p sl0 in
                 sl1 == sl0'))
-  | (|Tbind  _ _ f g, (|itm, cf, cg|)|) ->
+  | TCbind #_ #_ #f #g  pre itm post  cf cg ->
              bind_ens (tree_req f cf) (tree_ens f cf) (fun x -> tree_ens (g x) (cg x))
-  | (|TbindP _ _ wp _ g, cg|) ->
+  | TCbindP #_ #_ #wp #_ #g  pre post  cg ->
              bind_pure_ens wp (fun x -> tree_ens (g x) (cg x))
 
 
@@ -583,6 +555,24 @@ let tree_of_steel (#a : Type) (#pre : pre_t) (#post : post_t a) (#req : req_t pr
   : prog_tree a
   = Tspec a pre post req ens
 
+let repr_of_steel_steel
+      (a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
+      (pre' : pre_t) (post' : post_t a) (frame : vprop_list)
+      (p0 : vequiv pre' L.(pre @ frame)) (p1 : ((x : a) -> vequiv (post x @ frame) (post' x)))
+      ($f : repr_steel_t a pre post req ens)
+  : (let c = TCspec #a #pre #post #req #ens pre' post' frame p0 p1 in
+     repr_steel_t a pre' post' (tree_req _ c) (tree_ens _ c))
+  = fun () ->
+    (**) steel_change_vequiv p0;
+    (**) steel_elim_vprop_of_list_append pre frame;
+    let x = f () in
+    (**) steel_intro_vprop_of_list_append (post x) frame;
+    (**) let sl1' = gget (vprop_of_list L.(post x @ frame)) in
+    (**) steel_change_vequiv (p1 x);
+    (**) let sl1'' = gget (vprop_of_list (post' x)) in
+    (**) assert (vpl_sels (post' x) sl1'' == extract_vars (p1 x) (vpl_sels L.(post x @ frame) sl1'));
+    (**) extract_vars_sym_l (p1 x) (vpl_sels L.(post x @ frame) sl1');
+    Steel.Effect.Atomic.return x
 
 [@@ __tree_reduce__]
 let repr_of_steel (#a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
@@ -590,27 +580,32 @@ let repr_of_steel (#a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) 
   : repr a
   = {
     repr_tree  = tree_of_steel f;
-    repr_steel = (fun pre' post' (|frame, p0, p1|) () ->
-        (**) steel_change_vequiv p0;
-        (**) steel_elim_vprop_of_list_append pre frame;
-        let x = f () in
-        (**) steel_intro_vprop_of_list_append (post x) frame;
-        (**) let sl1' = gget (vprop_of_list L.(post x @ frame)) in
-        (**) steel_change_vequiv (p1 x);
-        (**) let sl1'' = gget (vprop_of_list (post' x)) in
-        (**) assert (vpl_sels (post' x) sl1'' == extract_vars (p1 x) (vpl_sels L.(post x @ frame) sl1'));
-        (**) extract_vars_sym_l (p1 x) (vpl_sels L.(post x @ frame) sl1');
-        return x)
+    repr_steel = (fun pre'0 post'0 c ->
+                    let (TCspec pre' post' frame  p0 p1) = c in
+                    U.cast (repr_steel_t a pre'0 post'0 (tree_req _ c) (tree_ens _ c))
+                           (repr_of_steel_steel a pre post req ens pre' post' frame p0 p1 f))
   }
+
+
+let return_steel
+      (a : Type) (x : a)
+      (pre : pre_t) (post : post_t a)
+      (p : vequiv pre (post x))
+  : (let c = TCret #a #x pre post p in
+     repr_steel_t a pre post (tree_req _ c) (tree_ens _ c))
+  = fun () ->
+    (**) steel_change_vequiv p;
+    Steel.Effect.Atomic.return x
 
 [@@ __tree_reduce__]
 let return (#a : Type) (x :a)
   : repr a
   = {
     repr_tree  = Tret a x;
-    repr_steel = (fun pre post p () ->
-        (**) steel_change_vequiv (Uv.downgrade_val p);
-        Steel.Effect.Atomic.return x)
+    repr_steel = (fun pre0 post0 c ->
+        let TCret pre post p = c in
+        U.cast (repr_steel_t a pre0 post0 (tree_req _ c) (tree_ens _ c))
+               (return_steel a x pre post p))
   }
 
 
@@ -618,12 +613,12 @@ let elim_tree_req_bind (#a #b : Type) (f : prog_tree a) (g : a -> prog_tree b)
       (#pre : pre_t) (#post : post_t b) (#itm : a -> vprop_list)
       (cf  : tree_cond f pre itm) (cg : (x:a) -> tree_cond (g x) (itm x) post)
       (sl0 : t_of (vprop_of_list pre))
-  : Lemma (requires tree_req (Tbind a b f g) (|itm, cf, cg|) (vpl_sels pre sl0))
+  : Lemma (requires tree_req _ (TCbind #a #b #f #g pre itm post cf cg) (vpl_sels pre sl0))
           (ensures  tree_req f cf (vpl_sels pre sl0) /\
                     (forall (x : a) (sl1 : t_of (vprop_of_list (itm x))) .
                       tree_ens f cf (vpl_sels pre sl0) x (vpl_sels (itm x) sl1) ==>
                       tree_req (g x) (cg x) (vpl_sels (itm x) sl1)))
-  = assert_norm (tree_req (Tbind a b f g) (|itm, cf, cg|) (vpl_sels pre sl0) == (
+  = assert_norm (tree_req _ (TCbind #a #b #f #g pre itm post cf cg) (vpl_sels pre sl0) == (
       tree_req f cf (vpl_sels pre sl0) /\
       (forall (x : a) (sl1 : sl_t (itm x)) .
          tree_ens f cf (vpl_sels pre sl0) x sl1 ==> tree_req (g x) (cg x) sl1)
@@ -637,9 +632,9 @@ let intro_tree_ens_bind (#a #b : Type) (f : prog_tree a) (g : a -> prog_tree b)
   : Lemma (requires tree_req f cf (vpl_sels pre sl0) /\
                     tree_ens f cf (vpl_sels pre sl0) x (vpl_sels (itm x) sl1) /\
                     tree_ens (g x) (cg x) (vpl_sels (itm x) sl1) y (vpl_sels (post y) sl2))
-          (ensures  tree_ens (Tbind a b f g) #pre #post (|itm, cf, cg|)
+          (ensures  tree_ens _ (TCbind #a #b #f #g pre itm post cf cg)
                              (vpl_sels pre sl0) y (vpl_sels (post y) sl2))
-  = assert_norm (tree_ens (Tbind a b f g) #pre #post (|itm, cf, cg|)
+  = assert_norm (tree_ens _ (TCbind #a #b #f #g pre itm post cf cg)
                           (vpl_sels pre sl0) y (vpl_sels (post y) sl2) == (
       tree_req f cf (vpl_sels pre sl0) /\
         (exists (x : a) (sl1 : sl_t (itm x)) .
@@ -647,26 +642,36 @@ let intro_tree_ens_bind (#a #b : Type) (f : prog_tree a) (g : a -> prog_tree b)
           tree_ens (g x) (cg x) sl1 y (vpl_sels (post y) sl2))
     ))
 
+let bind_steel
+      (a : Type) (b : Type) (f : prog_tree a) (g : (a -> prog_tree b))
+      (pre : pre_t) (itm : (a -> vprop_list)) (post : post_t b)
+      (cf : tree_cond f pre itm) (cg : ((x : a) -> tree_cond (g x) (itm x) post))
+      (rf : repr_steel_t a pre itm (tree_req f cf) (tree_ens f cf))
+      (rg : (x : a) -> repr_steel_t b (itm x) post (tree_req (g x) (cg x)) (tree_ens (g x) (cg x)))
+  : (let c = TCbind #a #b #f #g pre itm post cf cg in
+     repr_steel_t b pre post (tree_req _ c) (tree_ens _ c))
+  = fun () ->
+    (**) let sl0 = gget (vprop_of_list pre) in
+    (**) elim_tree_req_bind f g cf cg sl0;
+    let x = rf () in
+    (**) let sl1 = gget (vprop_of_list (itm x)) in
+    let y = rg x () in
+    (**) let sl2 = gget (vprop_of_list (post y)) in
+    (**) intro_tree_ens_bind f g cf cg sl0 x sl1 y sl2;
+    Steel.Effect.Atomic.return y
+
+
 [@@ __tree_reduce__]
 let bind (#a #b : Type)
       (f : repr a) (g : a -> repr b)
   : repr b
   = {
     repr_tree  = Tbind a b f.repr_tree (fun x -> (g x).repr_tree);
-    repr_steel = (fun pre post (|itm, cf, cg|) () ->
-        (**) let sl0 = gget (vprop_of_list pre) in
-        (**) assert (tree_req (Tbind a b f.repr_tree (fun x -> (g x).repr_tree))
-        (**)                  (|itm, cf, cg|) (vpl_sels pre sl0));
-        (**) elim_tree_req_bind f.repr_tree (fun x -> (g x).repr_tree) cf cg sl0;
-        let x = f.repr_steel pre itm cf () in
-        (**) let sl1 = gget (vprop_of_list (itm x)) in
-        (**) assert (tree_ens f.repr_tree cf (vpl_sels pre sl0) x (vpl_sels (itm x) sl1));
-        (**) assert (tree_req (g x).repr_tree (cg x) (vpl_sels (itm x) sl1));
-        let y = (g x).repr_steel (itm x) post (cg x) () in
-        (**) let sl2 = gget (vprop_of_list (post y)) in
-        (**) intro_tree_ens_bind f.repr_tree (fun x -> (g x).repr_tree) cf cg
-        (**)                     sl0 x sl1 y sl2;
-        Steel.Effect.Atomic.return y)
+    repr_steel = (fun pre0 post0 c ->
+                    let (TCbind #_ #_ #tf #tg pre itm post cf cg) = c in
+                    U.cast (repr_steel_t b pre0 post0 (tree_req _ c) (tree_ens _ c))
+                           (bind_steel a b tf tg pre itm post cf cg
+                              (f.repr_steel _ _ cf) (fun x -> (g x).repr_steel _ _ (cg x))))
   }
 
 (* --------------------------- *)
@@ -710,13 +715,6 @@ let normal_tree_steps : list norm_step = [
     iota; zeta
   ]
 
-let normal_tree_cond_steps : list norm_step = [
-    delta_attr [`%__tree_reduce__];
-    delta_qualifier ["unfold"];
-    delta_only [`%Mkrepr?.repr_tree; `%tree_cond; `%tree_of_steel];
-    iota; zeta
-  ]
-
 let normal_spec_steps : list norm_step = [
     delta; iota; zeta; primops
   ]
@@ -727,22 +725,13 @@ let normal_spec_steps : list norm_step = [
 
 unfold
 let test_cond (r : ref nat)
-  : norm normal_tree_cond_steps (tree_cond (test r).repr_tree [vptr' r full_perm] (fun _ -> [vptr' r full_perm]))
-  = (|(fun _ -> [vptr' r full_perm]),
-       (| [], Perm.id_n 1, (fun (_:nat) -> Perm.id_n 1) |), (fun _ -> Uv.raise_val (Perm.id_n 1))|)
-
-unfold
-let cast_unorm (s : list norm_step) (#t : Type) (x : norm s t) : t
-  = norm_spec s t; x
-
-unfold
-let cast_norm (s : list norm_step) (#t : Type) (x : t) : norm s t
-  = norm_spec s t; x
+  : tree_cond (test r).repr_tree [vptr' r full_perm] (fun _ -> [vptr' r full_perm])
+  = TCbind _ (fun _ -> [vptr' r full_perm]) _
+      (TCspec _ _ [] (Perm.id_n 1) (fun (_:nat) -> Perm.id_n 1))
+      (fun _ -> TCret _ _ (Perm.id_n 1))
 
 //let _ = fun r ->
-//  assert (print_util (tree_req (test r).repr_tree
-//                     #[vptr' r full_perm] #(fun _ -> [vptr' r full_perm])
-//                     (cast_unorm normal_tree_cond_steps (test_cond r))))
+//  assert (print_util (tree_req (test r).repr_tree (test_cond r)))
 //    by T.(norm normal_spec_steps; qed ())
 
 (*

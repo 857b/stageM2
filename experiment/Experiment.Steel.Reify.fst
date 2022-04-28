@@ -1,5 +1,6 @@
 module Experiment.Steel.Reify
 
+module U  = Learn.Util
 module Uv = FStar.Universe
 
 open Steel.Effect
@@ -154,10 +155,6 @@ open FStar.Calc
 open FStar.Classical.Sugar
 module T = FStar.Tactics
 
-let iff_refl (a b : Type0) :
-  Lemma (requires a == b) (ensures a <==> b)
-  = ()
-
 /// [reif_req] and [reif_ens] are not affected by [raise_steel_reif]:
 
 let rec raise_steel_reif_req (#a : Type u#a) (r : steel_reif a) (sl0 : sl_t)
@@ -192,7 +189,7 @@ let rec raise_steel_reif_req (#a : Type u#a) (r : steel_reif a) (sl0 : sl_t)
           assert (
             reif_req (raise_steel_reif u#a u#b (RbindP a b wp g)) sl0 <==>
             ((raise_pure_wp u#a u#b wp) pt' /\ True)
-          ) by T.(apply_lemma (`iff_refl); trefl ());
+          ) by T.(apply_lemma (`U.iff_refl); trefl ());
           
           introduce forall (x : a) . reif_req (raise_steel_reif u#a u#b (g x)) sl0 <==> reif_req (g x) sl0
             with raise_steel_reif_req (g x) sl0;
