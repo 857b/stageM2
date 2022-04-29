@@ -179,7 +179,7 @@ KRML=$(KRML_HOME)/krml
 # See the advanced topics section for an in-depth explanation of how the -bundle
 # option works. We also use -minimal.
 
-NOEXTRACT='LowStar.*,Prims,Learn.LowStar.Loops,C.Loops,FStar.*,Steel.*,Learn.Steel.Util,Learn.Tactics.*,Learn.Permutation'
+NOEXTRACT='LowStar.*,Prims,Learn.LowStar.Loops,C.Loops,FStar.*,Steel.*,Learn.Steel.Util,Learn.Tactics.*,Learn.Permutation,Learn.DList'
 
 dist/Makefile.basic: $(ALL_KRML_FILES) c/*
 	@mkdir -p $(dir $@)

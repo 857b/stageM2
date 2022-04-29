@@ -574,6 +574,22 @@ let apply_perm_p (#a : Type) (#len : nat) (p : perm_f len) (l : list a {length l
   = apply_swap_list_p (perm_f_to_swap p) l
 
 
+(***** [pequiv] *)
+
+type pequiv (#a : Type) (l0 l1 : list a) =
+  f : perm_f (length l0) { l1 == apply_perm_r f l0 }
+
+let pequiv_as_eq #a (#l0 #l1 : list a) (f : pequiv l0 l1)
+  : Lemma (l1 == apply_perm_r f l0)
+  = ()
+
+unfold
+let pequiv_sym #a (#l0 #l1 : list a) (f : pequiv l0 l1) : pequiv l1 l0
+  =
+    (**) apply_r_comp (inv_f f) f l0;
+    U.cast #(perm_f (length l0)) (perm_f (length l1)) (inv_f f)
+
+
 (*** [perm_t] *)
 
 /// representation of the permutation that maps [i] to [index l i]

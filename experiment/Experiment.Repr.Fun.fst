@@ -1,5 +1,7 @@
 module Experiment.Repr.Fun
 
+(* TODO? (a : Type)  --->  (ts : ty_list) *)
+
 noeq
 type prog_tree : (a : Type) -> Type =
   | Tnew   : (a : Type) -> prog_tree a
