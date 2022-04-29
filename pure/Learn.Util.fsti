@@ -21,6 +21,11 @@ unfold let alias (#t : Type) (x : t) : Type = y:t{y == x}
 let cast (#a b : Type) (x : a) : Pure b (requires a == b) (ensures fun y -> y == x)
   = x
 
+let cast_by (#a b : Type) (x : a) (pf : squash (a == b)) : Pure b (requires True) (ensures fun y -> y == x)
+  = x
+
 let iff_refl (a b : Type0) :
   Lemma (requires a == b) (ensures a <==> b)
   = ()
+
+let app_on (#a : Type) (x : a) (b : Type) (f : a -> b) = f x
