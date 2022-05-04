@@ -6,6 +6,7 @@ module L    = FStar.List.Pure
 module Uv   = FStar.Universe
 module Dl   = Learn.DList
 module Ll   = Learn.List
+module Lf   = Learn.ListFun
 module Mem  = Steel.Memory
 module Perm = Learn.Permutation
 module FExt = FStar.FunctionalExtensionality
@@ -300,9 +301,8 @@ let steel_change_vequiv (#vs0 #vs1 : vprop_list) (#opened:Mem.inames) (f : vequi
 type pre_t = vprop_list
 
 /// With this definition the shape of post (i.e. the length of the list) must be independant of the returned value
-/// ALT: [list (a -> vprop')]
-type post_t (a : Type) = len : nat & (a -> (vs : vprop_list {L.length vs = len}))
-let post_vp (#a : Type) (post : post_t a) : a -> vprop_list = post._2
+type post_t (a : Type) = Lf.list_fun a vprop'
+let post_vp (#a : Type) (post : post_t a) : a -> vprop_list = post.lf_list
 
 type req_t (pre : pre_t) = sl_t pre -> prop
 type ens_t (pre : pre_t) (a : Type) (post : post_t a) = sl_t pre -> (x : a) -> sl_t (post_vp post x) -> prop
@@ -596,7 +596,7 @@ let read_pre  (r : ref nat) : pre_t
   = [vptr' r full_perm]
 unfold
 let read_post (r : ref nat) : post_t nat
-  = (|1, (fun _ -> [vptr' r full_perm])|)
+  = Lf.const nat [vptr' r full_perm]
 let read_req  (r : ref nat) : req_t (read_pre r)
   = fun sl0 -> True
 let read_ens  (r : ref nat) : ens_t (read_pre r) nat (read_post r)
@@ -627,7 +627,7 @@ unfold let r_read (r : ref nat) : repr nat =
   repr_of_steel (read_pre r) (read_post r) (read_req r) (read_ens r) (steel_read r)
 
 unfold
-let test (r : ref nat) : repr nat =
+let test_M (r : ref nat) : repr nat =
   x <-- r_read r;
   return x
 
@@ -658,7 +658,7 @@ let test_equiv (r : ref nat) : vequiv ([vptr' r full_perm]) [vptr' r full_perm] 
 
 unfold
 let test_cond (r : ref nat)
-  : tree_cond (test r).repr_tree [vptr' r full_perm] (|1, (fun _ -> [vptr' r full_perm])|)
+  : tree_cond (test_M r).repr_tree [vptr' r full_perm] (Lf.const nat [vptr' r full_perm])
   = _ by T.(
     apply (`TCbind);
      (apply (`(TCspec _ (read_post (`@r)) []));

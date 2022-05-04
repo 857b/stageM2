@@ -184,9 +184,12 @@ let mk_perm_f (n : nat) (f : Fin.fin n -> Fin.fin n)
     p
 
 let perm_f_extensionality (#n : nat) (f g : perm_f n)
-  : Lemma (requires forall (x : Fin.fin n) . f x = g x)
-          (ensures  f == g)
-  = Fext.extensionality (Fin.fin n) (fun _ -> Fin.fin n) f g
+      (pf : (x : Fin.fin n) -> squash (f x = g x))
+  : Lemma (ensures  f == g)
+  =
+    introduce forall (x : Fin.fin n) . f x = g x
+      with pf x;
+    Fext.extensionality (Fin.fin n) (fun _ -> Fin.fin n) f g
 
 let id_n (n : nat) : perm_f n = mk_perm_f n (fun x -> x)
 
@@ -197,15 +200,15 @@ let comp (#n : nat) (f g : perm_f n) : perm_f n =
 
 let comp_assoc (#n : nat) (f g h : perm_f n)
   : Lemma ((f `comp` g) `comp` h == f `comp` (g `comp` h))
-  = perm_f_extensionality ((f `comp` g) `comp` h) (f `comp` (g `comp` h))
+  = perm_f_extensionality ((f `comp` g) `comp` h) (f `comp` (g `comp` h)) (fun _ -> ())
 
 let id_nl (#n : nat) (f : perm_f n)
   : Lemma (id_n n `comp` f == f) [SMTPat (id_n n `comp` f)]
-  = perm_f_extensionality (id_n n `comp` f) f
+  = perm_f_extensionality (id_n n `comp` f) f (fun _ -> ())
 
 let id_nr (#n : nat) (f : perm_f n)
   : Lemma (f `comp` id_n n == f) [SMTPat (f `comp` id_n n)]
-  = perm_f_extensionality (f `comp` id_n n) f
+  = perm_f_extensionality (f `comp` id_n n) f (fun _ -> ())
 
 
 let is_inverse (#n : nat) (f : perm_f n) (g : perm_f n) : prop
@@ -281,11 +284,11 @@ let apply_perm (#a : Type) (#len : nat) (p : perm_f len) (l : list a)
 
 let apply_r_id_n #a (#len : nat) (l : list a {length l = len})
   : Lemma (apply_perm_r (id_n len) l == l) [SMTPat (apply_perm_r (id_n len) l)]
-  = index_extensionality (apply_perm_r (id_n len) l) l
+  = list_extensionality (apply_perm_r (id_n len) l) l (fun _ -> ())
 
 let apply_r_comp #a (#len : nat) (f g : perm_f len) (l : list a {length l = len})
   : Lemma (apply_perm_r (f `comp` g) l == apply_perm_r f (apply_perm_r g l))
-  = index_extensionality (apply_perm_r (f `comp` g) l) (apply_perm_r f (apply_perm_r g l))
+  = list_extensionality (apply_perm_r (f `comp` g) l) (apply_perm_r f (apply_perm_r g l)) (fun _ -> ())
 
 let apply_comp #a (#len : nat) (f g : perm_f len) (l : list a {length l = len})
   : Lemma (apply_perm (f `comp` g) l == apply_perm g (apply_perm f l))
@@ -305,7 +308,7 @@ let apply_comp #a (#len : nat) (f g : perm_f len) (l : list a {length l = len})
 let map_apply_r (#a #b : Type) (#len : nat) (p : perm_f len) (f : a -> b) (l : list a {length l = len})
   : Lemma (map f (apply_perm_r p l) == apply_perm_r p (map f l))
   =
-    index_extensionality (map f (apply_perm_r p l)) (apply_perm_r p (map f l))
+    list_extensionality (map f (apply_perm_r p l)) (apply_perm_r p (map f l)) (fun _ -> ())
 
 
 (***** representing a permutation with transpositions / swap *)
@@ -329,7 +332,7 @@ let perm_f_transpose_inv (#n : nat) (i j : Fin.fin n)
 
 let perm_f_transpose_sym (#n : nat) (i j : Fin.fin n)
   : Lemma (perm_f_transpose i j == perm_f_transpose j i)
-  = perm_f_extensionality (perm_f_transpose i j) (perm_f_transpose j i)
+  = perm_f_extensionality (perm_f_transpose i j) (perm_f_transpose j i) (fun _ -> ())
 
 
 let perm_f_restrict (#n : nat) (f : perm_f (n+1))
@@ -347,21 +350,21 @@ let perm_f_extend (#n : nat) (f : perm_f n)
 let perm_f_extend_restrict (#n : nat) (f : perm_f (n+1))
   : Lemma (requires f n = n) (ensures perm_f_extend (perm_f_restrict f) == f)
           [SMTPat (perm_f_extend (perm_f_restrict f))]
-  = perm_f_extensionality (perm_f_extend (perm_f_restrict f)) f
+  = perm_f_extensionality (perm_f_extend (perm_f_restrict f)) f (fun _ -> ())
 
 let perm_f_extend_id_n (n : nat)
   : Lemma (perm_f_extend (id_n n) == id_n (n+1)) [SMTPat (perm_f_extend (id_n n))]
-  = perm_f_extensionality (perm_f_extend (id_n n)) (id_n (n+1))
+  = perm_f_extensionality (perm_f_extend (id_n n)) (id_n (n+1)) (fun _ -> ())
 
 let perm_f_extend_comp (#n : nat) (f g : perm_f n)
   : Lemma (perm_f_extend (f `comp` g) == perm_f_extend f `comp` perm_f_extend g)
           [SMTPat (perm_f_extend (f `comp` g))]
-  = perm_f_extensionality (perm_f_extend (f `comp` g)) (perm_f_extend f `comp` perm_f_extend g)
+  = perm_f_extensionality (perm_f_extend (f `comp` g)) (perm_f_extend f `comp` perm_f_extend g) (fun _ -> ())
 
 let perm_f_extend_transpose (#n : nat) (i j : Fin.fin n)
   : Lemma (perm_f_extend (perm_f_transpose #n i j) == perm_f_transpose #(n+1) i j)
           [SMTPat (perm_f_extend (perm_f_transpose i j))]
-  = perm_f_extensionality (perm_f_extend (perm_f_transpose i j)) (perm_f_transpose #(n+1) i j)
+  = perm_f_extensionality (perm_f_extend (perm_f_transpose i j)) (perm_f_transpose #(n+1) i j) (fun _ -> ())
 
 /// comp_list [f0; f1 ...] = f0; (f1; ...)
 let comp_list (#n : nat) (fs : list (perm_f n)) : perm_f n
@@ -399,7 +402,7 @@ let rec perm_f_to_transpose (#n : nat) (f : perm_f n)
          (decreases n)
   =
     if n = 0 then begin
-      perm_f_extensionality #0 (U.cast (perm_f 0) f) (id_n 0);
+      perm_f_extensionality #0 (U.cast (perm_f 0) f) (id_n 0) (fun _ -> ());
       []
     end else begin
       let n  = n - 1 in
@@ -426,12 +429,16 @@ let rec perm_f_to_transpose (#n : nat) (f : perm_f n)
       l'
     end
 
+#push-options "--z3rlimit 10"
 let perm_f_transpose_itm (#n : nat) (i j k : Fin.fin n)
   : Lemma (requires j <> k /\ j <> i)
           (ensures perm_f_transpose i j ==
                    perm_f_transpose i k `comp` perm_f_transpose k j `comp` perm_f_transpose i k)
-  = perm_f_extensionality (perm_f_transpose i j)
+  = perm_f_extensionality
+          (perm_f_transpose i j)
           (perm_f_transpose i k `comp` perm_f_transpose k j `comp` perm_f_transpose i k)
+          (fun _ -> ())
+#pop-options
 
 let rec perm_f_transpose_to_swap_aux (#n : nat) (i j : Fin.fin n)
   : Pure (list (k : nat {k <= n-2})) (requires i <= j)
@@ -439,7 +446,7 @@ let rec perm_f_transpose_to_swap_aux (#n : nat) (i j : Fin.fin n)
          (decreases j-i)
   = if j = i
     then begin
-      perm_f_extensionality (perm_f_transpose i i) (id_n n);
+      perm_f_extensionality (perm_f_transpose i i) (id_n n) (fun _ -> ());
       []
     end else if j = i + 1
     then [i]
@@ -502,11 +509,11 @@ let perm_f_shift (#len : nat) (p : perm_f len) : perm_f (len+1)
 
 let apply_perm_f_shift (#a : Type) (#len : nat) (p : perm_f len) (hd : a) (tl : list a{length tl = len})
   : Lemma (apply_perm_r (perm_f_shift p) (hd :: tl) == hd :: apply_perm_r p tl)
-  = index_extensionality (apply_perm_r (perm_f_shift p) (hd :: tl)) (hd :: apply_perm_r p tl)
+  = list_extensionality (apply_perm_r (perm_f_shift p) (hd :: tl)) (hd :: apply_perm_r p tl) (fun _ -> ())
 
 let perm_f_swap_rec_rel (len : nat) (i : nat {i <= len - 2})
   : Lemma (perm_f_swap #(len+1) (i+1) == perm_f_shift (perm_f_swap #len i))
-  = perm_f_extensionality (perm_f_swap #(len+1) (i+1)) (perm_f_shift (perm_f_swap #len i))
+  = perm_f_extensionality (perm_f_swap #(len+1) (i+1)) (perm_f_shift (perm_f_swap #len i)) (fun _ -> ())
 
 #push-options "--z3rlimit 20"
 let rec apply_swap_as_rec (#a : Type) (len : nat) (i : nat {i <= len-2}) (l : list a {length l = len})
@@ -514,7 +521,7 @@ let rec apply_swap_as_rec (#a : Type) (len : nat) (i : nat {i <= len-2}) (l : li
           (decreases len)
   = if i = 0 then begin
        let x :: y :: tl = l in
-       index_extensionality (apply_perm_r (perm_f_swap #len 0) (x :: y :: tl)) (y :: x :: tl)
+       list_extensionality (apply_perm_r (perm_f_swap #len 0) (x :: y :: tl)) (y :: x :: tl) (fun _ -> ())
     end else begin
       let hd :: tl = l in
       perm_f_swap_rec_rel (len-1) (i-1);

@@ -5,6 +5,7 @@ module M    = Experiment.Steel.Repr.M
 module L    = FStar.List.Pure
 module Uv   = FStar.Universe
 module Dl   = Learn.DList
+module Lf   = Learn.ListFun
 module Perm = Learn.Permutation
 
 open Experiment.Steel.Repr.M
@@ -12,16 +13,13 @@ open Steel.Effect.Common
 
 
 type pre_t = Dl.ty_list
-type post_t (a : Type) = len : nat & (a -> (ts : Dl.ty_list {L.length ts = len}))
+type post_t (a : Type) = Lf.list_fun a Type
 unfold
-let  post_ts (#a : Type) (post : post_t a) : a -> Dl.ty_list = post._2
+let  post_ts (#a : Type) (post : post_t a) : a -> Dl.ty_list = post.lf_list
 unfold
-let  post_t_of_ts (a : Type) (ts : Dl.ty_list) : post_t a = (|L.length ts, (fun _ -> ts)|)
+let  post_t_of_ts (a : Type) : Dl.ty_list -> post_t a = Lf.const a
 unfold
-let  append_post_t (#a : Type) (p0 p1 : post_t a) : post_t a =
-  (|p0._1 + p1._1,
-    (fun (x : a) -> (**) L.append_length (p0._2 x) (p1._2 x);
-                 L.append (p0._2 x) (p1._2 x))|)
+let  append_post_t (#a : Type) : post_t a -> post_t a -> post_t a = Lf.append #a #Type
 
 type req_t (pre : pre_t) = Dl.dlist pre -> prop
 type ens_t (pre : pre_t) (a : Type) (post : post_t a) = Dl.dlist pre -> (x : a) -> Dl.dlist (post_ts post x) -> prop
@@ -48,6 +46,90 @@ type prog_tree : (a : Type u#a) -> (pre : pre_t u#b) -> (post : post_t u#a u#b a
              (pre : pre_t) -> (post : post_t b) ->
              (wp : pure_wp a) -> (x : unit -> PURE a wp) -> (g : a -> prog_tree b pre post) ->
              prog_tree b pre post
+
+noeq
+type shape_tree : (pre_n : nat) -> (post_n : nat) -> Type =
+  | Sequiv : (n : nat) -> (p : Perm.perm_f n) ->
+             shape_tree n n
+  | Sspec  : (pre_n : nat) -> (post_n : nat) -> (frame_n : nat) ->
+             shape_tree (pre_n + frame_n) (post_n + frame_n)
+  | Sret   : (n : nat) ->
+             shape_tree n n
+  | Sbind  : (pre_n : nat) -> (itm_n : nat) -> (post_n : nat) ->
+             (f : shape_tree pre_n itm_n) -> (g : shape_tree itm_n post_n) ->
+             shape_tree pre_n post_n
+  | SbindP : (pre_n : nat) -> (post_n : nat) ->
+             (g : shape_tree pre_n post_n) ->
+             shape_tree pre_n post_n
+
+let rec prog_has_shape (#a : Type u#a) (#pre : pre_t u#b) (#post : post_t u#a u#b a)
+                       (t : prog_tree a pre post) (s : shape_tree (L.length pre) (post.lf_len))
+  : Tot prop (decreases t)
+  = match t returns prop with
+  | Tequiv pre post p           -> s == Sequiv _ p
+  | Tspec  _ pre post frame _ _ -> s == Sspec  (L.length pre) (post.lf_len) (L.length frame)
+  | Tret   _ _ post             -> s == Sret   _
+  | Tbind  a _ pre itm post f g -> exists (s_f : shape_tree (L.length pre) itm.lf_len)
+                                    (s_g : shape_tree itm.lf_len     post.lf_len) .
+                                  s == Sbind _ _ _ s_f s_g /\
+                                  prog_has_shape f s_f /\
+                                  (forall (x : a) . prog_has_shape (g x) s_g)
+  | TbindP a _ pre post _ _ g   -> exists (s_g : shape_tree (L.length pre) post.lf_len) .
+                                  s == SbindP _ _ s_g /\
+                                  (forall (x : a) . prog_has_shape (g x) s_g)
+
+type prog_shape (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree a pre post)
+  = s : shape_tree (L.length pre) (post.lf_len) {prog_has_shape t s}
+
+(* TODO ? r can requires t == t0*) 
+unfold
+let match_prog_tree
+      (#a0 : Type u#a) (#pre0 : pre_t u#b) (#post0 : post_t u#a u#b a0)
+      (t0 : prog_tree a0 pre0 post0)
+      (r : (a : Type u#a) -> (pre : pre_t u#b) -> (post : post_t u#a u#b a) ->
+           (t : prog_tree a pre post) -> Type u#c)
+      (c_Tequiv : (pre : Dl.ty_list) -> (post : Dl.ty_list) ->
+                  (p : Perm.pequiv pre post) ->
+                  Pure (r _ _ _ (Tequiv pre post p))
+                       (requires a0 == unit' /\ pre0 == pre /\ post0 == (post_t_of_ts unit' post) /\
+                                 t0 == Tequiv pre post p)
+                       (ensures fun _ -> True))
+      (c_Tspec  : (a : Type) -> (pre : pre_t) -> (post : post_t a) -> (frame : Dl.ty_list) ->
+                  (req : req_t pre) -> (ens : ens_t pre a post) ->
+                  Pure (r _ _ _ (Tspec a pre post frame req ens))
+                       (requires a0 == a /\ pre0 == L.(pre@frame) /\
+                                 post0 == append_post_t post (post_t_of_ts a frame) /\
+                                 t0 == Tspec a pre post frame req ens)
+                       (ensures fun _ -> True))
+      (c_Tret   : (a : Type) -> (x : a) -> (post : post_t a) ->
+                  Pure (r _ _ _ (Tret a x post))
+                       (requires a0 == a /\ pre0 == (post_ts post x) /\ post0 == post /\
+                                 t0 == Tret a x post)
+                       (ensures fun _ -> True))
+      (c_Tbind  : (a : Type) -> (b : Type) ->
+                  (pre : pre_t) -> (itm : post_t a) -> (post : post_t b) ->
+                  (f : prog_tree a pre itm {f << t0}) ->
+                  (g : ((x : a) -> prog_tree b (post_ts itm x) post) {forall (x : a) . {:pattern (g x)} g x << t0}) ->
+                  Pure (r _ _ _ (Tbind a b pre itm post f g))
+                       (requires a0 == b /\ pre0 == pre /\ post0 == post /\
+                                 t0 == Tbind a b pre itm post f g)
+                       (ensures fun _ -> True))
+      (c_TbindP : (a : Type) -> (b : Type) ->
+                  (pre : pre_t) -> (post : post_t b) ->
+                  (wp : pure_wp a) -> (x : (unit -> PURE a wp)) ->
+                  (g : (a -> prog_tree b pre post) {forall (x : a) . {:pattern (g x)} g x << t0}) ->
+                  Pure (r _ _ _ (TbindP a b pre post wp x g))
+                       (requires a0 == b /\ pre0 == pre /\ post0 == post /\
+                                 t0 == TbindP a b pre post wp x g)
+                       (ensures fun _ -> True))
+  : r _ _ _ t0
+  = match t0 as t returns r _ _ _ t with
+    | Tequiv pre post p               -> c_Tequiv pre post p
+    | Tspec  a pre post frame req ens -> c_Tspec  a pre post frame req ens
+    | Tret   a x post                 -> c_Tret   a x post
+    | Tbind  a b pre itm post f g     -> c_Tbind  a b pre itm post f g
+    | TbindP a b pre post wp x g      -> c_TbindP a b pre post wp x g
+
 
 let bind (#a : Type) (#b : Type) (#pre : pre_t) (#itm : post_t a) (#post : post_t b)
          (f : prog_tree a pre itm) (g : (x:a) -> prog_tree b (post_ts itm x) post)
@@ -97,7 +179,7 @@ open FStar.Calc
 
 unfold
 let post_ST_of_M (#a : Type) (post : M.post_t a) : post_t a
-  = (|post._1, (fun (x : a) -> vprop_list_sels_t (post._2 x))|)
+  = Lf.map Mkvprop'?.t post
 
 let rec repr_ST_of_M (#a : Type u#a) (t : M.prog_tree a)
                      (#pre : M.pre_t) (#post : M.post_t a) (c : M.tree_cond t pre post)
@@ -125,7 +207,8 @@ let rec repr_ST_of_M (#a : Type u#a) (t : M.prog_tree a)
 
 
 let norm_tree_spec () : T.Tac unit
-  = T.norm [delta_only [`%repr_ST_of_M; `%bind; `%tree_req; `%tree_ens; `%Mkdtuple2?._2];
+  = T.norm [delta_only [`%repr_ST_of_M; `%bind; `%tree_req; `%tree_ens];
+            delta_attr [`%Lf.__list_fun__; `%U.__util_func__];
             delta_qualifier ["unfold"];
             zeta; iota; simplify]
 
@@ -369,8 +452,45 @@ and repr_ST_of_M_ens (#a : Type) (t : M.prog_tree a)
 
 open Steel.Reference
 
-let test_ST (r : ref nat) = repr_ST_of_M (test r).repr_tree (test_cond r)
+let test_ST (r : ref nat) = repr_ST_of_M (test_M r).repr_tree (test_cond r)
 
 //let _ = fun r ->
-//  assert (print_util (test_ST r))
+// assert (print_util (test_ST r))
 //    by T.(norm normal_spec_steps; qed ())
+
+let test_ST_shape =
+  Sbind 1 1 1 (Sbind 1 1 1 (Sequiv 1 (Perm.id_n 1))
+              (Sbind 1 1 1 (Sspec  1 1 0)
+              (Sbind 1 1 1 (Sequiv 1 (Perm.id_n 1))
+                           (Sret   1))))
+              (Sbind 1 1 1 (Sequiv 1 (Perm.id_n 1))
+                           (Sret   1))
+
+let rec prog_has_shape' (#a : Type u#a) (#pre : pre_t u#b) (#post : post_t u#a u#b a)
+                        (t : prog_tree a pre post) (s : shape_tree (L.length pre) (post.lf_len))
+  : Pure prop (requires True) (ensures fun p -> p <==> prog_has_shape t s) (decreases t)
+  = match t returns prop with
+  | Tequiv pre post p           -> (match s with
+                                  | Sequiv _ p' -> p' == p
+                                  | _ -> False)
+  | Tspec  _ pre post frame _ _ -> (match s with
+                                  | Sspec  pre_n post_n frame_n ->
+                                      pre_n == L.length pre /\ post_n == post.lf_len /\ frame_n == L.length frame
+                                  | _ -> False)
+  | Tret   _ _ post             -> (match s with
+                                  | Sret   _ -> True
+                                  | _ -> False)
+  | Tbind  a _ pre itm post f g -> (match s with
+                                  | Sbind _ itm_n _ s_f s_g ->
+                                      itm_n == itm.lf_len /\
+                                      prog_has_shape' f s_f /\
+                                      (forall (x : a) . prog_has_shape' (g x) s_g)
+                                  | _ -> False)
+  | TbindP a _ pre post _ _ g   -> (match s with
+                                  | SbindP _ _ s_g -> (forall (x : a) . prog_has_shape' (g x) s_g)
+                                  | _ -> False)
+
+
+let test_ST_has_shape (r : ref nat)
+  : squash (prog_has_shape' (test_ST r) test_ST_shape)
+  = _ by T.(norm normal_spec_steps; norm [simplify]; smt ())

@@ -8,6 +8,16 @@ module U    = Learn.Util
 module T    = FStar.Tactics
 module Tuq  = Learn.Tactics.Unsquash
 
+
+let list_extensionality (#a : Type)
+      (l0 : list a) (l1 : list a {length l1 = length l0})
+      (pf : (i : nat {i < length l0}) -> squash (index l0 i == index l1 i))
+  : Lemma (ensures l0 == l1)
+  =
+    introduce forall (i : nat {i < length l0}) . index l0 i == index l1 i
+      with pf i;
+    index_extensionality l0 l1
+
 (* [map] *)
 
 let rec map_index (#a #b : Type) (f : a -> b) (l : list a) (i : nat {i < length l})
@@ -188,16 +198,16 @@ let for_all_opairsP_rev' (#a : Type) (f : a -> a -> prop) (l : list a)
 
 (* [initi] *)
 
-let rec initi (#a : Type) (lb ub : nat) (f : (i:nat{lb <= i /\ i < ub}) -> Tot a)
+let rec initi (#a : Type) (lb ub : int) (f : (i:int{lb <= i /\ i < ub}) -> Tot a)
   : Tot (list a) (decreases ub - lb)
   = if lb < ub then f lb :: initi (lb + 1) ub f else []
 
-let rec initi_length (#a : Type) (lb ub : nat) (f : (i:nat{lb <= i /\ i < ub}) -> Tot a)
+let rec initi_length (#a : Type) (lb ub : int) (f : (i:int{lb <= i /\ i < ub}) -> Tot a)
   : Lemma (ensures length (initi lb ub f) = (if ub >= lb then ub - lb else 0)) (decreases ub - lb)
           [SMTPat (length (initi lb ub f))]
   = if lb < ub then initi_length (lb + 1) ub f else ()
 
-let rec initi_index (#a : Type) (lb ub : nat) (f : (i:nat{lb <= i /\ i < ub}) -> Tot a)
+let rec initi_index (#a : Type) (lb ub : int) (f : (i:int{lb <= i /\ i < ub}) -> Tot a)
                     (i : nat{i < length (initi lb ub f)})
   : Lemma (ensures index (initi lb ub f) i == f (lb+i)) (decreases i)
           [SMTPat (index (initi lb ub f) i)]

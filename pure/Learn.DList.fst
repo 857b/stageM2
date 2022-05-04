@@ -24,19 +24,33 @@ let rec index (#ts : ty_list) (xs : dlist ts) (i : nat{i < L.length ts})
     else U.cast (L.index ts i) (index xs1 (i-1))
 
 let rec dlist_extensionality (#ts : ty_list) (xs ys : dlist ts)
-  : Lemma (requires forall (i : nat {i < L.length ts}) . index xs i == index ys i)
-          (ensures xs == ys)
-          (decreases ts)
+          (pf : (i : nat {i < L.length ts}) -> squash (index xs i == index ys i))
+  : Lemma (ensures xs == ys) (decreases ts)
   = match ts with
     | [] -> ()
     | t0 :: ts' -> let DCons _ x _ xs' = xs in
                 let DCons _ y _ ys' = ys in
-                assert (x == index xs 0);
-                assert (y == index ys 0);
-                introduce forall (i : nat {i < L.length ts'}) . index xs' i == index ys' i
-                  with (assert (index xs' i === index xs (i+1));
-                        assert (index ys' i === index ys (i+1)));
-                dlist_extensionality #ts' xs' ys'
+                pf 0;
+                dlist_extensionality #ts' xs' ys' (fun i -> pf (i+1))
+
+
+let rec append (#ts0 #ts1 : ty_list) (xs0 : dlist ts0) (xs1 : dlist ts1)
+  : Tot (dlist L.(ts0 @ ts1)) (decreases xs0)
+  = match xs0 with
+    | DNil  -> xs1
+    | DCons _ x0 _ xs0 -> DCons _ x0 _ (append xs0 xs1)
+
+let rec append_index (#ts0 #ts1 : ty_list) (xs0 : dlist ts0) (xs1 : dlist ts1)
+                     (i : nat {i < L.length ts0 + L.length ts1})
+  : Lemma (L.(index (ts0@ts1) i == (if i < length ts0 then index ts0 i else index ts1 (i - length ts0))) /\
+           index (append xs0 xs1) i ==
+          (if i < L.length ts0
+           then U.cast L.(index (ts0@ts1) i) (index xs0 i)
+           else U.cast L.(index (ts0@ts1) i) (index xs1 (i - L.length ts0))))
+  = match xs0 with
+    | DNil  -> ()
+    | DCons _ _ _ xs0 -> if i = 0 then () else append_index xs0 xs1 (i-1)
+
 
 
 let rec splitAt (n : nat) (#ts : ty_list) (xs : dlist ts)
@@ -64,20 +78,35 @@ let rec splitAt_ty_eq (ts0 ts1 : ty_list) (xs : dlist L.(ts0@ts1))
   | [] -> ()
   | t0 :: ts0 -> let DCons _ x0 _ xs = xs in splitAt_ty_eq ts0 ts1 xs
 
+let rec splitAt_ty_append (ts0 ts1 : ty_list) (xs : dlist L.(ts0@ts1))
+  : Lemma (ensures (let (xs0, xs1) = splitAt_ty ts0 ts1 xs in
+                    xs == append xs0 xs1))
+          (decreases ts0)
+  = match ts0 with
+    | [] -> ()
+    | t0 :: ts0 -> let DCons _ _ _ xs = xs in
+                 splitAt_ty_append ts0 ts1 xs
 
-let rec initi (lb ub : nat)
-          (t : (i:nat{lb <= i /\ i < ub}) -> Tot Type)
-          (f : (i:nat{lb <= i /\ i < ub}) -> Tot (t i))
+
+let rec initi (lb ub : int)
+          (t : (i:int{lb <= i /\ i < ub}) -> Tot Type)
+          (f : (i:int{lb <= i /\ i < ub}) -> Tot (t i))
   : Tot (dlist (Ll.initi lb ub t)) (decreases ub - lb)
   = if lb < ub then DCons (t lb) (f lb) _ (initi (lb + 1) ub t f) else DNil
 
-let rec initi_at (lb ub : nat)
-          (t : (i:nat{lb <= i /\ i < ub}) -> Tot Type)
-          (f : (i:nat{lb <= i /\ i < ub}) -> Tot (t i))
+let rec initi_at (lb ub : int)
+          (t : (i:int{lb <= i /\ i < ub}) -> Tot Type)
+          (f : (i:int{lb <= i /\ i < ub}) -> Tot (t i))
           (i : nat {i < L.length (Ll.initi lb ub t)})
   : Lemma (ensures index (initi lb ub t f) i == f (lb+i)) (decreases i)
           [SMTPat (index (initi lb ub t f) i)]
   = if i = 0 then () else initi_at (lb+1) ub t f (i-1)
+
+unfold
+let initi_ty (t : ty_list) (f : (i:nat{i < L.length t}) -> Tot (L.index t i))
+  : Tot (dlist t)
+  = Ll.list_extensionality t (Ll.initi 0 (L.length t) (L.index t)) (fun _ -> ());
+    initi 0 (L.length t) (L.index t) f
 
 
 (** permutations *)
@@ -88,12 +117,12 @@ let apply_perm_r (#n : nat) (p : Perm.perm_f n) (#ts : ty_list {L.length ts == n
 
 let apply_r_id_n (len : nat) (#ts : ty_list{L.length ts = len}) (xs :dlist ts)
   : Lemma (apply_perm_r (Perm.id_n len) xs == xs) [SMTPat (apply_perm_r (Perm.id_n len) xs)]
-  = dlist_extensionality (apply_perm_r (Perm.id_n len) xs) xs
+  = dlist_extensionality (apply_perm_r (Perm.id_n len) xs) xs (fun _ -> ())
 
 let apply_r_comp (#len : nat) (f g : Perm.perm_f len) (#ts : ty_list {L.length ts == len}) (xs : dlist ts)
   : Lemma (apply_perm_r (f `Perm.comp` g) xs === apply_perm_r f (apply_perm_r g xs))
   = Perm.apply_r_comp f g ts;
-    dlist_extensionality (apply_perm_r (f `Perm.comp` g) xs) (apply_perm_r f (apply_perm_r g xs))
+    dlist_extensionality (apply_perm_r (f `Perm.comp` g) xs) (apply_perm_r f (apply_perm_r g xs)) (fun _ -> ())
 
 let rec dlist_swap (i : nat) (#ts : ty_list{i <= L.length ts - 2}) (xs : dlist ts)
   : Tot (dlist (Perm.list_swap i ts)) (decreases i)
@@ -113,6 +142,7 @@ let apply_perm_f_shift (#len : nat) (p : Perm.perm_f len)
     dlist_extensionality
       (apply_perm_r (Perm.perm_f_shift p) (DCons _ hd _ tl))
       (DCons _ hd _ (apply_perm_r p tl))
+      (fun _ -> ())
 #pop-options
 
 #push-options "--z3rlimit 60"
@@ -126,6 +156,7 @@ let rec apply_swap_as_rec (len : nat) (i : nat {i <= len-2})
        dlist_extensionality
          (apply_perm_r (Perm.perm_f_swap #len 0) (DCons _ x _ (DCons _ y _ tl)))
          (DCons _ y _ (DCons _ x _ tl))
+         (fun _ -> ())
     end else begin
       let DCons _ hd _ tl = xs in
       Perm.perm_f_swap_rec_rel (len-1) (i-1);
