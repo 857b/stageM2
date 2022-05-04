@@ -65,7 +65,13 @@ FSTAR_ROOTS = $(wildcard $(addsuffix /*.fsti,$(SOURCE_DIRS))) \
 # good to force regeneration even though .depend may be more recent than the
 # mtime of the moved files.
 ifndef MAKE_RESTARTS
-.depend: .FORCE
+.versions: .FORCE
+	@echo -n "F*   : " > .versions
+	@(cd $(FSTAR_HOME) && git rev-parse --verify HEAD) >> .versions
+	@echo -n "KRML : " >> .versions
+	@(cd $(KRML_HOME) && git rev-parse --verify HEAD) >> .versions
+
+.depend: .FORCE .versions
 	@echo DEPENDS
 	@$(FSTAR_NO_FLAGS) --dep full $(notdir $(FSTAR_ROOTS)) $(FSTAR_EXTRACT) > $@
 

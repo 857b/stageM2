@@ -145,13 +145,6 @@ let rec list_find_rec (#c : Type) (a : queue_param c)
        else list_find_rec a (sg_next a p (G.reveal sg)) (G.reveal tl) h0 spec_f f
      end
 
-[@@"opaque_to_smt"]
-unfold
-let all_disjoint_live (h:HS.mem) (l:list M.buf_t) : prop =
-  BigOps.big_and #M.buf_t (fun (|_,_,_, b|) -> M.live h b) l /\
-  BigOps.pairwise_and #M.buf_t (fun (|_,_,_, b|) (|_,_,_, b'|) ->
-                                  M.(loc_disjoint (loc_buffer b) (loc_buffer b'))) l
-
 #push-options "--z3rlimit 20"
 inline_for_extraction
 let list_find_loop (#c : Type) (a : queue_param c)
@@ -162,21 +155,21 @@ let list_find_loop (#c : Type) (a : queue_param c)
               Stack bool
                     (requires fun h -> M.(modifies loc_none h0 h) /\ B.live h x /\ L.memP x sg0.segment)
                     (ensures  fun h b h' -> M.(modifies loc_none h h') /\ b = spec_f x))
-   : Stack (cell_ptr c)
+   : StackInline
+           (cell_ptr c)
            (requires fun h       -> h == h0 /\ live_seg a h sg0 /\ p == sg_entry sg0)
            (ensures  fun h rt h' -> M.(modifies loc_none h h') /\
                                  rt == (match Ll.find_gtot spec_f sg0.segment with
                                         | Some p -> p | None -> B.null))
    =
-     push_frame ();
        let h0' = ST.get () in
      let it = B.alloca #(cell_ptr c & G.erased (list_nil c)) (p, sg0) 1ul in
      let rt = B.alloca #(cell_ptr c) B.null 1ul in
+       let h_ini = ST.get () in
        let lloc = G.hide (M.(loc_union (loc_buffer it) (loc_buffer rt))) in
      let pre h1 : prop =
          M.(let (p, sg) = deref h1 it in
          modifies loc_none h0 h1 /\
-         (*all_disjoint_live h1 M.([buf it; buf rt]) /\*)
          live h1 it /\ live h1 rt /\
          live_seg a h1 (deref h1 it)._2 /\
          loc_disjoint (loc_buffer it) (loc_seg sg.segment) /\
@@ -188,6 +181,7 @@ let list_find_loop (#c : Type) (a : queue_param c)
          let _,sg = B.deref h1 it in
          let dflt = B.deref h1 rt in
          M.(modifies lloc h1 h2) /\
+         M.(modifies loc_none h0 h2) /\
          x == (match Ll.find_gtot spec_f sg.segment with
                      | Some p -> p | None -> dflt)
      in
@@ -217,9 +211,7 @@ let list_find_loop (#c : Type) (a : queue_param c)
                assert M.(fresh_loc (loc_union (loc_buffer it) (loc_buffer rt)) h0 h1));
            LLoops.tail_rec_postI h2 (post h2) (post h1) (fun x h3 -> ())
      in
-     let rt_v = LLoops.rec_while pre post_test post  test body (fun () -> rt.(0ul)) in
-     pop_frame ();
-     rt_v
+     LLoops.rec_while pre post_test post  test body (fun () -> rt.(0ul))
 #pop-options
 
 inline_for_extraction
@@ -236,4 +228,9 @@ let find (#c : Type) (a : queue_param c)
           (ensures  fun h rt h' -> M.(modifies loc_none h h') /\
                                 rt == (match Ll.find_gtot spec_f l with
                                        | Some p -> p | None -> B.null))
-  = list_find_loop a ((q.(0ul)).q_exit) (sg_of_cells l) h0 spec_f f
+  =
+    push_frame ();
+    (**) let h0' = ST.get () in
+    let rt = list_find_loop a ((q.(0ul)).q_exit) (sg_of_cells l) h0' spec_f f in
+    pop_frame ();
+    rt

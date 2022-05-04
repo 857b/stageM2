@@ -5,6 +5,8 @@ module M    = LowStar.Modifies
 module Prop = Learn.LowStar.Queue.Prop
 module Impl = Learn.LowStar.Queue.Impl
 
+open FStar.Classical.Sugar
+
 type queue c = Prop.queue c
 
 let loc_queue_st #c q =
@@ -31,9 +33,8 @@ noextract inline_for_extraction let enqueue #c a x q l =
   (**) M.loc_union_assoc (M.loc_addr_of_buffer q) (Prop.loc_seg l) (Prop.loc_seg [x])
 
 noextract inline_for_extraction let dequeue #c a q l =
-  let rt = Impl.dequeue #c a q l in
-  (**) UL.loc_union_comm12 (M.loc_addr_of_buffer q) (M.loc_buffer rt) (Prop.loc_seg (L.tl l));
-  rt
+  (**) UL.loc_union_comm12 (M.loc_addr_of_buffer q) (M.loc_buffer (L.hd l)) (Prop.loc_seg (L.tl l));
+  Impl.dequeue #c a q l
 
 noextract inline_for_extraction let find     = Impl.find
 

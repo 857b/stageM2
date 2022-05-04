@@ -2,5 +2,7 @@
 .depend
 *.hints
 _local/
-dist/
+dist/*.o
+dist/*.d
+dist/*.exe
 obj/
