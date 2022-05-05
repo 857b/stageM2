@@ -56,3 +56,7 @@ let funext_eta (#a : Type) (#b : a -> Type) (f g : (x:a -> b x))
                (eq : (x:a -> Lemma (f x == g x)))
   : Lemma (f == g)
   = funext_on_eta f g eq
+
+
+/// unit for an arbitrary universe
+type unit' : Type u#a = | Unit' : unit'

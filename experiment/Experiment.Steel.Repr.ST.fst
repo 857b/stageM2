@@ -25,14 +25,11 @@ type req_t (pre : pre_t) = Dl.dlist pre -> prop
 type ens_t (pre : pre_t) (a : Type) (post : post_t a) = Dl.dlist pre -> (x : a) -> Dl.dlist (post_ts post x) -> prop
 
 
-/// unit for an arbitrary universe
-type unit' : Type u#a = | Unit' : unit'
-
 noeq
 type prog_tree : (a : Type u#a) -> (pre : pre_t u#b) -> (post : post_t u#a u#b a) -> Type u#(1 + max a b) =
   | Tequiv : (pre : Dl.ty_list) -> (post : Dl.ty_list) ->
              (p : Perm.pequiv pre post) ->
-             prog_tree unit' pre (post_t_of_ts unit' post)
+             prog_tree U.unit' pre (post_t_of_ts U.unit' post)
   | Tspec  : (a : Type u#a) -> (pre : pre_t) -> (post : post_t a) -> (frame : Dl.ty_list) ->
              (req : req_t pre) -> (ens : ens_t pre a post) ->
              prog_tree a L.(pre@frame) (append_post_t post (post_t_of_ts a frame))
@@ -91,7 +88,7 @@ let match_prog_tree
       (c_Tequiv : (pre : Dl.ty_list) -> (post : Dl.ty_list) ->
                   (p : Perm.pequiv pre post) ->
                   Pure (r _ _ _ (Tequiv pre post p))
-                       (requires a0 == unit' /\ pre0 == pre /\ post0 == (post_t_of_ts unit' post) /\
+                       (requires a0 == U.unit' /\ pre0 == pre /\ post0 == (post_t_of_ts U.unit' post) /\
                                  t0 == Tequiv pre post p)
                        (ensures fun _ -> True))
       (c_Tspec  : (a : Type) -> (pre : pre_t) -> (post : post_t a) -> (frame : Dl.ty_list) ->
@@ -156,7 +153,7 @@ and tree_ens (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree a pre 
   : Tot (ens_t pre a post) (decreases t)
   = match t with
   | Tequiv _ post p ->
-             (fun sl0 x sl1 ->
+             (fun sl0 _ sl1 ->
                sl1 == Dl.apply_pequiv p sl0)
   | Tspec a  pre post frame  req ens ->
              (fun sl0 x sl1 ->

@@ -10,10 +10,9 @@ module Fin = FStar.Fin
 
 open Experiment.Steel.Repr.ST
 
-type post_t (a : Type) = Lf.list_fun a Type
-unfold
-let post_ts (#a : Type) (post : post_t a) : a -> Dl.ty_list = post.lf_list
-type post_v (#a : Type) (post : post_t a) (x : a) = Dl.dlist (post_ts post x)
+
+type post_t (a : Type) = a -> Dl.ty_list
+type post_v (#a : Type) (post : post_t a) (x : a) = Dl.dlist (post x)
 type req_t = prop
 type ens_t (a : Type) (post : post_t a) = (x : a) -> post_v post x -> prop
 
@@ -54,11 +53,11 @@ and tree_ens (#a : Type) (#post : post_t a) (t : prog_tree a post)
   | Tret _ x  post0 sl ->
              (fun x' (sl' : post_v post x') -> x' == x /\ sl' == sl)
   | Tbind a _  itm post0  f g ->
-             (fun y (sl2 : post_v post y) -> tree_req f /\
+             (fun y (sl2 : post_v post y) ->
                (exists (x : a) (sl1 : post_v itm x) .
                  tree_ens f x sl1 /\ tree_ens (g x sl1) y sl2))
   | TbindP a _  post0  wp _ g ->
-             (fun y (sl1 : post_v post y) -> as_requires wp /\
+             (fun y (sl1 : post_v post y) ->
                (exists (x : a) . as_ensures wp x /\ tree_ens (g x) y sl1))
 
 
@@ -153,8 +152,7 @@ let post_Fun_of_ST
       (#pre_n : nat) (s : ST.shape_tree pre_n post.lf_len)
   : post_t u#a u#b a
   = let p' = post_bij s in
-    { lf_len  = p'.post'_n;
-      lf_list = fun (x : a) -> Ll.initi 0 p'.post'_n (fun i -> L.index (post.lf_list x) (p'.post'_g i)) }
+    fun (x : a) -> Ll.initi 0 p'.post'_n (fun i -> L.index (post.lf_list x) (p'.post'_g i))
 
 // TODO? define with post : ty_list
 let sel_Fun_of_ST
@@ -203,7 +201,7 @@ let sel_Fun_ST_Fun
       calc (==) {
         Dl.index (sel_Fun_of_ST post s x post_ST) i;
       == {}
-        U.cast (L.index (post_ts (post_Fun_of_ST post s) x) i)
+        U.cast (L.index (post_Fun_of_ST post s x) i)
           (Dl.index post_ST ((post_bij s).post'_g i));
       == {}
         Dl.index sl1' ((post_bij s).post'_f ((post_bij s).post'_g i));
@@ -218,21 +216,22 @@ let post_Fun_of_ST__spec
       (#a : Type) (post : ST.post_t a) (frame : ST.post_t a)
       (pre_n : nat)
   : Lemma (ensures post_Fun_of_ST (append_post_t post frame) (Sspec pre_n post.lf_len frame.lf_len)
-                == Lf.eta post)
+                == U.eta (ST.post_ts post))
   =
     let post' = post_Fun_of_ST (append_post_t post frame) (Sspec pre_n post.lf_len frame.lf_len) in
-    Lf.lf_eta_extensionality post' (Lf.eta post)
-         (assert (post' == Lf.eta post') by T.(trefl ())) (_ by T.(trefl ()))
-         (fun x i -> Ll.append_index (post.lf_list x) (frame.lf_list x) i)
+    U.funext_eta post' (U.eta (ST.post_ts post))
+         (assert (post' == U.eta post') by T.(trefl ())) (_ by T.(trefl ()))
+         (fun x -> Ll.list_extensionality (post' x) (ST.post_ts post x)
+           (fun i -> Ll.append_index (post.lf_list x) (frame.lf_list x) i))
 
 let post_Fun_of_ST__ret
       (#a : Type) (post : ST.post_t a)
-  : Lemma (ensures post_Fun_of_ST post (Sret post.lf_len) == Lf.eta post)
+  : Lemma (ensures post_Fun_of_ST post (Sret post.lf_len) == U.eta (ST.post_ts post))
   =
     let post' = post_Fun_of_ST post (Sret post.lf_len) in
-    Lf.lf_eta_extensionality post' (Lf.eta post)
-         (assert (post' == Lf.eta post') by T.(trefl ())) (_ by T.(trefl ()))
-         (fun x i -> ())
+    U.funext_eta post' (U.eta (ST.post_ts post))
+         (assert (post' == U.eta post') by T.(trefl ())) (_ by T.(trefl ()))
+         (fun x -> Ll.list_extensionality (post' x) (ST.post_ts post x) (fun i -> ()))
 
 
 (* TODO? markers *)
@@ -245,17 +244,17 @@ let rec repr_Fun_of_ST
       (fun a pre post t -> (s : ST.prog_shape t) -> Dl.dlist pre ->
          prog_tree a (post_Fun_of_ST post s))
     begin fun (*ST.Tequiv*) pre post0 p -> fun s sl0 ->
-            Tret unit' Unit' (Lf.const unit' []) Dl.DNil
+            Tret U.unit' U.Unit' (fun _ -> []) Dl.DNil
     end
     begin fun (*ST.Tspec*) a pre post frame req ens -> fun s sl0' ->
             (**) post_Fun_of_ST__spec post (post_t_of_ts a frame) (L.length pre);
             (**) let post'  = post_Fun_of_ST (append_post_t post (post_t_of_ts a frame)) s in
             let sl0 : Dl.dlist pre = (Dl.splitAt_ty pre frame sl0')._1 in
-            Tspec a (Lf.eta post) (req sl0) (ens sl0) <: prog_tree a post'
+            Tspec a (U.eta (ST.post_ts post)) (req sl0) (ens sl0) <: prog_tree a post'
     end
     begin fun (*ST.Tret*) a x post -> fun s sl ->
             (**) post_Fun_of_ST__ret post;
-            U.cast (prog_tree a (post_Fun_of_ST post s)) (Tret a x (Lf.eta post) sl)
+            U.cast (prog_tree a (post_Fun_of_ST post s)) (Tret a x (U.eta (ST.post_ts post)) sl)
     end
     begin fun (*ST.Tbind*) a b pre itm post f g -> fun s sl0 ->
             (**) let Sbind _ _ _ s_f s_g = s in
@@ -458,15 +457,12 @@ let repr_Fun_of_ST_ens__Tbind a b pre (itm : ST.post_t a) post
       (s_f  : prog_shape f)
       (s_g : ST.shape_tree itm.lf_len post.lf_len {forall (x : a) . ST.prog_has_shape (g x) s_g})
       sl0 y sl2
-      (pre_eq_g  : (x : a) -> (sl1 : Dl.dlist (ST.post_ts itm x)) ->
-                   Lemma (req_equiv (g x) s_g sl1))
       (post_eq_f : (x : a) -> (sl1 : Dl.dlist (ST.post_ts itm x)) ->
                    Lemma (ens_equiv f s_f sl0 x sl1))
       (post_eq_g : (x : a) -> (sl1 : Dl.dlist (ST.post_ts itm x)) ->
                    Lemma (requires ST.tree_req (g x) sl1) (ensures ens_equiv (g x) s_g sl1 y sl2))
   : Lemma
-      (requires ST.tree_req (ST.Tbind a b pre itm post f g) sl0 /\
-                tree_req (repr_Fun_of_ST f s_f sl0))
+      (requires ST.tree_req (ST.Tbind a b pre itm post f g) sl0)
       (ensures  ens_equiv (ST.Tbind a b pre itm post f g) (Sbind _ _ _ s_f s_g) sl0 y sl2)
   =
     let t = ST.Tbind a b pre itm post f g in
@@ -484,19 +480,17 @@ let repr_Fun_of_ST_ens__Tbind a b pre (itm : ST.post_t a) post
          ST.tree_ens f sl0 x sl1 /\ ST.tree_ens (g x) sl1 y sl2)
      <==>
       (post_eq_src sl0 sl2 (post_src_of_shape s) /\
-      (tree_req r_f /\
-       (exists (x : a) (sl1' : post_v itm' x) .
+      ((exists (x : a) (sl1' : post_v itm' x) .
          tree_ens r_f x sl1' /\
        (let sl1 = sel_ST_of_Fun f s_f sl0 x sl1' in
         let r_g = r_g x sl1 in
-         tree_req r_g /\
         (exists (yg : b) (sl2g : post_v (post_Fun_of_ST post #(L.length (post_ts itm x)) s_g) yg) .
          tree_ens r_g yg sl2g /\
         (let sl2f : Dl.dlist (post_ts post yg) = sel_ST_of_Fun (g x) s_g sl1 yg sl2g in
          tree_ens (Tret b yg post' (sel_Fun_of_ST post s yg sl2f)) y sl2'
          ))))))
     )) by T.(trefl ());
-    
+
     assert (ST.tree_req f sl0);
     assert (post_eq_src sl0 sl2 (post_src_of_shape s));
 
@@ -506,7 +500,6 @@ let repr_Fun_of_ST_ens__Tbind a b pre (itm : ST.post_t a) post
          tree_ens r_f x sl1' /\
        (let sl1 = sel_ST_of_Fun f s_f sl0 x sl1' in
         let r_g = r_g x sl1 in
-         tree_req r_g /\
         (exists (sl2g : post_v post'g y) .
          tree_ens r_g y sl2g /\
          sl2' == sel_Fun_of_ST post s y (sel_ST_of_Fun (g x) s_g sl1 y sl2g)
@@ -536,16 +529,13 @@ let repr_Fun_of_ST_ens__Tbind a b pre (itm : ST.post_t a) post
         (fun sl1' -> tree_ens r_f x sl1' /\
                  (let sl1 = sel_ST_of_Fun f s_f sl0 x sl1' in
                   let r_g = r_g x sl1 in
-                  tree_req r_g /\
                   post_eq_src sl1 sl2 (post_src_of_shape s_g) /\
                   tree_ens r_g y (sel_Fun_of_ST post s_g y sl2)))
         (fun sl1' ->
           let sl1 = sel_ST_of_Fun f s_f sl0 x sl1' in
           post_eq_f x sl1;
           ens_equiv_rev f s_f sl0 x sl1';
-          pre_eq_g x sl1;
-          FStar.Classical.move_requires (post_eq_g x) sl1
-        )
+          FStar.Classical.move_requires (post_eq_g x) sl1)
     end
 #pop-options
 
@@ -553,8 +543,6 @@ let repr_Fun_of_ST_ens__TbindP a b pre post
       wp f (g : a -> ST.prog_tree b pre post)
       (s_g : ST.shape_tree _ _ {forall (x : a) . ST.prog_has_shape (g x) s_g})
       sl0 y sl1
-      (pre_eq_g  : (x : a) ->
-                   Lemma (req_equiv (g x) s_g sl0))
       (post_eq_g : (x : a) ->
                    Lemma (requires ST.tree_req (g x) sl0) (ensures ens_equiv (g x) s_g sl0 y sl1))
   : Lemma
@@ -574,34 +562,33 @@ let repr_Fun_of_ST_ens__TbindP a b pre post
         as_ensures wp x /\ ST.tree_ens (g x) sl0 y sl1)
      <==>
       (post_eq_src sl0 sl1 (post_src_of_shape s) /\
-      (as_requires wp /\
       (exists (x : a) .
        as_ensures wp x /\
-      (tree_req (r_g x) /\
       (exists (yg : b) (sl1g : post_v (post_Fun_of_ST post #(L.length #Type pre) s_g) yg) .
        tree_ens (r_g x) yg sl1g /\
       (let sl1f = sel_ST_of_Fun (g x) s_g sl0 yg sl1g in
        y == yg /\ sl1' == sel_Fun_of_ST post s yg sl1f
-      )))))))
+      )))))
     )) by T.(trefl ());
 
     assert (post_eq_src sl0 sl1 (post_src_of_shape s));
+    let req_g x = ST.tree_req (g x) sl0 in
+    assert (ST.tree_req (ST.TbindP a b pre post wp f g) sl0 == (wp req_g /\ True))
+        by T.(trefl ());
+    U.prop_equal (fun p -> p) (ST.tree_req (ST.TbindP a b pre post wp f g) sl0) (wp req_g /\ True);
+    
+    U.assert_by (as_requires wp)
+      (fun () -> FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp);
 
     introduce forall (x : a {as_ensures wp x}) .
-      tree_req (r_g x) /\
       (ST.tree_ens (g x) sl0 y sl1 <==>
       (exists (sl1g : post_v post'g y) .
          tree_ens (r_g x) y sl1g /\
          sl1' == sel_Fun_of_ST post s y (sel_ST_of_Fun (g x) s_g sl0 y sl1g)))
     with begin
+      
       U.assert_by (ST.tree_req (g x) sl0)
-        (fun () ->
-          let req_g x = ST.tree_req (g x) sl0 in
-          assert (ST.tree_req (ST.TbindP a b pre post wp f g) sl0 == (wp req_g /\ True))
-              by T.(trefl ());
-          U.prop_equal (fun p -> p) (ST.tree_req (ST.TbindP a b pre post wp f g) sl0) (wp req_g /\ True);
-          FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp);
-      pre_eq_g x;
+        (fun () -> FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp);
 
       introduce forall (sl1g : post_v post'g y) .
         sl1' == sel_Fun_of_ST post s y (sel_ST_of_Fun (g x) s_g sl0 y sl1g)
@@ -674,7 +661,7 @@ and repr_Fun_of_ST_ens
        (sl0 : Dl.dlist pre) -> (res : a) -> (sl1 : Dl.dlist (ST.post_ts post res)) ->
        squash (ST.tree_req t sl0) ->
        squash (ens_equiv t s sl0 res sl1))
-    begin fun (*ST.Tequiv*) pre post0 p -> fun s sl0 Unit' sl1 () ->
+    begin fun (*ST.Tequiv*) pre post0 p -> fun s sl0 U.Unit' sl1 () ->
       introduce (forall (i : Fin.fin (L.length post0)) . Dl.index sl1 i === Dl.index sl0 (p i)) ==>
                 sl1 == Dl.apply_perm_r p sl0
         with _ . Dl.dlist_extensionality sl1 (Dl.apply_perm_r p sl0) (fun _ -> ())
@@ -688,16 +675,13 @@ and repr_Fun_of_ST_ens
     end
     begin fun (*ST.Tbind*) a b pre itm post f g -> fun s sl0 y sl2 _ ->
       let Sbind _ _ _ s_f s_g = s in
-      repr_Fun_of_ST_req f s_f sl0;
       repr_Fun_of_ST_ens__Tbind a b pre itm post f g s_f s_g sl0 y sl2
-        (fun x sl1 -> repr_Fun_of_ST_req (g x) s_g sl1)
         (fun x sl1 -> repr_Fun_of_ST_ens f s_f sl0 x sl1)
         (fun x sl1 -> repr_Fun_of_ST_ens (g x) s_g sl1 y sl2)
     end
     begin fun (*ST.TbindP*) a b pre post wp f g -> fun s sl0 y sl1 _ ->
       let SbindP _ _ s_g = s in
       repr_Fun_of_ST_ens__TbindP a b pre post wp f g s_g sl0 y sl1
-        (fun x -> repr_Fun_of_ST_req (g x) s_g sl0)
         (fun x -> repr_Fun_of_ST_ens (g x) s_g sl0 y sl1)
     end s sl0 res sl1 ()
 #pop-options
@@ -705,8 +689,193 @@ and repr_Fun_of_ST_ens
 #pop-options
 
 
+(*** Steel.Repr.Fun --> Repr.Fun *)
 
-(***** Test *)
+module Uv  = FStar.Universe
+module Fun = Experiment.Repr.Fun
+
+noeq
+type sl_tys_t : Type u#(max a b + 1)= {
+  val_t : Type u#a;
+  sel_t : post_t u#a u#b val_t
+}
+
+noeq
+type sl_tys_v (ty : sl_tys_t u#a u#b) : Type u#(max a (b + 1)) = {
+  val_v : ty.val_t;
+  sel_v : Dl.dlist (ty.sel_t val_v)
+}
+
+let rec forall_dlist (ty : Dl.ty_list) (f : Dl.dlist ty -> Type0)
+  : Pure Type0 (requires True) (ensures fun p -> p <==> (forall (xs : Dl.dlist ty) . f xs)) (decreases ty)
+  = match ty with
+  | [] -> f Dl.DNil
+  | t0 :: ts -> assert (forall (xs' : Dl.dlist ty) . exists (x : t0) (xs : Dl.dlist ts) .
+                         xs' == Dl.DCons t0 x ts xs);
+             (forall (x : t0) . forall_dlist ts (fun xs -> f (Dl.DCons t0 x ts xs)))
+
+let sl_all (ty : sl_tys_t) (f : sl_tys_v ty -> Type0)
+  : Pure Type0 (requires True) (ensures fun p -> p <==> (forall (x : sl_tys_v ty) . f x))
+  =
+    assert (forall (x : sl_tys_v ty) . x == {val_v = x.val_v; sel_v = x.sel_v});
+   (forall (val_v : ty.val_t) . forall_dlist (ty.sel_t val_v) (fun sel_v -> f ({val_v; sel_v})))
+
+let rec exists_dlist (ty : Dl.ty_list) (f : Dl.dlist ty -> Type0)
+  : Pure Type0 (requires True) (ensures fun p -> p <==> (exists (xs : Dl.dlist ty) . f xs)) (decreases ty)
+  = match ty with
+  | [] -> f Dl.DNil
+  | t0 :: ts -> assert (forall (xs' : Dl.dlist ty) . exists (x : t0) (xs : Dl.dlist ts) .
+                         xs' == Dl.DCons t0 x ts xs);
+             (exists (x : t0) . exists_dlist ts (fun xs -> f (Dl.DCons t0 x ts xs)))
+
+let sl_ex (ty : sl_tys_t) (f : sl_tys_v ty -> Type0)
+  : Pure Type0 (requires True) (ensures fun p -> p <==> (exists (x : sl_tys_v ty) . f x))
+  =
+    assert (forall (x : sl_tys_v ty) . x == {val_v = x.val_v; sel_v = x.sel_v});
+   (exists (val_v : ty.val_t) . exists_dlist (ty.sel_t val_v) (fun sel_v -> f ({val_v; sel_v})))
+
+
+let rec arw_dlist (src : Dl.ty_list u#s) (dst : Type u#d)
+  : Tot (Type u#(max s d)) (decreases src)
+  = match src with
+  | [] -> Uv.raise_t dst
+  | t0 :: ts -> (t0 -> arw_dlist ts dst)
+
+let partial_app_dlist (src0 : Type u#s) (src : Dl.ty_list u#s) (dst : Type u#d) (f : Dl.dlist (src0 :: src) -> dst)
+                      (x : src0) (xs : Dl.dlist src) : dst
+  = f Dl.(DCons src0 x src xs)
+
+let rec lam_dlist (src : Dl.ty_list u#s) (dst : Type u#d) (f : Dl.dlist src -> dst)
+  : Tot (arw_dlist src dst) (decreases src)
+  = match src with
+  | [] -> Uv.raise_val (f Dl.DNil)
+  | t0 :: ts -> (fun (x : t0) -> lam_dlist ts dst (partial_app_dlist t0 ts dst f x))
+
+let rec app_dlist (#src : Dl.ty_list u#s) (#dst : Type u#d) (f : arw_dlist src dst) (x : Dl.dlist src)
+  : Tot dst (decreases src)
+  = match (|src, f, x|) <: (src : Dl.ty_list & arw_dlist src dst & Dl.dlist src) with
+  | (|[],      v, Dl.DNil|)           -> Uv.downgrade_val v
+  | (|t0 :: ts, f, Dl.DCons _ x _ xs|) -> app_dlist #ts #dst (f x) xs
+
+let rec app_lam_dlist (src : Dl.ty_list u#s) (dst : Type u#d) (f : Dl.dlist src -> dst) (x : Dl.dlist src)
+  : Lemma (ensures app_dlist (lam_dlist src dst f) x == f x)
+          (decreases src)
+          [SMTPat (app_dlist (lam_dlist src dst f) x)]
+  = match x with
+  | Dl.DNil -> ()
+  | Dl.DCons t0 x ts xs -> app_lam_dlist ts dst (partial_app_dlist t0 ts dst f x) xs
+
+let sl_arw (src : sl_tys_t u#a u#b) (dst : Type u#d) : Type =
+  (x : src.val_t) -> arw_dlist (src.sel_t x) dst
+
+let sl_lam (src : sl_tys_t u#a u#b) (dst : Type u#d) (f : (x : src.val_t) -> (xs : Dl.dlist (src.sel_t x)) -> dst)
+  : sl_arw src dst
+  = fun (x : src.val_t) -> lam_dlist (src.sel_t x) dst (f x)
+
+let sl_app (#src : sl_tys_t u#a u#b) (#dst : Type u#d) (f : sl_arw src dst) (x : sl_tys_v src) : dst
+  = app_dlist (f x.val_v) x.sel_v
+
+let sl_app_lam (src : sl_tys_t u#a u#b) (dst : Type u#d)
+               (f : (x : src.val_t) -> (xs : Dl.dlist (src.sel_t x)) -> dst) (x : sl_tys_v src)
+  : Lemma (ensures sl_app (sl_lam src dst f) x == f x.val_v x.sel_v)
+          [SMTPat (sl_app (sl_lam src dst f) x)]
+  = ()
+
+
+let sl_tys : Fun.tys u#(max a b + 1) u#(max a (b + 1)) = {
+  t = sl_tys_t u#a u#b;
+  v = sl_tys_v u#a u#b;
+  unit = {val_t = U.unit'; sel_t = (fun _ -> [])};
+  emp  = {val_v = U.Unit'; sel_v = Dl.DNil};
+  all  = sl_all;
+  ex   = sl_ex;
+}
+
+
+let rec repr_Fun_of_Steel (#val_t : Type u#a) (#sel_t : post_t u#a u#b val_t) (t : prog_tree val_t sel_t)
+  : Tot (Fun.prog_tree u#(max a b + 1) u#(max a (b + 1)) u#a (sl_tys u#a u#b) ({val_t; sel_t}))
+        (decreases t)
+  = match t with
+  | Tspec a post req ens ->
+          Fun.Tspec ({val_t = a; sel_t = post}) req
+             (sl_app (sl_lam ({val_t = a; sel_t = post}) prop ens))
+  | Tret a x post sl ->
+          Fun.Tret #sl_tys ({val_t = a; sel_t = post}) ({val_v = x; sel_v = sl})
+  | Tbind a b itm post f g ->
+          Fun.Tbind _ _
+            (repr_Fun_of_Steel f)
+            (sl_app (sl_lam _ _ (fun v sl -> repr_Fun_of_Steel (g v sl))))
+  | TbindP a b post wp f g ->
+           Fun.TbindP a ({val_t = b; sel_t = post}) wp f (fun (x : a) -> repr_Fun_of_Steel (g x))
+
+
+(***** soundness of Steel.Fun --> Fun *)
+
+#push-options "--z3rlimit 20 --ifuel 1 --fuel 1"
+let rec repr_Fun_of_Steel_req #val_t #sel_t (t : prog_tree val_t sel_t)
+  : Lemma (ensures tree_req t <==> Fun.tree_req (repr_Fun_of_Steel t))
+          (decreases t)
+  = match t with
+  | Tspec a post req ens -> ()
+  | Tret a x post sl -> ()
+  | Tbind a b itm post f g ->
+          repr_Fun_of_Steel_req f;
+          introduce forall (x : a) (sl1 : post_v itm x) .
+                    (tree_ens f x sl1   <==> Fun.tree_ens (repr_Fun_of_Steel f) ({val_v=x; sel_v=sl1})) /\
+                    (tree_req (g x sl1) <==> Fun.tree_req (repr_Fun_of_Steel (g x sl1)))
+            with (repr_Fun_of_Steel_ens f x sl1; repr_Fun_of_Steel_req (g x sl1))
+  | TbindP a b post wp f g ->
+          calc (<==>) {
+            tree_req (TbindP a b post wp f g);
+          <==> {_ by T.(apply_lemma (`U.iff_refl); trefl ())}
+            wp (fun x -> tree_req (g x)) /\ True;
+          <==> {wp_morph_iff wp (fun x -> tree_req (g x)) (fun x -> Fun.tree_req (repr_Fun_of_Steel (g x)))
+                              (fun x -> repr_Fun_of_Steel_req (g x))}
+            wp (fun x -> Fun.tree_req (repr_Fun_of_Steel (g x)));
+          <==> {_ by T.(apply_lemma (`U.iff_refl); trefl ())}
+            Fun.tree_req (repr_Fun_of_Steel (TbindP a b post wp f g));
+          }
+
+and repr_Fun_of_Steel_ens #val_t #sel_t (t : prog_tree val_t sel_t)
+                          (val_v : val_t) (sel_v : Dl.dlist (sel_t val_v))
+  : Lemma (ensures tree_ens t val_v sel_v <==> Fun.tree_ens (repr_Fun_of_Steel t) ({val_v; sel_v}))
+          (decreases t)
+  = match t with
+  | Tspec a post req ens ->
+          assert (tree_ens (Tspec a post req ens) val_v sel_v == ens val_v sel_v)
+               by T.(trefl ());
+          assert (Fun.tree_ens (repr_Fun_of_Steel (Tspec a post req ens)) ({val_v; sel_v})
+               == sl_app (sl_lam ({val_t = a; sel_t = post}) prop ens) ({val_v; sel_v}))
+               by T.(trefl ())
+  | Tret a x post sl -> ()
+  | Tbind a b itm post f g ->
+          assert (tree_ens (Tbind a b itm post f g) val_v sel_v
+               == (exists (x : a) (sl1 : post_v itm x) . tree_ens f x sl1 /\ tree_ens (g x sl1) val_v sel_v) )
+               by T.(trefl ());
+          assert (Fun.tree_ens (repr_Fun_of_Steel (Tbind a b itm post f g)) ({val_v; sel_v})
+               == sl_tys.ex ({val_t=a; sel_t=itm}) (fun (x_sl1 : sl_tys_v ({val_t=a; sel_t=itm})) ->
+                     Fun.tree_ens (repr_Fun_of_Steel f) x_sl1 /\
+                     Fun.tree_ens
+                      (sl_app (sl_lam _ _ (fun v sl -> repr_Fun_of_Steel (g v sl))) x_sl1) ({val_v; sel_v})))
+               by T.(trefl ());
+          introduce forall (x : a) (sl1 : post_v itm x) .
+                    (tree_ens f x sl1   <==> Fun.tree_ens (repr_Fun_of_Steel f) ({val_v=x; sel_v=sl1})) /\
+                    (tree_ens (g x sl1) val_v sel_v <==> Fun.tree_ens (repr_Fun_of_Steel (g x sl1)) ({val_v; sel_v}))
+            with (repr_Fun_of_Steel_ens f x sl1; repr_Fun_of_Steel_ens (g x sl1) val_v sel_v)
+  | TbindP a b post wp f g ->
+          assert (tree_ens (TbindP a b post wp f g) val_v sel_v
+              == (exists (x : a) . as_ensures wp x /\ tree_ens (g x) val_v sel_v))
+            by T.(trefl ());
+          assert (Fun.tree_ens (repr_Fun_of_Steel (TbindP a b post wp f g)) ({val_v; sel_v})
+              == (exists (x : a) . as_ensures wp x /\ Fun.tree_ens (repr_Fun_of_Steel (g x)) ({val_v; sel_v})))
+            by T.(trefl ());
+          introduce forall (x : a) .
+                    (tree_ens (g x) val_v sel_v <==> Fun.tree_ens (repr_Fun_of_Steel (g x)) ({val_v; sel_v}))
+            with repr_Fun_of_Steel_ens (g x) val_v sel_v
+#pop-options
+
+
+(*** Test *)
 
 module Perm = Learn.Permutation
 module M = Experiment.Steel.Repr.M
@@ -738,6 +907,51 @@ let test_ST_shape : ST.prog_shape test_ST =
 let test_Fun (b_ini : bool) (x_ini : int) =
   repr_Fun_of_ST test_ST test_ST_shape Dl.(DCons _ b_ini _ (DCons _ x_ini _ DNil))
 
-//let _ = fun b_ini x_ini ->
-//  assert (M.print_util (test_Fun b_ini x_ini))
-//    by T.(norm M.normal_spec_steps; qed ())
+let norm_test_Fun : list norm_step
+  = [delta_only [`%test_Fun; `%test_ST; `%test_ST_shape;
+                            `%test_ST_shape_tree; `%ST.bind; `%L.length; `%L.op_At; `%L.append];
+     delta_qualifier ["unfold"];
+     delta_attr [`%Lf.__list_fun__; `%U.__util_func__];
+     iota; zeta; primops]
+
+let delta_only_repr_Fun_of_ST =
+  [`%repr_Fun_of_ST; `%match_prog_tree;
+   `%post_Fun_of_ST; `%Learn.List.initi; `%L.index; `%L.hd; `%L.tl; `%L.tail;
+   `%Mkpost_bij_t'?.post'_n; `%Mkpost_bij_t'?.post'_f; `%Mkpost_bij_t'?.post'_g;
+   `%post_bij; `%sel_ST_of_Fun; `%sel_Fun_of_ST; `%post_src_of_shape]
+
+let norm_repr_Fun_of_ST : list norm_step
+  = [delta_only delta_only_repr_Fun_of_ST;
+     delta_qualifier ["unfold"];
+     delta_attr [`%Lf.__list_fun__; `%U.__util_func__];
+     iota; zeta; primops]
+
+(*let _ = fun b_ini x_ini ->
+  assert (M.print_util (test_Fun b_ini x_ini))
+    by T.(norm norm_test_Fun;
+          norm norm_repr_Fun_of_ST;
+          qed ())*)
+
+let test_Fun' (b_ini : bool) (x_ini : int) = 
+  repr_Fun_of_Steel (test_Fun b_ini x_ini)
+
+let norm_repr_Fun_of_Steel : list norm_step
+  = [delta_only (L.append delta_only_repr_Fun_of_ST
+                [`%repr_Fun_of_Steel; `%sl_lam; `%lam_dlist; `%partial_app_dlist;
+                 `%Mksl_tys_t?.val_t; `%Mksl_tys_t?.sel_t;
+                 `%Dl.index; `%Dl.splitAt_ty; `%Mktuple2?._1; `%Mktuple2?._2;
+                 `%Dl.initi; `%L.length;
+                 
+                 `%Perm.perm_f_swap; `%Perm.perm_f_transpose; `%Perm.perm_f_of_pair;
+                 `%Perm.mk_perm_f]);
+     delta_qualifier ["unfold"];
+     delta_attr [`%Lf.__list_fun__; `%U.__util_func__];
+     iota; zeta; primops]
+
+(*let _ = fun b_ini x_ini ->
+  assert (M.print_util (test_Fun' b_ini x_ini))
+    by T.(norm [delta_only [`%test_Fun']];
+          norm norm_test_Fun;
+          norm norm_repr_Fun_of_ST;
+          norm norm_repr_Fun_of_Steel;
+          qed ())*)
