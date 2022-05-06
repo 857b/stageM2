@@ -234,6 +234,7 @@ let norm_repr_Fun_of_ST : list norm_step
           norm norm_repr_Fun_of_ST;
           qed ())*)
 
+unfold
 let test1_Fun (b_ini : bool) (x_ini : int) = 
   SF.repr_Fun_of_Steel (test1_SF b_ini x_ini)
 
@@ -251,9 +252,59 @@ let norm_repr_Fun_of_Steel : list norm_step
      iota; zeta; primops]
 
 (*let _ = fun b_ini x_ini ->
-  assert (M.print_util (test_Fun' b_ini x_ini))
-    by T.(norm [delta_only [`%test_Fun']];
-          norm norm_test_Fun;
+  assert (print_util (test1_Fun b_ini x_ini))
+    by T.(norm norm_test_Fun;
           norm norm_repr_Fun_of_ST;
           norm norm_repr_Fun_of_Steel;
           qed ())*)
+
+
+unfold
+let test2_SF : SF.prog_tree bool (fun _ -> [int]) = SF.(
+  Tbind bool bool (fun _ -> [int; int]) (fun _ -> [int])
+    (Tspec bool (fun _ -> [int; int]) True
+      (fun (b : bool) (xs : Dl.dlist [int; int]) ->
+         b ==> Dl.index xs 0 + Dl.index xs 1 >= 0))
+    (fun (b : bool) (xs : Dl.dlist [int; int]) ->
+      Tret bool (b && Dl.index xs 0 >= 0)
+              (fun _ -> [int]) Dl.(DCons int (index xs 0 + index xs 1) _ DNil)))
+
+unfold
+let test2_Fun =
+  SF.repr_Fun_of_Steel test2_SF
+
+let normal_tree_Fun : list norm_step = [
+    delta_only [`%SF.repr_Fun_of_Steel; `%SF.sl_lam; `%SF.lam_dlist; `%SF.partial_app_dlist;
+                `%SF.Mksl_tys_t?.val_t; `%SF.Mksl_tys_t?.sel_t;
+                `%Dl.index];
+    delta_qualifier ["unfold"];
+    iota; zeta; primops
+  ]
+
+(*let _ =
+  assert (print_util test2_Fun)
+    by T.(norm normal_tree_Fun;
+          qed ())*)
+
+
+unfold
+let test2_wp =
+  Fun.tree_wp test2_Fun (fun x -> b2t x.val_v)
+
+let normal_spec_Fun : list norm_step = [
+    delta_only [`%Fun.tree_wp; `%SF.sl_app; `%SF.app_dlist; `%SF.partial_app_dlist;
+                `%Fun.Mktys'?.all; `%SF.sl_tys; `%SF.sl_all; `%SF.forall_dlist;
+                `%SF.Mksl_tys_t?.val_t; `%SF.Mksl_tys_t?.sel_t;
+                `%SF.Mksl_tys_v?.val_v; `%SF.Mksl_tys_v?.sel_v;
+                `%SF.downgrade_val];
+    delta_qualifier ["unfold"];
+    iota; zeta; primops
+  ]
+
+(*#push-options "--print_full_names"
+let _ =
+  assert (print_util test2_wp)
+    by T.(norm normal_tree_Fun;
+          norm normal_spec_Fun;
+          qed ())
+#pop-options*)

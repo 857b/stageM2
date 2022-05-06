@@ -51,6 +51,11 @@ let return (#s : tys) (#a : s.t) ($x : s.v a) : prog_tree s a
 let bind (#s : tys) (#a #b : s.t) (f : prog_tree s a) (g : s.v a -> prog_tree s b) : prog_tree s b
   = Tbind a b f g
 
+/// We do not ensure [tree_req f] in the post-condition of [Tbind]. This is equivalent (assuming the
+/// pre-condition, as in [equiv]) but it is simpler for reasoning about some program transformations.
+/// For instance, if one ensures [tree_req f] for the bind, the post-condition of `let x = f in x` is equivalent
+/// to the post-condition of `f` only when the pre-condition holds.
+/// The same holds for [as_requires wp] in the post-condition of [TbindP].
 
 let rec tree_req (#s : tys) (#a : s.t) (t : prog_tree s a)
   : Tot pure_pre (decreases t)

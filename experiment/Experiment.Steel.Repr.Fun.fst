@@ -404,7 +404,7 @@ let repr_Fun_of_ST_req__Tbind a b pre (itm : ST.post_t a) post
       (pre_eq_g  : (x : a) -> (sl1 : Dl.dlist (itm x)) ->
                    Lemma (req_equiv (g x) (ST.mk_prog_shape (g x) shp_g) sl1))
       (post_eq_f : (x : a) -> (sl1 : Dl.dlist (itm x)) ->
-                   Lemma (requires ST.tree_req f sl0) (ensures ens_equiv f s_f sl0 x sl1))
+                   Lemma (ens_equiv f s_f sl0 x sl1))
   : Lemma
       (requires ST.tree_req f sl0 <==> tree_req (repr_Fun_of_ST f s_f sl0))
       (ensures  req_equiv (ST.Tbind a b pre itm post f g)
@@ -463,10 +463,8 @@ let repr_Fun_of_ST_ens__Tbind a b pre (itm : ST.post_t a) post
       (post_eq_f : (x : a) -> (sl1 : Dl.dlist (itm x)) ->
                    Lemma (ens_equiv f s_f sl0 x sl1))
       (post_eq_g : (x : a) -> (sl1 : Dl.dlist (itm x)) ->
-                   Lemma (requires ST.tree_req (g x) sl1)
-                         (ensures ens_equiv (g x) (ST.mk_prog_shape (g x) shp_g) sl1 y sl2))
+                   Lemma (ens_equiv (g x) (ST.mk_prog_shape (g x) shp_g) sl1 y sl2))
   : Lemma
-      (requires ST.tree_req (ST.Tbind a b pre itm post f g) sl0)
       (ensures  ens_equiv (ST.Tbind a b pre itm post f g)
                           (ST.mk_prog_shape _ (Sbind _ _ _ s_f.shp shp_g)) sl0 y sl2)
   =
@@ -482,8 +480,7 @@ let repr_Fun_of_ST_ens__Tbind a b pre (itm : ST.post_t a) post
     let sl2' : post_v post' y = sel_Fun_of_ST post s.shp y sl2 in
 
     assert (ens_equiv t s sl0 y sl2 ==
-      (ST.tree_req f sl0 /\
-       (exists (x : a) (sl1 : Dl.dlist (itm x)) .
+      ((exists (x : a) (sl1 : Dl.dlist (itm x)) .
          ST.tree_ens f sl0 x sl1 /\ ST.tree_ens (g x) sl1 y sl2)
      <==>
       (post_eq_src sl0 sl2 (post_src_of_shape s.shp) /\
@@ -498,7 +495,6 @@ let repr_Fun_of_ST_ens__Tbind a b pre (itm : ST.post_t a) post
          ))))))
     )) by T.(trefl ());
 
-    assert (ST.tree_req f sl0);
     assert (post_eq_src sl0 sl2 (post_src_of_shape s.shp));
 
     introduce forall (x : a) .
@@ -552,10 +548,8 @@ let repr_Fun_of_ST_ens__TbindP a b pre post
       (shp_g : ST.shape_tree _ post_n {forall (x : a) . ST.prog_has_shape (g x) shp_g})
       sl0 y sl1
       (post_eq_g : (x : a) ->
-                   Lemma (requires ST.tree_req (g x) sl0)
-                         (ensures ens_equiv (g x) (ST.mk_prog_shape (g x) shp_g) sl0 y sl1))
+                   Lemma (ensures ens_equiv (g x) (ST.mk_prog_shape (g x) shp_g) sl0 y sl1))
   : Lemma
-      (requires ST.tree_req (ST.TbindP a b pre post wp f g) sl0)
       (ensures  ens_equiv (ST.TbindP a b pre post wp f g)
                           (ST.mk_prog_shape _ (SbindP _ _ shp_g)) sl0 y sl1)
   =
@@ -568,8 +562,7 @@ let repr_Fun_of_ST_ens__TbindP a b pre post
     let sl1' : post_v post' y = sel_Fun_of_ST post s.shp y sl1 in
 
     assert (ens_equiv t s sl0 y sl1 == (
-      (as_requires wp /\
-      (exists (x : a) .
+      ((exists (x : a) .
         as_ensures wp x /\ ST.tree_ens (g x) sl0 y sl1)
      <==>
       (post_eq_src sl0 sl1 (post_src_of_shape s.shp) /\
@@ -583,24 +576,13 @@ let repr_Fun_of_ST_ens__TbindP a b pre post
     )) by T.(trefl ());
 
     assert (post_eq_src sl0 sl1 (post_src_of_shape s.shp));
-    let req_g x = ST.tree_req (g x) sl0 in
-    assert (ST.tree_req (ST.TbindP a b pre post wp f g) sl0 == (wp req_g /\ True))
-        by T.(trefl ());
-    U.prop_equal (fun p -> p) (ST.tree_req (ST.TbindP a b pre post wp f g) sl0) (wp req_g /\ True);
-    
-    U.assert_by (as_requires wp)
-      (fun () -> FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp);
-
+  
     introduce forall (x : a {as_ensures wp x}) .
       (ST.tree_ens (g x) sl0 y sl1 <==>
       (exists (sl1g : post_v post'g y) .
          tree_ens (r_g x) y sl1g /\
          sl1' == sel_Fun_of_ST post s.shp y (sel_ST_of_Fun (g x) (s_g x) sl0 y sl1g)))
     with begin
-      
-      U.assert_by (ST.tree_req (g x) sl0)
-        (fun () -> FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp);
-
       introduce forall (sl1g : post_v post'g y) .
         sl1' == sel_Fun_of_ST post s.shp y (sel_ST_of_Fun (g x) (s_g x) sl0 y sl1g)
         <==> (sl1g == sel_Fun_of_ST post shp_g y sl1 /\
@@ -668,28 +650,26 @@ and repr_Fun_of_ST_ens
   (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
   (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
   (sl0 : Dl.dlist pre) (res : a) (sl1 : Dl.dlist (post res))
-  : Lemma (requires  ST.tree_req t sl0)
-          (ensures   ens_equiv t s sl0 res sl1)
+  : Lemma (ensures ens_equiv t s sl0 res sl1)
           (decreases t)
   = ST.match_prog_tree t
     (fun a pre post t -> (s : ST.prog_shape t) ->
        (sl0 : Dl.dlist pre) -> (res : a) -> (sl1 : Dl.dlist (post res)) ->
-       squash (ST.tree_req t sl0) ->
        squash (ens_equiv t s sl0 res sl1))
-    begin fun (*ST.Tequiv*) pre post0 p -> fun s sl0 U.Unit' sl1 () ->
+    begin fun (*ST.Tequiv*) pre post0 p -> fun s sl0 U.Unit' sl1 ->
       introduce (forall (i : Fin.fin (L.length post0)) . Dl.index sl1 i === Dl.index sl0 (p i)) ==>
                 sl1 == Dl.apply_perm_r p sl0
         with _ . Dl.dlist_extensionality sl1 (Dl.apply_perm_r p sl0) (fun _ -> ())
     end
-    begin fun (*ST.Tspec*) a pre post frame req ens -> fun s sl0 x sl1 () ->
+    begin fun (*ST.Tspec*) a pre post frame req ens -> fun s sl0 x sl1 ->
       repr_Fun_of_ST_ens__Tspec a pre post frame req ens s sl0 x sl1
     end
-    begin fun (*ST.Tret*) a x post -> fun s sl0 x sl1 () ->
+    begin fun (*ST.Tret*) a x post -> fun s sl0 x sl1 ->
       let Sret post_n = s.shp in
       post_Fun_of_ST__ret post post_n;
       Dl.dlist_extensionality (sel_Fun_of_ST post s.shp x sl1) sl1 (fun _ -> ())
     end
-    begin fun (*ST.Tbind*) a b pre itm post f g -> fun s sl0 y sl2 _ ->
+    begin fun (*ST.Tbind*) a b pre itm post f g -> fun s sl0 y sl2 ->
       let Sbind _ itm_n post_n shp_f shp_g = s.shp in
       let s_f = ST.mk_prog_shape f shp_f in
       let s_g (x : a) = ST.mk_prog_shape (g x) shp_g in
@@ -697,12 +677,12 @@ and repr_Fun_of_ST_ens
         (fun x sl1 -> repr_Fun_of_ST_ens f s_f sl0 x sl1)
         (fun x sl1 -> repr_Fun_of_ST_ens (g x) (s_g x) sl1 y sl2)
     end
-    begin fun (*ST.TbindP*) a b pre post wp f g -> fun s sl0 y sl1 _ ->
+    begin fun (*ST.TbindP*) a b pre post wp f g -> fun s sl0 y sl1 ->
       let SbindP _ post_n shp_g = s.shp in
       let s_g (x : a) = ST.mk_prog_shape (g x) shp_g in
       repr_Fun_of_ST_ens__TbindP a b pre post wp f g post_n shp_g sl0 y sl1
         (fun x -> repr_Fun_of_ST_ens (g x) (s_g x) sl0 y sl1)
-    end s sl0 res sl1 ()
+    end s sl0 res sl1
 #pop-options
 
 #pop-options
@@ -725,55 +705,103 @@ type sl_tys_v (ty : sl_tys_t u#a u#b) : Type u#(max a (b + 1)) = {
   sel_v : Dl.dlist (ty.sel_t val_v)
 }
 
-let rec forall_dlist (ty : Dl.ty_list) (f : Dl.dlist ty -> Type0)
-  : Pure Type0 (requires True) (ensures fun p -> p <==> (forall (xs : Dl.dlist ty) . f xs)) (decreases ty)
-  = match ty with
-  | [] -> f Dl.DNil
-  | t0 :: ts -> assert (forall (xs' : Dl.dlist ty) . exists (x : t0) (xs : Dl.dlist ts) .
-                         xs' == Dl.DCons t0 x ts xs);
-             (forall (x : t0) . forall_dlist ts (fun xs -> f (Dl.DCons t0 x ts xs)))
-
-let sl_all (ty : sl_tys_t) (f : sl_tys_v ty -> Type0)
-  : Pure Type0 (requires True) (ensures fun p -> p <==> (forall (x : sl_tys_v ty) . f x))
-  =
-    assert (forall (x : sl_tys_v ty) . x == {val_v = x.val_v; sel_v = x.sel_v});
-   (forall (val_v : ty.val_t) . forall_dlist (ty.sel_t val_v) (fun sel_v -> f ({val_v; sel_v})))
-
-let rec exists_dlist (ty : Dl.ty_list) (f : Dl.dlist ty -> Type0)
-  : Pure Type0 (requires True) (ensures fun p -> p <==> (exists (xs : Dl.dlist ty) . f xs)) (decreases ty)
-  = match ty with
-  | [] -> f Dl.DNil
-  | t0 :: ts -> assert (forall (xs' : Dl.dlist ty) . exists (x : t0) (xs : Dl.dlist ts) .
-                         xs' == Dl.DCons t0 x ts xs);
-             (exists (x : t0) . exists_dlist ts (fun xs -> f (Dl.DCons t0 x ts xs)))
-
-let sl_ex (ty : sl_tys_t) (f : sl_tys_v ty -> Type0)
-  : Pure Type0 (requires True) (ensures fun p -> p <==> (exists (x : sl_tys_v ty) . f x))
-  =
-    assert (forall (x : sl_tys_v ty) . x == {val_v = x.val_v; sel_v = x.sel_v});
-   (exists (val_v : ty.val_t) . exists_dlist (ty.sel_t val_v) (fun sel_v -> f ({val_v; sel_v})))
-
-
-let rec arw_dlist (src : Dl.ty_list u#s) (dst : Type u#d)
-  : Tot (Type u#(max s d)) (decreases src)
-  = match src with
-  | [] -> Uv.raise_t dst
-  | t0 :: ts -> (t0 -> arw_dlist ts dst)
 
 let partial_app_dlist (src0 : Type u#s) (src : Dl.ty_list u#s) (dst : Type u#d) (f : Dl.dlist (src0 :: src) -> dst)
                       (x : src0) (xs : Dl.dlist src) : dst
   = f Dl.(DCons src0 x src xs)
 
+/// One could define [forall_dlist] with type:
+///   [Pure Type0 (requires True) (ensures fun p -> p <==> (forall (xs : Dl.dlist ty) . f xs))]
+/// However, the refinement on the result is keept during normalization and yields terms that cannot reduce fully.
+/// For this reason, [forall_dlist] is defined with type [Type0] and we prove separately a lemma (with a pattern)
+/// to use equivalence during proofs.
+/// The same holds for [sl_all], [exists_dlist] and [sl_ex].
+
+let rec forall_dlist (ty : Dl.ty_list) (f : Dl.dlist ty -> Type0)
+  : Tot Type0 (decreases ty)
+  = match ty with
+  | []      -> f Dl.DNil
+  | t0 :: ts -> (forall (x : t0) . forall_dlist ts (partial_app_dlist t0 ts Type0 f x))
+
+let rec forall_dlist_iff (ty : Dl.ty_list) (f : Dl.dlist ty -> Type0)
+  : Lemma (ensures forall_dlist ty f <==> (forall (xs : Dl.dlist ty) . f xs)) (decreases ty)
+          [SMTPat (forall_dlist ty f)]
+  = match ty with
+  | [] -> ()
+  | t0 :: ts -> assert (forall (xs' : Dl.dlist ty) . exists (x : t0) (xs : Dl.dlist ts) .
+                         xs' == Dl.DCons t0 x ts xs);
+              introduce forall (x : t0) .
+                forall_dlist ts (partial_app_dlist t0 ts Type0 f x) <==>
+                (forall (xs : Dl.dlist ts) . f (Dl.DCons t0 x ts xs))
+              with forall_dlist_iff ts (partial_app_dlist t0 ts Type0 f x)
+
+let sl_all (ty : sl_tys_t) (f : sl_tys_v ty -> Type0)
+  : Type0
+  =
+   (forall (val_v : ty.val_t) . forall_dlist (ty.sel_t val_v) (fun sel_v -> f ({val_v; sel_v})))
+
+
+let sl_all_iff (ty : sl_tys_t) (f : sl_tys_v ty -> Type0)
+  : Lemma (sl_all ty f  <==> (forall (x : sl_tys_v ty) . f x))
+          [SMTPat (sl_all ty f)]
+  =
+    assert (forall (x : sl_tys_v ty) . x == {val_v = x.val_v; sel_v = x.sel_v})
+
+
+let rec exists_dlist (ty : Dl.ty_list) (f : Dl.dlist ty -> Type0)
+  : Tot Type0 (decreases ty)
+  = match ty with
+  | []     -> f Dl.DNil
+  | t0 :: ts -> (exists (x : t0) . exists_dlist ts (partial_app_dlist t0 ts Type0 f x))
+
+let rec exists_dlist_iff (ty : Dl.ty_list) (f : Dl.dlist ty -> Type0)
+  : Lemma (ensures exists_dlist ty f <==> (exists (xs : Dl.dlist ty) . f xs)) (decreases ty)
+          [SMTPat (exists_dlist ty f)]
+  = match ty with
+  | [] -> ()
+  | t0 :: ts -> assert (forall (xs' : Dl.dlist ty) . exists (x : t0) (xs : Dl.dlist ts) .
+                         xs' == Dl.DCons t0 x ts xs);
+              introduce forall (x : t0) .
+                exists_dlist ts (partial_app_dlist t0 ts Type0 f x) <==>
+                (exists (xs : Dl.dlist ts) . f (Dl.DCons t0 x ts xs))
+              with exists_dlist_iff ts (partial_app_dlist t0 ts Type0 f x)
+
+let sl_ex (ty : sl_tys_t) (f : sl_tys_v ty -> Type0)
+  : Type0
+  =
+   (exists (val_v : ty.val_t) . exists_dlist (ty.sel_t val_v) (fun sel_v -> f ({val_v; sel_v})))
+
+let sl_ex_iff (ty : sl_tys_t) (f : sl_tys_v ty -> Type0)
+  : Lemma (sl_ex ty f  <==> (exists (x : sl_tys_v ty) . f x))
+          [SMTPat (sl_ex ty f)]
+  =
+    assert (forall (x : sl_tys_v ty) . x == {val_v = x.val_v; sel_v = x.sel_v})
+
+
+// TODO? normalize Uv.(downgrade_val (raise_val _))
+noeq type raise_t (a : Type u#a) : Type u#(max a b) =
+  | Raise_val : (x : a) -> raise_t a
+
+let downgrade_val (#a : Type u#a) (y : raise_t u#a u#b a) : a
+  = let Raise_val x = y in x
+
+
+let rec arw_dlist (src : Dl.ty_list u#s) (dst : Type u#d)
+  : Tot (Type u#(max s d)) (decreases src)
+  = match src with
+  | [] -> raise_t dst
+  | t0 :: ts -> (t0 -> arw_dlist ts dst)
+
 let rec lam_dlist (src : Dl.ty_list u#s) (dst : Type u#d) (f : Dl.dlist src -> dst)
   : Tot (arw_dlist src dst) (decreases src)
   = match src with
-  | [] -> Uv.raise_val (f Dl.DNil)
+  | [] -> Raise_val (f Dl.DNil)
   | t0 :: ts -> (fun (x : t0) -> lam_dlist ts dst (partial_app_dlist t0 ts dst f x))
 
 let rec app_dlist (#src : Dl.ty_list u#s) (#dst : Type u#d) (f : arw_dlist src dst) (x : Dl.dlist src)
   : Tot dst (decreases src)
   = match (|src, f, x|) <: (src : Dl.ty_list & arw_dlist src dst & Dl.dlist src) with
-  | (|[],      v, Dl.DNil|)           -> Uv.downgrade_val v
+  | (|[],      v, Dl.DNil|)           -> downgrade_val v
   | (|t0 :: ts, f, Dl.DCons _ x _ xs|) -> app_dlist #ts #dst (f x) xs
 
 let rec app_lam_dlist (src : Dl.ty_list u#s) (dst : Type u#d) (f : Dl.dlist src -> dst) (x : Dl.dlist src)

@@ -125,10 +125,10 @@ and tree_ens (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree a pre 
   | Tret _ x post ->
              (fun sl0 x' sl1 -> x' == x /\ sl1 == sl0)
   | Tbind a _  _ itm _  f g ->
-             (fun sl0 y sl2 -> tree_req f sl0 /\
+             (fun sl0 y sl2 ->
                (exists (x : a) (sl1 : Dl.dlist (itm x)) . tree_ens f sl0 x sl1 /\ tree_ens (g x) sl1 y sl2))
   | TbindP a _  _ _  wp _ g ->
-             (fun sl0 y sl1 -> as_requires wp /\ (exists (x : a) . as_ensures wp x /\ tree_ens (g x) sl0 y sl1))
+             (fun sl0 y sl1 -> (exists (x : a) . as_ensures wp x /\ tree_ens (g x) sl0 y sl1))
 
 
 (***** Shape *)
@@ -292,7 +292,7 @@ let repr_ST_of_M__TCspec_ens
                              (Dl.apply_pequiv (vequiv_sl p0) sl0') in
         let sl1, frame1 = Dl.splitAt_ty (vprop_list_sels_t (post res)) (vprop_list_sels_t frame)
                              (Dl.apply_pequiv (Perm.pequiv_sym (vequiv_sl (p1 res))) sl1') in
-        req sl0 /\ frame1 == frame0 /\ ens sl0 res sl1)))
+        frame1 == frame0 /\ ens sl0 res sl1)))
   =
     L.map_append Mkvprop'?.t pre frame;
     L.map_append Mkvprop'?.t (post res) frame;
@@ -303,7 +303,7 @@ let repr_ST_of_M__TCspec_ens
                                (Dl.apply_pequiv (vequiv_sl p0) sl0') in
           let sl1, frame1 = Dl.splitAt_ty (vprop_list_sels_t (post res)) (vprop_list_sels_t frame) sl1f in
           sl1' == Dl.apply_pequiv (vequiv_sl (p1 res)) sl1f /\
-          req sl0 /\ frame1 == frame0 /\ ens sl0 res sl1))
+          frame1 == frame0 /\ ens sl0 res sl1))
       by T.(norm_tree_spec (); smt ());
 
     introduce forall (sl1f : Dl.dlist L.(vprop_list_sels_t (post res) @ vprop_list_sels_t frame)) .
@@ -316,11 +316,9 @@ let repr_ST_of_M__TCspec_ens
                              (Dl.apply_pequiv (vequiv_sl p0) sl0') in
         let sl1, frame1 = Dl.splitAt_ty (vprop_list_sels_t (post res)) (vprop_list_sels_t frame)
                              (Dl.apply_pequiv (Perm.pequiv_sym (vequiv_sl (p1 res))) sl1') in
-        req sl0 /\ frame1 == frame0 /\ ens sl0 res sl1))
+        frame1 == frame0 /\ ens sl0 res sl1))
 #pop-options
 
-
-/// Remark: the equivalence of the ensures clauses holds only when the requires clause is satisfied
 
 #push-options "--z3rlimit 30"
 let rec repr_ST_of_M_req (#a : Type) (t : M.prog_tree a)
@@ -369,11 +367,9 @@ let rec repr_ST_of_M_req (#a : Type) (t : M.prog_tree a)
              <==> {
                repr_ST_of_M_req f cf sl0;
                introduce forall (x : a) (sl1 : sl_t (itm x)) .
-                 tree_req (repr_ST_of_M f cf) sl0 ==>
                  (M.tree_ens f cf sl0 x sl1 <==> tree_ens (repr_ST_of_M f cf) sl0 x sl1) /\
                  (M.tree_req (g x) (cg x) sl1 <==> tree_req (repr_ST_of_M (g x) (cg x)) sl1)
-               with introduce _ ==> _
-               with _ . (repr_ST_of_M_ens f cf sl0 x sl1; repr_ST_of_M_req (g x) (cg x) sl1)
+               with (repr_ST_of_M_ens f cf sl0 x sl1; repr_ST_of_M_req (g x) (cg x) sl1)
              }
                tree_req (repr_ST_of_M f cf) sl0 /\
                (forall (x : a) (sl1 : Dl.dlist (vprop_list_sels_t (itm x))) .
@@ -409,8 +405,7 @@ let rec repr_ST_of_M_req (#a : Type) (t : M.prog_tree a)
 and repr_ST_of_M_ens (#a : Type) (t : M.prog_tree a)
                      (#pre : M.pre_t) (#post : M.post_t a) (c : M.tree_cond t pre post)
                      (sl0 : sl_t pre) (res : a) (sl1 : sl_t (post res))
-  : Lemma (requires M.tree_req t c sl0)
-          (ensures M.tree_ens t c sl0 res sl1 <==> tree_ens (repr_ST_of_M t c) sl0 res sl1)
+  : Lemma (ensures M.tree_ens t c sl0 res sl1 <==> tree_ens (repr_ST_of_M t c) sl0 res sl1)
   = match c as c returns squash (M.tree_ens t c sl0 res sl1 <==> tree_ens (repr_ST_of_M t c) sl0 res sl1) with
     | TCspec #a #pre #post #req #ens  pre' post' frame  p0 p1 ->
              L.map_append Mkvprop'?.t pre frame;
@@ -423,12 +418,12 @@ and repr_ST_of_M_ens (#a : Type) (t : M.prog_tree a)
                let fsl1, frame1 = extract_vars_f (post' res) (post res) frame
                                                  (Perm.pequiv_sym (p1 res)) sl1 in
                 frame1 == frame0 /\ ens fsl0 res fsl1);
-             <==> { (* since req holds *) }
+             <==> { }
               (let fsl0, frame0 = Dl.splitAt_ty (vprop_list_sels_t pre) (vprop_list_sels_t frame)
                                                   (Dl.apply_pequiv (vequiv_sl p0) sl0) in
                let fsl1, frame1 = Dl.splitAt_ty (vprop_list_sels_t (post res)) (vprop_list_sels_t frame)
                                                   (Dl.apply_pequiv (Perm.pequiv_sym (vequiv_sl (p1 res))) sl1) in
-                req fsl0 /\ frame1 == frame0 /\ ens fsl0 res fsl1);
+                frame1 == frame0 /\ ens fsl0 res fsl1);
              <==> {repr_ST_of_M__TCspec_ens req ens pre' post' frame p0 p1 sl0 res sl1}
                tree_ens (repr_ST_of_M _ (TCspec #a #pre #post #req #ens  pre' post' frame p0 p1)) sl0 res sl1;
              <==> {U.f_equal tree_ens (repr_ST_of_M _ (TCspec #a #pre #post #req #ens  pre' post' frame  p0 p1))
@@ -458,20 +453,14 @@ and repr_ST_of_M_ens (#a : Type) (t : M.prog_tree a)
              calc (<==>) {
                M.tree_ens _ (TCbind #a #b #f #g  pre itm post  cf cg) sl0 res sl1;
              <==> {_ by T.(apply_lemma (`U.iff_refl); trefl ())}
-               bind_ens (M.tree_req f cf) (M.tree_ens f cf) (fun x -> M.tree_ens (g x) (cg x)) sl0 res sl1;
+               bind_ens (M.tree_ens f cf) (fun x -> M.tree_ens (g x) (cg x)) sl0 res sl1;
              <==> {
-               repr_ST_of_M_req f cf sl0;
                introduce forall (x : a) (sl1' : sl_t (itm x)) .
-                 tree_req (repr_ST_of_M f cf) sl0 ==>
                  (M.tree_ens f cf sl0 x sl1' <==> tree_ens (repr_ST_of_M f cf) sl0 x sl1') /\
-                 (M.tree_ens f cf sl0 x sl1' ==> (
-                 (M.tree_ens (g x) (cg x) sl1' res sl1 <==> tree_ens (repr_ST_of_M (g x) (cg x)) sl1' res sl1)))
-               with introduce _ ==> _ with _ . introduce _ /\ _
-               with repr_ST_of_M_ens f cf sl0 x sl1'
-                and introduce _ ==> _
-                with _ . repr_ST_of_M_ens (g x) (cg x) sl1' res sl1
+                 (M.tree_ens (g x) (cg x) sl1' res sl1 <==> tree_ens (repr_ST_of_M (g x) (cg x)) sl1' res sl1)
+               with (repr_ST_of_M_ens f cf sl0 x sl1';
+                     repr_ST_of_M_ens (g x) (cg x) sl1' res sl1)
              }
-               tree_req (repr_ST_of_M f cf) sl0 /\
                (exists (x : a) (sl1' : Dl.dlist (vprop_list_sels_t (itm x))) .
                  tree_ens (repr_ST_of_M f cf) sl0 x sl1' /\
                  tree_ens (repr_ST_of_M (g x) (cg x)) sl1' res sl1);
@@ -490,19 +479,11 @@ and repr_ST_of_M_ens (#a : Type) (t : M.prog_tree a)
             <==> {_ by T.(apply_lemma (`U.iff_refl); trefl ())}
               bind_pure_ens wp (fun x -> M.tree_ens (g x) (cg x)) sl0 res sl1;
             <==> {
-              assert (M.tree_req _ (TCbindP #a #b #wp #x #g pre post cg) sl0
-                   == (wp (fun x -> M.tree_req (g x) (cg x) sl0) /\ True))
-                 by T.(trefl ());
-              U.prop_equal (fun p -> p) (M.tree_req _ (TCbindP #a #b #wp #x #g pre post cg) sl0)
-                                     (wp (fun x -> M.tree_req (g x) (cg x) sl0) /\ True);
-              FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp;
               introduce forall (x : a).
-                 as_ensures wp x ==>
                  (M.tree_ens (g x) (cg x) sl0 res sl1 <==> tree_ens (repr_ST_of_M (g x) (cg x)) sl0 res sl1)
-               with introduce _ ==> _
-               with _ . repr_ST_of_M_ens (g x) (cg x) sl0 res sl1
+               with repr_ST_of_M_ens (g x) (cg x) sl0 res sl1
             }
-              as_requires wp /\ (exists (x : a) . as_ensures wp x /\ tree_ens (repr_ST_of_M (g x) (cg x)) sl0 res sl1);
+              (exists (x : a) . as_ensures wp x /\ tree_ens (repr_ST_of_M (g x) (cg x)) sl0 res sl1);
             <==> {_ by T.(apply_lemma (`U.iff_refl); trefl ())}
               tree_ens (repr_ST_of_M _ (TCbindP #a #b #wp #x #g pre post cg)) sl0 res sl1;
             <==> {U.f_equal tree_ens (repr_ST_of_M _ (TCbindP #a #b #wp #x #g pre post cg))

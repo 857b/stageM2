@@ -433,14 +433,15 @@ let bind_req (#a : Type)
       (forall (x : a) (sl1 : sl_t (itm x)) .
         ens_f sl0 x sl1 ==> req_g x sl1)
 
+/// Unlike the bind combiner of Steel, our ensures clause does not recall the pre-condition of [f] for
+/// the reason explained on [Experiment.Repr.Fun.tree_ens]
+
 unfold
 let bind_ens (#a : Type) (#b : Type)
       (#pre : pre_t) (#itm : post_t a) (#post : post_t b)
-      (req_f : req_t pre) (ens_f : ens_t pre a itm)
-      (ens_g : (x:a) -> ens_t (itm x) b post)
+      (ens_f : ens_t pre a itm) (ens_g : (x:a) -> ens_t (itm x) b post)
   : ens_t pre b post
   = fun sl0 y sl2 ->
-      req_f sl0 /\
       (exists (x : a) (sl1 : sl_t (itm x)) .
         ens_f sl0 x sl1 /\
         ens_g x sl1 y sl2)
@@ -460,7 +461,7 @@ let bind_pure_ens (#a : Type) (#b : Type)
       (#pre : pre_t) (#post : post_t b)
       (ens : a -> ens_t pre b post)
   : ens_t pre b post
-  = fun sl0 y sl1 -> as_requires wp /\ (exists (x:a) . as_ensures wp x /\ ens x sl0 y sl1)
+  = fun sl0 y sl1 -> (exists (x:a) . as_ensures wp x /\ ens x sl0 y sl1)
 
 
 (** prog_tree *)
@@ -494,7 +495,7 @@ and tree_ens (#a : Type u#a) (t : prog_tree a)
                (let sl0' = extract_vars p sl0 in
                 sl1 == sl0'))
   | TCbind #_ #_ #f #g  pre itm post  cf cg ->
-             bind_ens (tree_req f cf) (tree_ens f cf) (fun x -> tree_ens (g x) (cg x))
+             bind_ens (tree_ens f cf) (fun x -> tree_ens (g x) (cg x))
   | TCbindP #_ #_ #wp #_ #g  pre post  cg ->
              bind_pure_ens wp (fun x -> tree_ens (g x) (cg x))
 
@@ -598,7 +599,6 @@ let intro_tree_ens_bind (#a #b : Type) (f : prog_tree a) (g : a -> prog_tree b)
                              (vpl_sels pre sl0) y (vpl_sels (post y) sl2))
   = assert_norm (tree_ens _ (TCbind #a #b #f #g pre itm post cf cg)
                           (vpl_sels pre sl0) y (vpl_sels (post y) sl2) == (
-      tree_req f cf (vpl_sels pre sl0) /\
         (exists (x : a) (sl1 : sl_t (itm x)) .
           tree_ens f cf (vpl_sels pre sl0) x sl1 /\
           tree_ens (g x) (cg x) sl1 y (vpl_sels (post y) sl2))
