@@ -154,8 +154,11 @@ let normal_tree_SF : list norm_step = [
     delta_only [`%SF.repr_Fun_of_ST; `%SF.post_Fun_of_ST; `%SF.post_bij;
                 `%ST.Mkprog_shape?.post_len; `%ST.Mkprog_shape?.shp;
                 `%SF.Mkpost_bij_t'?.post'_n; `%SF.Mkpost_bij_t'?.post'_f; `%SF.Mkpost_bij_t'?.post'_g;
-                `%Ll.initi; `%L.index; `%L.hd; `%L.tl; `%L.tail;
-                `%SF.sel_ST_of_Fun; `%SF.post_src_of_shape];
+                `%Ll.initi; `%L.index; `%L.hd; `%L.tl; `%L.tail; `%L.length;
+                `%SF.sel_ST_of_Fun; `%SF.post_src_of_shape; `%SF.sel_Fun_of_ST;
+                `%Dl.initi; `%Dl.splitAt_ty;
+                `%Mktuple2?._1;`%Mktuple2?._2;
+                `%Learn.Option.map];
     delta_qualifier ["unfold"];
     delta_attr [`%U.__util_func__];
     iota; zeta; primops
@@ -172,20 +175,21 @@ let normal_tree_SF : list norm_step = [
 unfold
 let test1_ST : ST.prog_tree int [bool; int] (fun _ -> [bool; int])
   = ST.(
-    b <-- Tspec bool [bool] (fun _ -> [bool]) [int]
-           (fun _ -> True) (fun sl0 b sl1 -> Dl.index sl1 0 = Dl.index sl0 0 /\ b = Dl.index sl0 0);
+    b <-- Tframe _ _ _ [int] (
+           Tspec bool [bool] (fun _ -> [bool])
+             (fun _ -> True) (fun sl0 b sl1 -> Dl.index sl1 0 = Dl.index sl0 0 /\ b = Dl.index sl0 0));
     Tequiv [bool; int] [int; bool] (Perm.perm_f_swap #2 0);;
-    x <-- Tspec int [int] (fun _ -> [int]) [bool]
-           (fun _ -> True) (fun sl0 x sl1 -> Dl.index sl1 0 = Dl.index sl0 0 /\ x = Dl.index sl0 0);
+    x <-- Tframe _ _ _ [bool] (Tspec int [int] (fun _ -> [int])
+           (fun _ -> True) (fun sl0 x sl1 -> Dl.index sl1 0 = Dl.index sl0 0 /\ x = Dl.index sl0 0));
     Tequiv [int; bool] [bool; int] (Perm.perm_f_swap #2 0);;
     Tret int (if b then x else 0) (fun _ -> [bool; int])
   )
 
 unfold
 let test1_shape_tree_ST : ST.shape_tree 2 2 = ST.(
-  Sbind _ _ _ (Sspec  1 1 1)
+  Sbind _ _ _ (Sframe _ _ 1 (Sspec  1 1))
  (Sbind _ _ _ (Sequiv 2 (Perm.perm_f_swap #2 0))
- (Sbind _ _ _ (Sspec  1 1 1)
+ (Sbind _ _ _ (Sframe _ _ 1 (Sspec  1 1))
  (Sbind _ _ _ (Sequiv 2 (Perm.perm_f_swap #2 0))
               (Sret   2)))))
 
