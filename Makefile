@@ -185,7 +185,7 @@ KRML=$(KRML_HOME)/krml
 # See the advanced topics section for an in-depth explanation of how the -bundle
 # option works. We also use -minimal.
 
-NOEXTRACT='LowStar.*,Prims,Learn.LowStar.Loops,C.Loops,FStar.*,Steel.*,Learn.Steel.Util,Learn.Tactics.*,Learn.Util,Learn.Permutation,Learn.DList,Learn.FList,Learn.ListFun,Learn.Logic,Experiment.*'
+NOEXTRACT=$(shell tr -d '\n' < no_extract.list)
 
 dist/Makefile.basic: $(ALL_KRML_FILES) c/*
 	@mkdir -p $(dir $@)
@@ -196,16 +196,19 @@ dist/Makefile.basic: $(ALL_KRML_FILES) c/*
 	  $(filter %.krml,$^) \
 	  -warn-error @4@5@18 \
 	  -fparentheses \
-	  -bundle $(NOEXTRACT)\
+	  -bundle "$(NOEXTRACT)"\
 	  -bundle 'Learn.LowStar.List+Learn.LowStar.List.Impl=Learn.LowStar.List.*'[rename=list] \
 	  -bundle 'Learn.LowStar.Queue.Test=Learn.LowStar.Queue,Learn.LowStar.Queue.*'[rename=queue] \
 	  -bundle 'Learn.Steel.List.Impl=Learn.Steel.List.*'[rename=list_steel] \
 	  -bundle 'Learn.Steel.ListP.Test=Learn.Steel.ListP.*'[rename=list_param] \
 	  -bundle 'Learn.Steel.QueueP.Test=Learn.Steel.QueueP.*'[rename=queue_steel] \
 	  -minimal \
+	  -header krml_header.txt \
 	  -add-include '<stdint.h>' \
 	  -add-include '"krml/internal/target.h"'
 	  @#-dstructs > _local/krml.out 2>&1
+	@#Suppress KaRaMel invocation command from output files
+	@for f in dist/*.h dist/*.c ; do (sed -ne '3P' "$$f" | grep -q "^  KaRaMeL invocation:") && sed -i -e '3,5d' "$$f" ; done; exit 0
 
 extract:dist/Makefile.basic
 
