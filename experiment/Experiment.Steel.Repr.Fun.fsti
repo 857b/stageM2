@@ -69,17 +69,17 @@ module Opt = Learn.Option
 (**) val __begin_repr_fun_of_st : unit
 #push-options "--fuel 1 --ifuel 1"
 
-type post_src (pre_n : nat) (post_n : nat) = Fin.fin post_n -> option (Fin.fin pre_n)
+type post_src_f (pre_n : nat) (post_n : nat) = Fin.fin post_n -> option (Fin.fin pre_n)
 
-let rec post_src_of_shape (#pre_n : nat) (#post_n : nat) (s : ST.shape_tree pre_n post_n)
-  : Tot (post_src pre_n post_n) (decreases s)
+let rec post_src_f_of_shape (#pre_n : nat) (#post_n : nat) (s : ST.shape_tree pre_n post_n)
+  : Tot (post_src_f pre_n post_n) (decreases s)
   = match s with
   | Sequiv n p ->
            (fun i -> Some (p i))
   | Sframe pre_n post_n frame_n f ->
            (fun i -> if i < post_n
                   then Opt.map #(Fin.fin pre_n) #(Fin.fin (pre_n + frame_n)) (fun j -> j)
-                               (post_src_of_shape f i)
+                               (post_src_f_of_shape f i)
                   else Some (i - post_n + pre_n))
   | Sspec  pre_n post_n ->
            (fun i -> None)
@@ -92,110 +92,153 @@ let rec post_src_of_shape (#pre_n : nat) (#post_n : nat) (s : ST.shape_tree pre_
   | SbindP pre_n post_n g ->
            (fun i -> None)
 
-val post_src_ty
-      (#a : Type) (#pre0 : ST.pre_t) (#post0 : ST.post_t a) (t : ST.prog_tree a pre0 post0)
-      (s : ST.prog_shape t) (x : a) (i : Fin.fin (L.length (post0 x)))
-  : Lemma (requires Some? (post_src_of_shape s.shp i))
-          (ensures  L.index (post0 x) i == L.index pre0 (Some?.v (post_src_of_shape s.shp i)))
+
+let post_src_well_typed (pre post : Fl.ty_list) (f : post_src_f (L.length pre) (L.length post)) : prop
+  = forall (i : Fin.fin (L.length post) {Some? (f i)}) . {:pattern (f i)}
+      L.index post i == L.index pre (Some?.v (f i))
+
+type post_src (pre post : Fl.ty_list) =
+  f : post_src_f (L.length pre) (L.length post) {post_src_well_typed pre post f}
+
+let post_src_ty_eq (#pre #post : Fl.ty_list) (f : post_src_f (L.length pre) (L.length post))
+                   (i : Fin.fin (L.length post))
+  : Lemma (requires post_src_well_typed pre post f /\ Some? (f i))
+          (ensures  L.index post i == L.index pre (Some?.v (f i)))
+  = ()
+
+val post_src_of_shape_ty
+      (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a) (t : ST.prog_tree a pre post)
+      (s : ST.prog_shape t) (x : a) (i : Fin.fin (L.length (post x)) {Some? (post_src_f_of_shape s.shp i)})
+  : Lemma (L.index (post x) i == L.index pre (Some?.v (post_src_f_of_shape s.shp i)))
+
+unfold
+let post_src_of_shape
+      (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a) (t : ST.prog_tree a pre post)
+      (s : ST.prog_shape t) (x : a)
+  : post_src pre (post x)
+  =
+    (**) FStar.Classical.forall_intro (post_src_of_shape_ty t s x);
+    post_src_f_of_shape s.shp
 
 noeq
-type post_bij_t' (#pre_n : nat) (#post_n : nat) (s : post_src pre_n post_n) = {
-  post'_n : nat;
-  post'_f : (i : Fin.fin post_n {None? (s i)}) -> Fin.fin post'_n;
-  post'_g : Fin.fin post'_n -> (i : Fin.fin post_n  {None? (s i)});
+type post_bij_t' (#pre_n : nat) (#post_n : nat) (s : post_src_f pre_n post_n) = {
+  len_Fun : nat;
+  idx_Fun : (i : Fin.fin post_n {None? (s i)}) -> Fin.fin len_Fun;
+  idx_ST  : Fin.fin len_Fun -> (i : Fin.fin post_n  {None? (s i)});
 }
 
-type post_bij_t (#pre_n : nat) (#post_n : nat) (s : post_src pre_n post_n) =
+type post_bij_t (#pre_n : nat) (#post_n : nat) (s : post_src_f pre_n post_n) =
   r : post_bij_t' s {
-    (forall (i : Fin.fin post_n {None? (s i)}) . {:pattern (r.post'_g (r.post'_f i))}
-      r.post'_g (r.post'_f i) = i) /\
-    (forall (j : Fin.fin r.post'_n) . {:pattern (r.post'_f (r.post'_g j))}
-      r.post'_f (r.post'_g j) = j)
+    (forall (i : Fin.fin post_n {None? (s i)}) . {:pattern (r.idx_ST (r.idx_Fun i))}
+      r.idx_ST (r.idx_Fun i) = i) /\
+    (forall (j : Fin.fin r.len_Fun) . {:pattern (r.idx_Fun (r.idx_ST j))}
+      r.idx_Fun (r.idx_ST j) = j)
   }
 
-let rec mk_post_bij (#pre_n : nat) (#post_n : nat) (s : post_src pre_n post_n)
+let rec mk_post_bij (#pre_n : nat) (#post_n : nat) (s : post_src_f pre_n post_n)
   : Tot (post_bij_t s) (decreases post_n)
   = if post_n = 0 then {
-       post'_n = 0;
-       post'_f = (fun _ -> false_elim ());
-       post'_g = (fun _ -> false_elim ())}
+       len_Fun = 0;
+       idx_Fun = (fun _ -> false_elim ());
+       idx_ST  = (fun _ -> false_elim ())}
     else
-      let s' : post_src pre_n (post_n - 1) = fun i -> s (i+1) in
+      let s' : post_src_f pre_n (post_n - 1) = fun i -> s (i+1) in
       let p' = mk_post_bij s' in
       match s 0 with
-      | Some _ -> { post'_n = p'.post'_n;
-                   post'_f = (fun i -> p'.post'_f (i-1));
-                   post'_g = (fun j -> p'.post'_g j + 1)}
-      | None   -> { post'_n = p'.post'_n + 1;
-                   post'_f = (fun i -> if i = 0 then 0 else (p'.post'_f (i-1) + 1));
-                   post'_g = (fun j -> if j = 0 then 0 else (p'.post'_g (j-1) + 1))}
+      | Some _ -> { len_Fun = p'.len_Fun;
+                   idx_Fun = (fun i -> p'.idx_Fun (i-1));
+                   idx_ST  = (fun j -> p'.idx_ST j + 1)}
+      | None   -> { len_Fun = p'.len_Fun + 1;
+                   idx_Fun = (fun i -> if i = 0 then 0 else (p'.idx_Fun (i-1) + 1));
+                   idx_ST  = (fun j -> if j = 0 then 0 else (p'.idx_ST (j-1) + 1))}
 
 let rec post_bij (#post_n : nat) (#pre_n : nat) (s : ST.shape_tree pre_n post_n)
-  : Tot (post_bij_t (post_src_of_shape s)) (decreases s)
+  : Tot (post_bij_t (post_src_f_of_shape s)) (decreases s)
   = match s with
   | Sequiv n p ->
-           { post'_n = 0; post'_f = (fun _ -> false_elim ()); post'_g = (fun _ -> false_elim ()) }
+           { len_Fun = 0; idx_Fun = (fun _ -> false_elim ()); idx_ST = (fun _ -> false_elim ()) }
   | Sframe pre_n post_n frame_n f ->
            let bj = post_bij f in
-           { post'_n = bj.post'_n;
-             post'_f = (fun (i : Fin.fin (post_n + frame_n) {None? (post_src_of_shape s i)}) -> bj.post'_f i);
-             post'_g = bj.post'_g }
+           { len_Fun = bj.len_Fun;
+             idx_Fun = (fun (i : Fin.fin (post_n + frame_n) {None? (post_src_f_of_shape s i)}) -> bj.idx_Fun i);
+             idx_ST  = bj.idx_ST }
   | Sspec  pre_n post_n ->
-           { post'_n = post_n; post'_f = (fun i -> i); post'_g = (fun j -> j) }
+           { len_Fun = post_n; idx_Fun = (fun i -> i); idx_ST = (fun j -> j) }
   | Sret   n ->
-           { post'_n = n; post'_f = (fun i -> i); post'_g = (fun j -> j) }
+           { len_Fun = n; idx_Fun = (fun i -> i); idx_ST = (fun j -> j) }
   | Sbind  pre_n itm_n post_n f g ->
-           { post'_n = post_n; post'_f = (fun i -> i); post'_g = (fun j -> j) }
+           { len_Fun = post_n; idx_Fun = (fun i -> i); idx_ST = (fun j -> j) }
   | SbindP pre_n post_n g ->
-           { post'_n = post_n; post'_f = (fun i -> i); post'_g = (fun j -> j) }
+           { len_Fun = post_n; idx_Fun = (fun i -> i); idx_ST = (fun j -> j) }
 
+
+let postl_Fun_of_ST
+      (post : Fl.ty_list)
+      (#pre_n : nat) (#s : post_src_f pre_n (L.length post)) (bij : post_bij_t s)
+  : Fl.ty_list
+  = Ll.initi 0 bij.len_Fun (fun i -> L.index post (bij.idx_ST i))
 
 let post_Fun_of_ST
       (#a : Type u#a) (post : ST.post_t u#a u#b a)
       (#pre_n #post_n : nat) (s : ST.shape_tree pre_n post_n {post_has_len post post_n})
   : post_t u#a u#b a
-  = let p' = post_bij s in
-    fun (x : a) -> Ll.initi 0 p'.post'_n (fun i -> L.index (post x) (p'.post'_g i))
+  = fun (x : a) -> postl_Fun_of_ST (post x) (post_bij s)
 
-// TODO? define with post : ty_list
+let sell_Fun_of_ST
+      (post : Fl.ty_list)
+      (#pre_n : nat) (#s : post_src_f pre_n (L.length post)) (bij : post_bij_t s)
+      (sl_ST : Fl.flist post)
+  : Fl.flist (postl_Fun_of_ST post bij)
+  = 
+    Fl.mk_flist (postl_Fun_of_ST post bij)
+                (fun i -> U.cast (L.index (postl_Fun_of_ST post bij) i) (sl_ST (bij.idx_ST i)))
+
 let sel_Fun_of_ST
       (#a : Type u#a) (post : ST.post_t u#a u#b a)
       (#pre_n #post_n : nat) (s : ST.shape_tree pre_n post_n {post_has_len post post_n})
-      (x : a) (post_val : Fl.flist (post x))
-  : post_v (post_Fun_of_ST post s) x
-  = let p' = post_bij s in
-    Fl.mk_flist (post_Fun_of_ST post s x)
-                (fun i -> U.cast (L.index (post_Fun_of_ST post s x) i) (post_val (p'.post'_g i)))
+      (x : a)
+  : Fl.flist (post x) -> post_v (post_Fun_of_ST post s) x
+  = sell_Fun_of_ST (post x) (post_bij s)
 
 unfold
-let return_Fun_post'_of_ST
+let return_Fun_post_of_ST
       (#a : Type u#a) (post : ST.post_t u#a u#b a)
       (#pre_n #post_n : nat) (s : ST.shape_tree pre_n post_n {post_has_len post post_n})
       (x : a) (post_val : Fl.flist (post x))
   : prog_tree a (post_Fun_of_ST post s)
   = Tret a x (post_Fun_of_ST post s) (Fl.dlist_of_f (sel_Fun_of_ST post s x post_val))
 
-// TODO? remove the dependency in [t]
+
+let sell_ST_of_Fun
+      (#pre #post : Fl.ty_list)
+      (s : post_src pre post) (bij : post_bij_t s)
+      (sl0 : Fl.flist pre) (sl1_Fun : Fl.flist (postl_Fun_of_ST post bij))
+  : Fl.flist post
+  =
+    Fl.mk_flist post
+         (fun i -> match s i with
+                | Some j -> U.cast (L.index post i) (sl0 j)
+                | None   -> U.cast (L.index post i) (sl1_Fun (bij.idx_Fun i)))
+
 let sel_ST_of_Fun
       (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a) (t : ST.prog_tree a pre post)
       (s : ST.prog_shape t)
-      (sl0 : Fl.flist pre) (x : a) (sl1' : post_v (post_Fun_of_ST post s.shp) x)
+      (sl0 : Fl.flist pre) (x : a) (sl1_Fun : post_v (post_Fun_of_ST post s.shp) x)
   : Fl.flist (post x)
-  =
-    let p' = post_bij s.shp in
-    Fl.mk_flist (post x)
-             (fun i -> match post_src_of_shape s.shp i with
-                    | Some j -> (**) post_src_ty t s x i;
-                               U.cast (L.index (post x) i)
-                                      (sl0 j)
-                    | None   -> U.cast (L.index (post x) i)
-                                      (sl1' (p'.post'_f i)))
+  = sell_ST_of_Fun (post_src_of_shape t s x) (post_bij s.shp) sl0 sl1_Fun
 
-val sel_Fun_ST_Fun
+val sell_Fun_ST_Fun
+      (#pre #post : Fl.ty_list)
+      (s : post_src pre post) (bij : post_bij_t s)
+      (sl0 : Fl.flist pre) (sl1_Fun : Fl.flist (postl_Fun_of_ST post bij))
+  : Lemma (sell_Fun_of_ST post bij (sell_ST_of_Fun s bij sl0 sl1_Fun) == sl1_Fun)
+
+let sel_Fun_ST_Fun
       (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a) (t : ST.prog_tree a pre post)
       (s : ST.prog_shape t)
-      (sl0 : Fl.flist pre) (x : a) (sl1' : post_v (post_Fun_of_ST post s.shp) x)
-  : Lemma (sel_Fun_of_ST post s.shp x (sel_ST_of_Fun t s sl0 x sl1') == sl1')
+      (sl0 : Fl.flist pre) (x : a) (sl1_Fun : post_v (post_Fun_of_ST post s.shp) x)
+  : Lemma (sel_Fun_of_ST post s.shp x (sel_ST_of_Fun t s sl0 x sl1_Fun) == sl1_Fun)
+  = sell_Fun_ST_Fun (post_src_of_shape t s x) (post_bij s.shp) sl0 sl1_Fun
 
 
 val post_Fun_of_ST__frame
@@ -248,7 +291,7 @@ let rec repr_Fun_of_ST
             Tbind b b  (post_Fun_of_ST post #(L.length (itm x)) shp_g) _
                        (repr_Fun_of_ST (g x) s_g sl1) (fun y sl2' ->
             let sl2 = sel_ST_of_Fun (g x) s_g sl1 y sl2' in
-            return_Fun_post'_of_ST post s.shp y sl2))
+            return_Fun_post_of_ST post s.shp y sl2))
     | ST.TbindP a b pre post wp f g -> fun s sl0 ->
             (**) let SbindP _ post_n shp_g = s.shp in
             TbindP a b _ wp f (fun x ->
@@ -256,7 +299,7 @@ let rec repr_Fun_of_ST
             Tbind  b b (post_Fun_of_ST post #(L.length #Type pre) shp_g) _
                        (repr_Fun_of_ST (g x) s_g sl0) (fun y sl1' ->
             let sl1 = sel_ST_of_Fun (g x) s_g sl0 y sl1' in
-            return_Fun_post'_of_ST post s.shp y sl1))
+            return_Fun_post_of_ST post s.shp y sl1))
 
 (**) val __end_repr_fun_of_st : unit
 #pop-options
@@ -264,33 +307,44 @@ let rec repr_Fun_of_ST
 
 (***** soundness of ST --> Fun *)
 
-let post_eq_src (#pre #post : Fl.ty_list) (sl0 : Fl.flist pre) (sl1 : Fl.flist post)
-                (s : post_src (L.length pre) (L.length post))
+// TODO? pattern
+let post_eq_src (#pre #post : Fl.ty_list) (s : post_src pre post)
+                (sl0 : Fl.flist pre) (sl1_ST : Fl.flist post)
   : prop
-  = forall (i : Fin.fin (L.length post)) .
-      Some? (s i) ==> sl1 i === sl0 (Some?.v (s i))
+  = forall (i : Fin.fin (L.length post) {Some? (s i)}) .
+      sl1_ST i == U.cast (L.index post i) (sl0 (Some?.v (s i)))
 
-val sel_ST_of_Fun_eq_src
-      (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a)
-      (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
-      (sl0 : Fl.flist pre) (x : a) (sl1' : post_v (post_Fun_of_ST post s.shp) x)
-  : Lemma (post_eq_src sl0 (sel_ST_of_Fun t s sl0 x sl1') (post_src_of_shape s.shp))
+let post_eq_srcD
+      (#pre #post : Fl.ty_list) (s : post_src pre post)
+      (sl0 : Fl.flist pre) (sl1_ST : Fl.flist post)
+      (i : Fin.fin (L.length post))
+  : Lemma (requires post_eq_src s sl0 sl1_ST /\ Some? (s i))
+          (ensures  sl1_ST i === sl0 (Some?.v (s i)))
+  = eliminate forall (i : Fin.fin (L.length post) {Some? (s i)}) .
+                sl1_ST i == U.cast (L.index post i) (sl0 (Some?.v (s i)))
+      with i
+
+val sell_ST_of_Fun_eq_src
+      (#pre #post : Fl.ty_list)
+      (s : post_src pre post) (bij : post_bij_t s)
+      (sl0 : Fl.flist pre) (sl1_Fun : Fl.flist (postl_Fun_of_ST post bij))
+  : Lemma (post_eq_src s sl0 (sell_ST_of_Fun s bij sl0 sl1_Fun))
 
 val post_eq_src_ST_Fun_ST
-      (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a)
-      (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
-      (sl0 : Fl.flist pre) (x : a) (sl1 : Fl.flist (post x))
-  : Lemma (requires post_eq_src sl0 sl1 (post_src_of_shape s.shp))
-          (ensures  sel_ST_of_Fun t s sl0 x (sel_Fun_of_ST post s.shp x sl1) == sl1)
+      (#pre #post : Fl.ty_list)
+      (s : post_src pre post) (bij : post_bij_t s)
+      (sl0 : Fl.flist pre) (sl1_ST : Fl.flist post)
+  : Lemma (requires post_eq_src s sl0 sl1_ST)
+          (ensures  sell_ST_of_Fun s bij sl0 (sell_Fun_of_ST post bij sl1_ST) == sl1_ST)
 
 (* TODO? def de post_eq_src *)
 let post_eq_src_iff
-      #a #pre #post (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
-      (sl0 : Fl.flist pre) (x : a) (sl1 : Fl.flist (post x))
-  : Lemma (post_eq_src sl0 sl1 (post_src_of_shape s.shp)
-           <==> sl1 == sel_ST_of_Fun t s sl0 x (sel_Fun_of_ST post s.shp x sl1))
-  = sel_ST_of_Fun_eq_src t s sl0 x (sel_Fun_of_ST post s.shp x sl1);
-    FStar.Classical.move_requires (post_eq_src_ST_Fun_ST t s sl0 x) sl1
+      (#pre #post : Fl.ty_list) (s : post_src pre post) (bij : post_bij_t s)
+      (sl0 : Fl.flist pre) (sl1_ST : Fl.flist post)
+  : Lemma (post_eq_src s sl0 sl1_ST
+           <==> sl1_ST == sell_ST_of_Fun s bij sl0 (sell_Fun_of_ST post bij sl1_ST))
+  = sell_ST_of_Fun_eq_src s bij sl0 (sell_Fun_of_ST post bij sl1_ST);
+    FStar.Classical.move_requires (post_eq_src_ST_Fun_ST s bij sl0) sl1_ST
 
 
 unfold
@@ -301,20 +355,22 @@ let req_equiv #a #pre #post (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
 
 unfold
 let ens_equiv #a #pre #post (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
-      (sl0 : Fl.flist pre) (res : a) (sl1 : Fl.flist (post res))
+      (sl0 : Fl.flist pre) (res : a) (sl1_ST : Fl.flist (post res))
   : prop
-  = ST.tree_ens t sl0 res sl1 <==>
-   (post_eq_src sl0 sl1 (post_src_of_shape s.shp) /\
-    tree_ens (repr_Fun_of_ST t s sl0) res (sel_Fun_of_ST post s.shp res sl1))
+  = ST.tree_ens t sl0 res sl1_ST <==>
+   (post_eq_src (post_src_of_shape t s res) sl0 sl1_ST /\
+    tree_ens (repr_Fun_of_ST t s sl0) res (sel_Fun_of_ST post s.shp res sl1_ST))
 
 let ens_equiv_rev #a #pre #post (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
-      (sl0 : Fl.flist pre) (res : a) (sl1' : post_v (post_Fun_of_ST post s.shp) res)
-  : Lemma (requires ens_equiv t s sl0 res (sel_ST_of_Fun t s sl0 res sl1'))
-          (ensures  ST.tree_ens t sl0 res (sel_ST_of_Fun t s sl0 res sl1') <==>
-                    tree_ens (repr_Fun_of_ST t s sl0) res sl1')
+      (sl0 : Fl.flist pre) (res : a) (sl1_Fun : post_v (post_Fun_of_ST post s.shp) res)
+  : Lemma (requires ens_equiv t s sl0 res (sel_ST_of_Fun t s sl0 res sl1_Fun))
+          (ensures  ST.tree_ens t sl0 res (sel_ST_of_Fun t s sl0 res sl1_Fun) <==>
+                    tree_ens (repr_Fun_of_ST t s sl0) res sl1_Fun)
   =
-    sel_ST_of_Fun_eq_src t s sl0 res sl1';
-    sel_Fun_ST_Fun t s sl0 res sl1'
+    let src = post_src_of_shape t s res in
+    let bij = post_bij s.shp            in
+    sell_ST_of_Fun_eq_src src bij sl0 sl1_Fun;
+    sel_Fun_ST_Fun t s sl0 res sl1_Fun
 
 
 /// The soundness (and completeness) lemmas:
@@ -349,6 +405,31 @@ type sl_tys_v (ty : sl_tys_t u#a u#b) : Type u#(max a (b + 1)) = {
   val_v : ty.val_t;
   sel_v : Fl.flist (ty.sel_t val_v)
 }
+
+noeq
+type sl_tys_r (ty : sl_tys_t u#a u#b) : Type u#(max a (b + 1)) = {
+  vl : ty.val_t;
+  sl : Dl.dlist (ty.sel_t vl)
+}
+
+let sl_v_of_r (#ty : sl_tys_t u#a u#b) (x : sl_tys_r ty) : sl_tys_v ty = {
+  val_v = x.vl;
+  sel_v = Fl.flist_of_d x.sl;
+}
+
+let sl_r_of_v (#ty : sl_tys_t u#a u#b) (x : sl_tys_v ty) : sl_tys_r ty = {
+  vl = x.val_v;
+  sl = Fl.dlist_of_f x.sel_v;
+}
+
+let sl_vrv (ty : sl_tys_t u#a u#b) (x : sl_tys_v ty)
+  : Lemma (sl_v_of_r (sl_r_of_v x) == x) [SMTPat (sl_v_of_r (sl_r_of_v x))]
+  = ()
+
+let sl_rvr (ty : sl_tys_t u#a u#b) (x : sl_tys_r ty)
+  : Lemma (sl_r_of_v (sl_v_of_r x) == x) [SMTPat (sl_r_of_v (sl_v_of_r x))]
+  = ()
+
 
 let sl_all (ty : sl_tys_t) (f : sl_tys_v ty -> Type0)
   : Type0
@@ -397,29 +478,33 @@ let sl_uncurrify (#val_t : Type) (#sel_t : post_t val_t) (#dst : Type)
   = f x.val_v x.sel_v
 
 unfold
-let sl_tys' : Fun.tys' u#(max a b + 1) u#(max a (b + 1)) = {
+let sl_tys' : Fun.tys' u#(max a b + 1) u#(max a (b + 1)) u#(max a (b + 1)) = {
   t = sl_tys_t u#a u#b;
   v = sl_tys_v u#a u#b;
+  r = sl_tys_r u#a u#b;
+  v_of_r = sl_v_of_r;
+  r_of_v = sl_r_of_v;
   unit = {val_t = U.unit'; sel_t = (fun _ -> [])};
   emp  = {val_v = U.Unit'; sel_v = Fl.nil};
   all  = sl_all;
   ex   = sl_ex;
 }
 
-let sl_tys : Fun.tys u#(max a b + 1) u#(max a (b + 1)) =
+let sl_tys : Fun.tys u#(max a b + 1) u#(max a (b + 1)) u#(max a (b + 1)) =
   (**) introduce forall (x : sl_tys'.v sl_tys'.unit) . x == sl_tys'.emp
   (**)   with Fl.nil_uniq x.sel_v;
   sl_tys'
 
 
 let rec repr_Fun_of_Steel (#val_t : Type u#a) (#sel_t : post_t u#a u#b val_t) (t : prog_tree val_t sel_t)
-  : Tot (Fun.prog_tree u#(max a b + 1) u#(max a (b + 1)) u#a (sl_tys u#a u#b) ({val_t; sel_t}))
+  : Tot (Fun.prog_tree u#(max a b + 1) u#(max a (b + 1)) u#(max a (b + 1)) u#a
+                       (sl_tys u#a u#b) ({val_t; sel_t}))
         (decreases t)
   = match t with
   | Tspec a post req ens ->
           Fun.Tspec ({val_t = a; sel_t = post}) req (sl_uncurrify ens)
   | Tret a x post sl ->
-          Fun.Tret #sl_tys ({val_t = a; sel_t = post}) ({val_v = x; sel_v = Fl.flist_of_d sl})
+          Fun.Tret #sl_tys ({val_t = a; sel_t = post}) ({vl = x; sl})
   | Tbind a b itm post f g ->
           Fun.Tbind _ _ (repr_Fun_of_Steel f) (sl_uncurrify (fun x sls -> repr_Fun_of_Steel (g x sls)))
   | TbindP a b post wp f g ->

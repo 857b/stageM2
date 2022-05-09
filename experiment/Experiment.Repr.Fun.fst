@@ -2,26 +2,38 @@ module Experiment.Repr.Fun
 
 module U = Learn.Util
 
-
+/// [tys] describes a family of types, indexed by [t]. Those types are used for the returned values of programs.
+/// - [v] map the index to the associated type
+/// - [r ty] is a "concrete" representation of [v ty]
+/// - [unit] should be associated to a type with an unique element [emp]
+/// - [all] and [ex] are representations of the universal and existential quantification. They are used when
+///   generating the VC. They must be equivalent to a quantification on [v ty]
 noeq
 type tys' = {
   t : Type u#t;
   v : t -> Type u#v;
+  r : t -> Type u#r;
+  v_of_r : (#ty : t) -> r ty -> v ty;
+  r_of_v : (#ty : t) -> v ty -> r ty;
   unit : t;
   emp  : v unit;
   all  : (ty : t) -> (v ty -> Type0) -> Type0;
-  ex   : (ty : t) -> (v ty -> Type0) -> Type0;
+  ex   : (ty : t) -> (v ty -> Type0) -> Type0; 
 }
 
 type tys = s : tys' {
+  (forall (ty : s.t) (x : s.v ty) . {:pattern (s.v_of_r (s.r_of_v x))} s.v_of_r (s.r_of_v x) == x) /\
   (forall (x : s.v s.unit) . x == s.emp) /\
-  (forall (ty : s.t) (f : s.v ty -> Type0) . s.all ty f <==> (forall (x : s.v ty) . f x)) /\
-  (forall (ty : s.t) (f : s.v ty -> Type0) . s.ex  ty f <==> (exists (x : s.v ty) . f x))
+  (forall (ty : s.t) (f : s.v ty -> Type0) . {:pattern (s.all ty f)} s.all ty f <==> (forall (x : s.v ty) . f x)) /\
+  (forall (ty : s.t) (f : s.v ty -> Type0) . {:pattern (s.ex  ty f)} s.ex  ty f <==> (exists (x : s.v ty) . f x))
 }
 
-let can_tys : tys u#(v+1) u#v = {
+let can_tys : tys u#(v+1) u#v u#v = {
   t = Type u#v;
   v = (fun ty -> ty);
+  r = (fun ty -> ty);
+  v_of_r = (fun x -> x);
+  r_of_v = (fun x -> x);
   unit = U.unit';
   emp  = U.Unit';
   all  = (fun ty p -> forall (x : ty) . p x);
@@ -29,13 +41,13 @@ let can_tys : tys u#(v+1) u#v = {
 }
 
 noeq
-type prog_tree (s : tys u#t u#v) : s.t -> Type u#(max t v a + 1) =
+type prog_tree (s : tys u#t u#v u#r) : s.t -> Type u#(max t v r a + 1) =
   | Tnew   : (a : s.t) -> prog_tree s a
   | Tasrt  : (p : prop) -> prog_tree s s.unit
   | Tasum  : (p : prop) -> prog_tree s s.unit
   | Tspec  : (a : s.t) -> (pre : pure_pre) -> (post : pure_post (s.v a)) ->
              prog_tree s a
-  | Tret   : (a : s.t) -> (x : s.v a) -> prog_tree s a
+  | Tret   : (a : s.t) -> (x : s.r a) -> prog_tree s a
   | Tbind  : (a : s.t) -> (b : s.t) ->
              (f : prog_tree s a) -> (g : s.v a -> prog_tree s b) ->
              prog_tree s b
@@ -46,7 +58,7 @@ type prog_tree (s : tys u#t u#v) : s.t -> Type u#(max t v a + 1) =
 
 
 let return (#s : tys) (#a : s.t) ($x : s.v a) : prog_tree s a
-  = Tret a x
+  = Tret a (s.r_of_v x)
 
 let bind (#s : tys) (#a #b : s.t) (f : prog_tree s a) (g : s.v a -> prog_tree s b) : prog_tree s b
   = Tbind a b f g
@@ -75,7 +87,7 @@ and tree_ens (#s : tys) (#a : s.t) (t : prog_tree s a)
   | Tasrt  p          -> fun _(*()*) -> True (* p ?*)
   | Tasum  p          -> fun _(*()*) -> p
   | Tspec  a _ post   -> post
-  | Tret   _ x        -> fun r  -> r == x
+  | Tret   _ x        -> fun r  -> r == s.v_of_r x
   | Tbind  a _ f g    -> fun y  -> s.ex a (fun (x : s.v a) -> tree_ens f x /\ tree_ens (g x) y)
   | TbindP a _ wp _ g -> fun y -> (exists (x : a) . as_ensures wp x /\ tree_ens (g x) y)
 
@@ -115,7 +127,7 @@ let rec tree_wp (#s : tys) (#a : s.t) (t : prog_tree s a)
   | Tasrt p           -> MP.as_pure_wp (fun pt -> p /\ (p ==> pt s.emp))
   | Tasum p           -> MP.as_pure_wp (fun pt -> p ==> pt s.emp)
   | Tspec a pre post  -> MP.as_pure_wp (fun pt -> pre /\ s.all a (fun (x : s.v a) -> post x ==> pt x))
-  | Tret  _ x         -> MP.as_pure_wp (fun pt -> pt x)
+  | Tret  _ x         -> MP.as_pure_wp (fun pt -> pt (s.v_of_r x))
   | Tbind a _ f g     -> MP.elim_pure_wp_monotonicity_forall ();
                         MP.as_pure_wp (fun pt -> tree_wp f (fun (x : s.v a) -> tree_wp (g x) pt))
   | TbindP a _ wp _ g -> MP.elim_pure_wp_monotonicity_forall ();

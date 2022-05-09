@@ -152,11 +152,12 @@ let test0_SF (r : ref nat) (x_ini : nat) : SF.prog_tree _ _ =
   SF.repr_Fun_of_ST (test0_ST r) (test0_shape_ST r) Fl.(cons x_ini nil)
 
 let normal_tree_SF : list norm_step = [
-    delta_only [`%SF.repr_Fun_of_ST; `%SF.post_Fun_of_ST; `%SF.post_bij;
+    delta_only [`%SF.repr_Fun_of_ST; `%SF.post_Fun_of_ST; `%SF.postl_Fun_of_ST; `%SF.post_bij;
                 `%ST.Mkprog_shape?.post_len; `%ST.Mkprog_shape?.shp;
-                `%SF.Mkpost_bij_t'?.post'_n; `%SF.Mkpost_bij_t'?.post'_f; `%SF.Mkpost_bij_t'?.post'_g;
+                `%SF.Mkpost_bij_t'?.len_Fun; `%SF.Mkpost_bij_t'?.idx_Fun; `%SF.Mkpost_bij_t'?.idx_ST;
                 `%Ll.initi; `%L.index; `%L.hd; `%L.tl; `%L.tail; `%L.length;
-                `%SF.sel_ST_of_Fun; `%SF.post_src_of_shape; `%SF.sel_Fun_of_ST;
+                `%SF.sel_ST_of_Fun; `%SF.sell_ST_of_Fun; `%SF.post_src_of_shape;
+                `%SF.post_src_f_of_shape; `%SF.sel_Fun_of_ST; `%SF.sell_Fun_of_ST;
                 `%Fl.splitAt_ty; `%Fl.head; `%Fl.tail;
                 `%Fl.dlist_of_f; `%Dl.initi;
                 `%Mktuple2?._1;`%Mktuple2?._2;
@@ -266,7 +267,7 @@ let norm_test_Fun : list norm_step
 let delta_only_repr_Fun_of_ST =
   [`%SF.repr_Fun_of_ST; `%ST.match_prog_tree;
    `%SF.post_Fun_of_ST; `%Learn.List.initi; `%L.index; `%L.hd; `%L.tl; `%L.tail; `%L.op_At; `%L.append;
-   `%SF.Mkpost_bij_t'?.post'_n; `%SF.Mkpost_bij_t'?.post'_f; `%SF.Mkpost_bij_t'?.post'_g;
+   `%SF.Mkpost_bij_t'?.len_Fun; `%SF.Mkpost_bij_t'?.idx_Fun; `%SF.Mkpost_bij_t'?.idx_ST;
    `%ST.Mkprog_shape?.post_len; `%ST.Mkprog_shape?.shp;
    `%SF.post_bij; `%SF.sel_ST_of_Fun; `%SF.sel_Fun_of_ST; `%SF.post_src_of_shape;
    `%ST.frame_post; `%ST.const_post]
