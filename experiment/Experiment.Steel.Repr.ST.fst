@@ -4,28 +4,28 @@ module U    = Learn.Util
 module M    = Experiment.Steel.Repr.M
 module L    = FStar.List.Pure
 module Uv   = FStar.Universe
-module Dl   = Learn.DList
+module Fl   = Learn.FList
 module Perm = Learn.Permutation
 
 open Experiment.Steel.Repr.M
 open Steel.Effect.Common
 
 
-type pre_t = Dl.ty_list
-type post_t (a : Type) = a -> Dl.ty_list
+type pre_t = Fl.ty_list
+type post_t (a : Type) = a -> Fl.ty_list
 
-type req_t (pre : pre_t) = Dl.dlist pre -> prop
-type ens_t (pre : pre_t) (a : Type) (post : post_t a) = Dl.dlist pre -> (x : a) -> Dl.dlist (post x) -> prop
+type req_t (pre : pre_t) = Fl.flist pre -> prop
+type ens_t (pre : pre_t) (a : Type) (post : post_t a) = Fl.flist pre -> (x : a) -> Fl.flist (post x) -> prop
 
-let const_post (#a : Type) (ts : Dl.ty_list) : post_t a = fun _ -> ts
-let frame_post (#a : Type) (pt : post_t a) (fr : Dl.ty_list) : post_t a = fun (x : a) -> L.(pt x @ fr)
+let const_post (#a : Type) (ts : Fl.ty_list) : post_t a = fun _ -> ts
+let frame_post (#a : Type) (pt : post_t a) (fr : Fl.ty_list) : post_t a = fun (x : a) -> L.(pt x @ fr)
 
 noeq
 type prog_tree : (a : Type u#a) -> (pre : pre_t u#b) -> (post : post_t u#a u#b a) -> Type u#(1 + max a b) =
-  | Tequiv : (pre : Dl.ty_list) -> (post : Dl.ty_list) ->
+  | Tequiv : (pre : Fl.ty_list) -> (post : Fl.ty_list) ->
              (p : Perm.pequiv pre post) ->
              prog_tree U.unit' pre (const_post post)
-  | Tframe : (a : Type u#a) -> (pre : Dl.ty_list) -> (post : post_t a) -> (frame : Dl.ty_list) ->
+  | Tframe : (a : Type u#a) -> (pre : Fl.ty_list) -> (post : post_t a) -> (frame : Fl.ty_list) ->
              (f : prog_tree a pre post) ->
              prog_tree a L.(pre @ frame) (frame_post post frame)
   | Tspec  : (a : Type u#a) -> (pre : pre_t) -> (post : post_t a) ->
@@ -50,13 +50,13 @@ let match_prog_tree
       (t0 : prog_tree a0 pre0 post0)
       (r : (a : Type u#a) -> (pre : pre_t u#b) -> (post : post_t u#a u#b a) ->
            (t : prog_tree a pre post) -> Type u#c)
-      (c_Tequiv : (pre : Dl.ty_list) -> (post : Dl.ty_list) ->
+      (c_Tequiv : (pre : Fl.ty_list) -> (post : Fl.ty_list) ->
                   (p : Perm.pequiv pre post) ->
                   Pure (r _ _ _ (Tequiv pre post p))
                        (requires a0 == U.unit' /\ pre0 == pre /\ post0 == const_post post /\
                                  t0 == Tequiv pre post p)
                        (ensures fun _ -> True))
-      (c_Tframe : (a : Type) -> (pre : pre_t) -> (post : post_t a) -> (frame : Dl.ty_list) ->
+      (c_Tframe : (a : Type) -> (pre : pre_t) -> (post : post_t a) -> (frame : Fl.ty_list) ->
                   (f : prog_tree a pre post {f << t0}) ->
                   Pure (r _ _ _ (Tframe a pre post frame f))
                        (requires a0 == a /\ pre0 == L.(pre @ frame) /\
@@ -113,14 +113,14 @@ let rec tree_req (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree a 
   | Tequiv _ _ _ ->
              (fun sl0 -> True)
   | Tframe _ pre _ frame f ->
-             (fun sl0 -> tree_req f (Dl.splitAt_ty pre frame sl0)._1)
+             (fun sl0 -> tree_req f (Fl.splitAt_ty pre frame sl0)._1)
   | Tspec _  _ _  req _ ->
              req
   | Tret _ _ _ ->
              (fun sl0 -> True)
   | Tbind a _  _ itm _  f g ->
              (fun sl0 -> tree_req f sl0 /\
-               (forall (x : a) (sl1 : Dl.dlist (itm x)) . tree_ens f sl0 x sl1 ==> tree_req (g x) sl1))
+               (forall (x : a) (sl1 : Fl.flist (itm x)) . tree_ens f sl0 x sl1 ==> tree_req (g x) sl1))
   | TbindP a _  _ _  wp _ g ->
              (fun sl0 -> wp (fun (x : a) -> tree_req (g x) sl0) /\ True)
 
@@ -129,11 +129,11 @@ and tree_ens (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree a pre 
   = match t with
   | Tequiv _ post p ->
              (fun sl0 _ sl1 ->
-               sl1 == Dl.apply_pequiv p sl0)
+               sl1 == Fl.apply_pequiv p sl0)
   | Tframe a  pre post frame f ->
              (fun sl0 x sl1 ->
-               let sl0', frame0 = Dl.splitAt_ty pre      frame sl0 in
-               let sl1', frame1 = Dl.splitAt_ty (post x) frame sl1 in
+               let sl0', frame0 = Fl.splitAt_ty pre      frame sl0 in
+               let sl1', frame1 = Fl.splitAt_ty (post x) frame sl1 in
                frame1 == frame0 /\ tree_ens f sl0' x sl1')
   | Tspec _  _ _  _ ens ->
              ens
@@ -141,7 +141,7 @@ and tree_ens (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree a pre 
              (fun sl0 x' sl1 -> x' == x /\ sl1 == sl0)
   | Tbind a _  _ itm _  f g ->
              (fun sl0 y sl2 ->
-               (exists (x : a) (sl1 : Dl.dlist (itm x)) . tree_ens f sl0 x sl1 /\ tree_ens (g x) sl1 y sl2))
+               (exists (x : a) (sl1 : Fl.flist (itm x)) . tree_ens f sl0 x sl1 /\ tree_ens (g x) sl1 y sl2))
   | TbindP a _  _ _  wp _ g ->
              (fun sl0 y sl1 -> (exists (x : a) . as_ensures wp x /\ tree_ens (g x) sl0 y sl1))
 
@@ -313,34 +313,34 @@ let repr_ST_of_M__TCspec_ens
     (**) L.map_append Mkvprop'?.t (post res) frame;
 
     (tree_ens (repr_ST_of_M _ (TCspec #a #pre #post #req #ens  pre' post' frame  p0 p1)) sl0' res sl1'
-    <==> (let sl0, frame0 = Dl.splitAt_ty (vprop_list_sels_t pre) (vprop_list_sels_t frame)
-                             (Dl.apply_pequiv (vequiv_sl p0) sl0') in
-        let sl1, frame1 = Dl.splitAt_ty (vprop_list_sels_t (post res)) (vprop_list_sels_t frame)
-                             (Dl.apply_pequiv (Perm.pequiv_sym (vequiv_sl (p1 res))) sl1') in
+    <==> (let sl0, frame0 = Fl.splitAt_ty (vprop_list_sels_t pre) (vprop_list_sels_t frame)
+                             (Fl.apply_pequiv (vequiv_sl p0) sl0') in
+        let sl1, frame1 = Fl.splitAt_ty (vprop_list_sels_t (post res)) (vprop_list_sels_t frame)
+                             (Fl.apply_pequiv (Perm.pequiv_sym (vequiv_sl (p1 res))) sl1') in
         frame1 == frame0 /\ ens sl0 res sl1)))
   =
     L.map_append Mkvprop'?.t pre frame;
     L.map_append Mkvprop'?.t (post res) frame;
     assert (
       tree_ens (repr_ST_of_M _ (TCspec #a #pre #post #req #ens  pre' post' frame  p0 p1)) sl0' res sl1'
-    <==> (exists (sl1f : Dl.dlist L.(vprop_list_sels_t (post res) @ vprop_list_sels_t frame)) .
-          let sl0, frame0 = Dl.splitAt_ty (vprop_list_sels_t pre) (vprop_list_sels_t frame)
-                               (Dl.apply_pequiv (vequiv_sl p0) sl0') in
-          let sl1, frame1 = Dl.splitAt_ty (vprop_list_sels_t (post res)) (vprop_list_sels_t frame) sl1f in
-          sl1' == Dl.apply_pequiv (vequiv_sl (p1 res)) sl1f /\
+    <==> (exists (sl1f : Fl.flist L.(vprop_list_sels_t (post res) @ vprop_list_sels_t frame)) .
+          let sl0, frame0 = Fl.splitAt_ty (vprop_list_sels_t pre) (vprop_list_sels_t frame)
+                               (Fl.apply_pequiv (vequiv_sl p0) sl0') in
+          let sl1, frame1 = Fl.splitAt_ty (vprop_list_sels_t (post res)) (vprop_list_sels_t frame) sl1f in
+          sl1' == Fl.apply_pequiv (vequiv_sl (p1 res)) sl1f /\
           frame1 == frame0 /\ ens sl0 res sl1))
       by T.(norm_tree_spec (); smt ());
 
-    introduce forall (sl1f : Dl.dlist L.(vprop_list_sels_t (post res) @ vprop_list_sels_t frame)) .
-        sl1' == Dl.apply_pequiv (vequiv_sl (p1 res)) sl1f <==>
-        sl1f == Dl.apply_pequiv (Perm.pequiv_sym (vequiv_sl (p1 res))) sl1'
-      with Dl.apply_pequiv_sym_eq_iff (vequiv_sl (p1 res)) sl1f sl1';
+    introduce forall (sl1f : Fl.flist L.(vprop_list_sels_t (post res) @ vprop_list_sels_t frame)) .
+        sl1' == Fl.apply_pequiv (vequiv_sl (p1 res)) sl1f <==>
+        sl1f == Fl.apply_pequiv (Perm.pequiv_sym (vequiv_sl (p1 res))) sl1'
+      with Fl.apply_pequiv_sym_eq_iff (vequiv_sl (p1 res)) sl1f sl1';
 
     assert (tree_ens (repr_ST_of_M _ (TCspec #a #pre #post #req #ens  pre' post' frame  p0 p1)) sl0' res sl1'
-    <==> (let sl0, frame0 = Dl.splitAt_ty (vprop_list_sels_t pre) (vprop_list_sels_t frame)
-                             (Dl.apply_pequiv (vequiv_sl p0) sl0') in
-        let sl1, frame1 = Dl.splitAt_ty (vprop_list_sels_t (post res)) (vprop_list_sels_t frame)
-                             (Dl.apply_pequiv (Perm.pequiv_sym (vequiv_sl (p1 res))) sl1') in
+    <==> (let sl0, frame0 = Fl.splitAt_ty (vprop_list_sels_t pre) (vprop_list_sels_t frame)
+                             (Fl.apply_pequiv (vequiv_sl p0) sl0') in
+        let sl1, frame1 = Fl.splitAt_ty (vprop_list_sels_t (post res)) (vprop_list_sels_t frame)
+                             (Fl.apply_pequiv (Perm.pequiv_sym (vequiv_sl (p1 res))) sl1') in
         frame1 == frame0 /\ ens sl0 res sl1))
 #pop-options
 
@@ -359,13 +359,13 @@ let rec repr_ST_of_M_req (#a : Type) (t : M.prog_tree a)
              <==> {_ by T.(apply_lemma (`U.iff_refl); trefl ()) }
                req (extract_vars_f pre' pre frame p0 sl0)._1;
              <==> { assert_norm (extract_vars_f pre' pre frame p0 sl0
-                    == Dl.splitAt_ty (vprop_list_sels_t pre) (vprop_list_sels_t frame)
-                         (Dl.apply_pequiv (vequiv_sl p0) sl0)) }
-               req (Dl.splitAt_ty (vprop_list_sels_t pre) (vprop_list_sels_t frame)
-                              (Dl.apply_pequiv (vequiv_sl p0) sl0))._1;
+                    == Fl.splitAt_ty (vprop_list_sels_t pre) (vprop_list_sels_t frame)
+                         (Fl.apply_pequiv (vequiv_sl p0) sl0)) }
+               req (Fl.splitAt_ty (vprop_list_sels_t pre) (vprop_list_sels_t frame)
+                              (Fl.apply_pequiv (vequiv_sl p0) sl0))._1;
              <==> { assert (tree_req (repr_ST_of_M _ (TCspec #a #pre #post #req #ens  pre' post' frame  p0 p1)) sl0
-                     <==> req (Dl.splitAt_ty (vprop_list_sels_t pre) (vprop_list_sels_t frame)
-                              (Dl.apply_pequiv (vequiv_sl p0) sl0))._1)
+                     <==> req (Fl.splitAt_ty (vprop_list_sels_t pre) (vprop_list_sels_t frame)
+                              (Fl.apply_pequiv (vequiv_sl p0) sl0))._1)
                  by T.(norm_tree_spec (); smt ()) }
                tree_req (repr_ST_of_M _ (TCspec #a #pre #post #req #ens  pre' post' frame  p0 p1)) sl0;
              <==> { U.f_equal tree_req (repr_ST_of_M _ (TCspec #a #pre #post #req #ens  pre' post' frame  p0 p1))
@@ -397,7 +397,7 @@ let rec repr_ST_of_M_req (#a : Type) (t : M.prog_tree a)
                with (repr_ST_of_M_ens f cf sl0 x sl1; repr_ST_of_M_req (g x) (cg x) sl1)
              }
                tree_req (repr_ST_of_M f cf) sl0 /\
-               (forall (x : a) (sl1 : Dl.dlist (vprop_list_sels_t (itm x))) .
+               (forall (x : a) (sl1 : Fl.flist (vprop_list_sels_t (itm x))) .
                  tree_ens (repr_ST_of_M f cf) sl0 x sl1 ==> tree_req (repr_ST_of_M (g x) (cg x)) sl1);
              <==> {_ by T.(apply_lemma (`U.iff_refl); trefl ())}
                tree_req (repr_ST_of_M _ (TCbind #a #b #f #g  pre itm post  cf cg)) sl0;
@@ -444,10 +444,10 @@ and repr_ST_of_M_ens (#a : Type) (t : M.prog_tree a)
                                                  (Perm.pequiv_sym (p1 res)) sl1 in
                 frame1 == frame0 /\ ens fsl0 res fsl1);
              <==> { }
-              (let fsl0, frame0 = Dl.splitAt_ty (vprop_list_sels_t pre) (vprop_list_sels_t frame)
-                                                  (Dl.apply_pequiv (vequiv_sl p0) sl0) in
-               let fsl1, frame1 = Dl.splitAt_ty (vprop_list_sels_t (post res)) (vprop_list_sels_t frame)
-                                                  (Dl.apply_pequiv (Perm.pequiv_sym (vequiv_sl (p1 res))) sl1) in
+              (let fsl0, frame0 = Fl.splitAt_ty (vprop_list_sels_t pre) (vprop_list_sels_t frame)
+                                                  (Fl.apply_pequiv (vequiv_sl p0) sl0) in
+               let fsl1, frame1 = Fl.splitAt_ty (vprop_list_sels_t (post res)) (vprop_list_sels_t frame)
+                                                  (Fl.apply_pequiv (Perm.pequiv_sym (vequiv_sl (p1 res))) sl1) in
                 frame1 == frame0 /\ ens fsl0 res fsl1);
              <==> {repr_ST_of_M__TCspec_ens req ens pre' post' frame p0 p1 sl0 res sl1}
                tree_ens (repr_ST_of_M _ (TCspec #a #pre #post #req #ens  pre' post' frame p0 p1)) sl0 res sl1;
@@ -464,9 +464,9 @@ and repr_ST_of_M_ens (#a : Type) (t : M.prog_tree a)
                       by T.(norm [delta_only [`%M.tree_ens]; zeta; iota]; smt ()) }
                res == x /\ sl1 == extract_vars p sl0;
              <==> {}
-               res == x /\ sl1 == Dl.apply_pequiv (vequiv_sl p) sl0;
+               res == x /\ sl1 == Fl.apply_pequiv (vequiv_sl p) sl0;
              <==> { assert (tree_ens (repr_ST_of_M _ (TCret #a #x pre post p)) sl0 res sl1 <==>
-                           (res == x /\ sl1 == Dl.apply_pequiv (vequiv_sl p) sl0))
+                           (res == x /\ sl1 == Fl.apply_pequiv (vequiv_sl p) sl0))
                       by T.(norm_tree_spec (); smt ()) }
                tree_ens (repr_ST_of_M _ (TCret #a #x pre post p)) sl0 res sl1;
              <==> { U.f_equal tree_ens (repr_ST_of_M _ (TCret #a #x pre post p))
@@ -486,7 +486,7 @@ and repr_ST_of_M_ens (#a : Type) (t : M.prog_tree a)
                with (repr_ST_of_M_ens f cf sl0 x sl1';
                      repr_ST_of_M_ens (g x) (cg x) sl1' res sl1)
              }
-               (exists (x : a) (sl1' : Dl.dlist (vprop_list_sels_t (itm x))) .
+               (exists (x : a) (sl1' : Fl.flist (vprop_list_sels_t (itm x))) .
                  tree_ens (repr_ST_of_M f cf) sl0 x sl1' /\
                  tree_ens (repr_ST_of_M (g x) (cg x)) sl1' res sl1);
              <==> {_ by T.(apply_lemma (`U.iff_refl); trefl ())}

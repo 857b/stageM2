@@ -3,6 +3,7 @@ module Learn.DList
 module U    = Learn.Util
 module L    = FStar.List.Pure
 module Ll   = Learn.List
+module Fin  = FStar.Fin
 module Perm = Learn.Permutation
 
 (*** Dependent lists *)
@@ -17,14 +18,14 @@ type dlist : ty_list -> Type =
              dlist (t0 :: ts)
 
 
-let rec index (#ts : ty_list) (xs : dlist ts) (i : nat{i < L.length ts})
+let rec index (#ts : ty_list) (xs : dlist ts) (i : Fin.fin (L.length ts))
   : L.index ts i
   = let DCons t0 x0 ts1 xs1 = xs in
     if i = 0 then x0
     else U.cast (L.index ts i) (index xs1 (i-1))
 
 let rec dlist_extensionality (#ts : ty_list) (xs ys : dlist ts)
-          (pf : (i : nat {i < L.length ts}) -> squash (index xs i == index ys i))
+          (pf : (i : Fin.fin (L.length ts)) -> squash (index xs i == index ys i))
   : Lemma (ensures xs == ys) (decreases ts)
   = match ts with
     | [] -> ()
@@ -41,7 +42,7 @@ let rec append (#ts0 #ts1 : ty_list) (xs0 : dlist ts0) (xs1 : dlist ts1)
     | DCons _ x0 _ xs0 -> DCons _ x0 _ (append xs0 xs1)
 
 let rec append_index (#ts0 #ts1 : ty_list) (xs0 : dlist ts0) (xs1 : dlist ts1)
-                     (i : nat {i < L.length ts0 + L.length ts1})
+                     (i : Fin.fin (L.length ts0 + L.length ts1))
   : Lemma (L.(index (ts0@ts1) i == (if i < length ts0 then index ts0 i else index ts1 (i - length ts0))) /\
            index (append xs0 xs1) i ==
           (if i < L.length ts0
@@ -97,25 +98,25 @@ let rec initi (lb ub : int)
 let rec initi_at (lb ub : int)
           (t : (i:int{lb <= i /\ i < ub}) -> Tot Type)
           (f : (i:int{lb <= i /\ i < ub}) -> Tot (t i))
-          (i : nat {i < L.length (Ll.initi lb ub t)})
+          (i : Fin.fin (L.length (Ll.initi lb ub t)))
   : Lemma (ensures index (initi lb ub t f) i == f (lb+i)) (decreases i)
           [SMTPat (index (initi lb ub t f) i)]
   = if i = 0 then () else initi_at (lb+1) ub t f (i-1)
 
 unfold
-let initi_ty (t : ty_list) (f : (i:nat{i < L.length t}) -> Tot (L.index t i))
+let initi_ty (t : ty_list) (f : (i:Fin.fin (L.length t)) -> Tot (L.index t i))
   : Tot (dlist t)
   = Ll.list_extensionality t (Ll.initi 0 (L.length t) (L.index t)) (fun _ -> ());
     initi 0 (L.length t) (L.index t) f
 
 
-(** permutations *)
+(***** permutations *)
 
 let apply_perm_r (#n : nat) (p : Perm.perm_f n) (#ts : ty_list {L.length ts == n}) (xs : dlist ts)
   : dlist (Perm.apply_perm_r p ts)
   = initi 0 n (fun i -> L.index ts (p i)) (fun i -> index xs (p i))
 
-let apply_r_id_n (len : nat) (#ts : ty_list{L.length ts = len}) (xs :dlist ts)
+let apply_r_id_n (len : nat) (#ts : ty_list{L.length ts = len}) (xs : dlist ts)
   : Lemma (apply_perm_r (Perm.id_n len) xs == xs) [SMTPat (apply_perm_r (Perm.id_n len) xs)]
   = dlist_extensionality (apply_perm_r (Perm.id_n len) xs) xs (fun _ -> ())
 
@@ -187,3 +188,89 @@ let apply_pequiv_sym_eq_iff (#ts0 #ts1 : ty_list) (f : Perm.pequiv ts0 ts1) (xs 
   =
     apply_pequiv_sym_l f xs;
     apply_pequiv_sym_r f ys
+
+
+(***** quantifiers *)
+
+let partial_app_dlist (src0 : Type u#s) (src : ty_list u#s) (dst : Type u#d) (f : dlist (src0 :: src) -> dst)
+                      (x : src0) (xs : dlist src) : dst
+  = f (DCons src0 x src xs)
+
+/// One could define [forall_dlist] with type:
+///   [Pure Type0 (requires True) (ensures fun p -> p <==> (forall (xs : Dl.dlist ty) . f xs))]
+/// However, the refinement on the result is keept during normalization and yields terms that cannot reduce fully.
+/// For this reason, [forall_dlist] is defined with type [Type0] and we prove separately a lemma (with a pattern)
+/// to use equivalence during proofs.
+/// The same holds for [exists_dlist].
+
+let rec forall_dlist (ty : ty_list) (f : dlist ty -> Type0)
+  : Tot Type0 (decreases ty)
+  = match ty with
+  | []      -> f DNil
+  | t0 :: ts -> (forall (x : t0) . forall_dlist ts (partial_app_dlist t0 ts Type0 f x))
+
+let rec forall_dlist_iff (ty : ty_list) (f : dlist ty -> Type0)
+  : Lemma (ensures forall_dlist ty f <==> (forall (xs : dlist ty) . f xs)) (decreases ty)
+          [SMTPat (forall_dlist ty f)]
+  = match ty with
+  | [] -> ()
+  | t0 :: ts -> assert (forall (xs' : dlist ty) . exists (x : t0) (xs : dlist ts) .
+                         xs' == DCons t0 x ts xs);
+              introduce forall (x : t0) .
+                forall_dlist ts (partial_app_dlist t0 ts Type0 f x) <==>
+                (forall (xs : dlist ts) . f (DCons t0 x ts xs))
+              with forall_dlist_iff ts (partial_app_dlist t0 ts Type0 f x)
+
+
+let rec exists_dlist (ty : ty_list) (f : dlist ty -> Type0)
+  : Tot Type0 (decreases ty)
+  = match ty with
+  | []     -> f DNil
+  | t0 :: ts -> (exists (x : t0) . exists_dlist ts (partial_app_dlist t0 ts Type0 f x))
+
+let rec exists_dlist_iff (ty : ty_list) (f : dlist ty -> Type0)
+  : Lemma (ensures exists_dlist ty f <==> (exists (xs : dlist ty) . f xs)) (decreases ty)
+          [SMTPat (exists_dlist ty f)]
+  = match ty with
+  | [] -> ()
+  | t0 :: ts -> assert (forall (xs' : dlist ty) . exists (x : t0) (xs : dlist ts) .
+                         xs' == DCons t0 x ts xs);
+              introduce forall (x : t0) .
+                exists_dlist ts (partial_app_dlist t0 ts Type0 f x) <==>
+                (exists (xs : dlist ts) . f (DCons t0 x ts xs))
+              with exists_dlist_iff ts (partial_app_dlist t0 ts Type0 f x)
+
+/// Transparent implementation of [FStar.Universe.raise_t] that can be reduced by the normalizer
+/// TODO? is there a way to normalize [FStar.Universe.(downgrade_val (raise_val _))]
+noeq type raise_t (a : Type u#a) : Type u#(max a b) =
+  | Raise_val : (x : a) -> raise_t a
+
+let downgrade_val (#a : Type u#a) (y : raise_t u#a u#b a) : a
+  = let Raise_val x = y in x
+
+
+let rec arw_list (src : ty_list u#s) (dst : Type u#d)
+  : Tot (Type u#(max s d)) (decreases src)
+  = match src with
+  | [] -> raise_t dst
+  | t0 :: ts -> (t0 -> arw_list ts dst)
+
+let rec lam_dlist (src : ty_list u#s) (dst : Type u#d) (f : dlist src -> dst)
+  : Tot (arw_list src dst) (decreases src)
+  = match src with
+  | [] -> Raise_val (f DNil)
+  | t0 :: ts -> (fun (x : t0) -> lam_dlist ts dst (partial_app_dlist t0 ts dst f x))
+
+let rec app_dlist (#src : ty_list u#s) (#dst : Type u#d) (f : arw_list src dst) (x : dlist src)
+  : Tot dst (decreases src)
+  = match (|src, f, x|) <: (src : ty_list & arw_list src dst & dlist src) with
+  | (|[],      v, DNil|)           -> downgrade_val v
+  | (|t0 :: ts, f, DCons _ x _ xs|) -> app_dlist #ts #dst (f x) xs
+
+let rec app_lam_dlist (src : ty_list u#s) (dst : Type u#d) (f : dlist src -> dst) (x : dlist src)
+  : Lemma (ensures app_dlist (lam_dlist src dst f) x == f x)
+          (decreases src)
+          [SMTPat (app_dlist (lam_dlist src dst f) x)]
+  = match x with
+  | DNil -> ()
+  | DCons t0 x ts xs -> app_lam_dlist ts dst (partial_app_dlist t0 ts dst f x) xs

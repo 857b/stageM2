@@ -58,5 +58,9 @@ let funext_eta (#a : Type) (#b : a -> Type) (f g : (x:a -> b x))
   = funext_on_eta f g eq
 
 
-/// unit for an arbitrary universe
+/// [unit] for an arbitrary universe
 type unit' : Type u#a = | Unit' : unit'
+
+/// Using [let () = block_red in t] will prevent the heuristic used for zeta-normalisation from unfolding
+/// recursive functions in [t] until [block_red] is unfolded.
+let block_red : unit = ()
