@@ -7,6 +7,7 @@ open Learn.Logic
 (*** Repr.ST --> Repr.Fun *)
 
 (**) let __begin_repr_fun_of_st = ()
+#push-options "--fuel 1 --ifuel 1"
 
 let rec post_src_of_shape_ty
       (#a : Type) (#pre0 : ST.pre_t) (#post0 : ST.post_t a) (t : ST.prog_tree a pre0 post0)
@@ -80,7 +81,7 @@ let post_Fun_of_ST__ret #a post post_n
          (assert (post' == U.eta post') by T.(trefl ())) (_ by T.(trefl ()))
          (fun x -> Ll.list_extensionality (post' x) (post x) (fun i -> ()))
 
-
+#pop-options
 (**) let __end_repr_fun_of_st = ()
 
 

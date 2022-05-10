@@ -23,6 +23,26 @@ irreducible
 let print_util (#a : Type) (x : a) : prop = True
 
 
+////////// test_flatten //////////
+
+unfold
+let test_flatten : ST.prog_tree int [] (fun _ -> []) = ST.(
+  x1 <-- (x0 <-- Tspec int [] (fun _ -> []) (fun _ -> True) (fun _ x _ -> x == 0);
+        Tret int (x0 + 1) (fun _ -> []));
+  Tret int (x1 + 2) (fun _ -> []))
+
+let normal_flatten_prog : list norm_step = [
+    delta_only [`%ST.flatten_prog; `%ST.flatten_prog_aux; `%ST.flatten_prog_k_id; `%ST.bind];
+    delta_qualifier ["unfold"];
+    iota; zeta
+  ]
+
+(*let () = assert (print_util (ST.flatten_prog test_flatten))
+             by T.(norm normal_flatten_prog; fail "print")*)
+
+
+////////// test0 //////////
+
 unfold
 let read_pre  (r : ref nat) : M.pre_t
   = [vptr' r full_perm]
@@ -116,11 +136,12 @@ let test0_M_has_shape (r : ref nat)
 
 
 unfold
-let test0_ST (r : ref nat) = ST.repr_ST_of_M (test0_M r).repr_tree (test0_cond r)
+let test0_ST (r : ref nat) = ST.flatten_prog (ST.repr_ST_of_M (test0_M r).repr_tree (test0_cond r))
 
 let normal_tree_ST : list norm_step = [
     delta_only [`%ST.repr_ST_of_M; `%ST.bind; `%ST.post_ST_of_M; `%M.vprop_list_sels_t;
-                `%L.map; `%Mkvprop'?.t; `%ST.const_post; `%ST.frame_post; `%L.op_At; `%L.append];
+                `%L.map; `%Mkvprop'?.t; `%ST.const_post; `%ST.frame_post; `%L.op_At; `%L.append;
+                `%ST.flatten_prog; `%ST.flatten_prog_aux; `%ST.flatten_prog_k_id];
     delta_qualifier ["unfold"];
     delta_attr [`%__steel_reduce__];
     iota; zeta; primops
@@ -135,10 +156,12 @@ let test0_shape_ST (r : ref nat) : ST.prog_shape (test0_ST r)
   = 
     (**) test0_M_has_shape r;
     (**) ST.repr_ST_of_M_shape (test0_M r).repr_tree (test0_cond r) test0_shape_M;
-    ST.mk_prog_shape (test0_ST r) (ST.shape_ST_of_M test0_shape_M)
+    let s = ST.shape_ST_of_M test0_shape_M in
+    (**) ST.flatten_prog_shape (ST.repr_ST_of_M (test0_M r).repr_tree (test0_cond r)) s;
+    ST.mk_prog_shape (test0_ST r) (ST.flatten_shape s)
 
 let normal_shape_ST : list norm_step = [
-    delta_only [`%ST.shape_ST_of_M];
+    delta_only [`%ST.shape_ST_of_M; `%ST.flatten_shape; `%ST.flatten_shape_aux; `%ST.flatten_shape_k_id];
     delta_qualifier ["unfold"];
     iota; zeta; primops
   ]
@@ -201,9 +224,11 @@ let test0_wp (r : ref nat) (x_ini : nat) =
 let normal_spec_Fun : list norm_step = [
     delta_only [`%Fun.tree_wp; `%Fl.partial_app_flist;
                 `%Fun.Mktys'?.all; `%SF.sl_tys; `%SF.sl_all; `%Fl.forall_flist;
+                `%Fun.Mktys'?.v_of_r; `%SF.sl_v_of_r;
                 `%Fl.cons; `%Fl.nil;
                 `%SF.Mksl_tys_t?.val_t; `%SF.Mksl_tys_t?.sel_t;
-                `%SF.Mksl_tys_v?.val_v; `%SF.Mksl_tys_v?.sel_v];
+                `%SF.Mksl_tys_v?.val_v; `%SF.Mksl_tys_v?.sel_v;
+                `%SF.Mksl_tys_r?.vl; `%SF.Mksl_tys_r?.sl];
     delta_qualifier ["unfold"];
     iota; zeta; primops
   ]
@@ -217,6 +242,8 @@ let normal_spec_Fun : list norm_step = [
               norm normal_spec_Fun;
               qed ())*)
 
+
+////////// test1 //////////
 
 unfold
 let test1_ST : ST.prog_tree int [bool; int] (fun _ -> [bool; int])
@@ -308,6 +335,8 @@ let norm_repr_Fun_of_Steel : list norm_step
           norm norm_repr_Fun_of_Steel;
           qed ())*)
 
+
+////////// test2 //////////
 
 unfold
 let test2_SF : SF.prog_tree bool (fun _ -> [int]) = SF.(

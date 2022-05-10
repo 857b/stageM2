@@ -3,6 +3,7 @@ module Experiment.Steel.Repr.ST
 module U    = Learn.Util
 module M    = Experiment.Steel.Repr.M
 module L    = FStar.List.Pure
+module T    = FStar.Tactics
 module Fl   = Learn.FList
 module Perm = Learn.Permutation
 
@@ -99,7 +100,7 @@ let match_prog_tree
     | Tbind  a b pre itm post f g -> c_Tbind  a b pre itm post f g
     | TbindP a b pre post wp x g  -> c_TbindP a b pre post wp x g
 
-
+unfold
 let bind (#a : Type) (#b : Type) (#pre : pre_t) (#itm : post_t a) (#post : post_t b)
          (f : prog_tree a pre itm) (g : (x:a) -> prog_tree b (itm x) post)
   : prog_tree b pre post
@@ -144,8 +145,55 @@ and tree_ens (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree a pre 
   | TbindP a _  _ _  wp _ g ->
              (fun sl0 y sl1 -> (exists (x : a) . as_ensures wp x /\ tree_ens (g x) sl0 y sl1))
 
+(***** [equiv] *)
+
+let equiv (#a : Type) (#pre : pre_t) (#post : post_t a) (f g : prog_tree a pre post) : prop =
+  (forall (sl0 : Fl.flist pre) . tree_req f sl0 <==> tree_req g sl0) /\
+  (forall (sl0 : Fl.flist pre) . tree_req f sl0 ==>
+    (forall (res : a) (sl1 : Fl.flist (post res)) .
+      tree_ens f sl0 res sl1 <==> tree_ens g sl0 res sl1))
+
+
+val equiv_Tframe
+      (#a : Type) (#pre : pre_t) (#post : post_t a) (frame : Fl.ty_list)
+      (f f' : prog_tree a pre post) (eq_f : squash (equiv f f'))
+  : squash (equiv (Tframe a pre post frame f) (Tframe a pre post frame f'))
+
+val equiv_Tbind
+      (#a #b : Type) (#pre : pre_t) (#itm : post_t a) (#post : post_t b)
+      (f f' : prog_tree a pre itm) (g g' : (x : a) -> prog_tree b (itm x) post)
+      (eq_f : squash (equiv f f')) (eq_g : (x : a) -> squash (equiv (g x) (g' x)))
+  : squash (equiv (Tbind a b pre itm post f g) (Tbind a b pre itm post f' g'))
+
+val equiv_TbindP
+      (#a #b : Type) (#pre : pre_t) (#post : post_t b) (wp : pure_wp a)
+      (f : unit -> PURE a wp) (g g' : (x : a) -> prog_tree b pre post)
+      (eq_g : (x : a) -> squash (equiv (g x) (g' x)))
+  : squash (equiv (TbindP a b pre post wp f g) (TbindP a b pre post wp f g'))
+
+val equiv_Tbind_assoc_Tbind
+      (#a #b #c : Type) (#pre : pre_t) (#itm0 : post_t a) (#itm1 : post_t b) (#post : post_t c)
+      (f : prog_tree a pre itm0)
+      (g : (x : a) -> prog_tree b (itm0 x) itm1)
+      (h : (y : b) -> prog_tree c (itm1 y) post)
+  : squash (equiv (bind (bind f g) h) (bind f (fun x -> bind (g x) h)))
+
+(* NOTE: the following:
+
+   val equiv_TbindP_assoc_Tbind (#a #b #c : Type) (#pre : pre_t) (#itm : post_t a) (#post : post_t b)
+      (wp : pure_wp a) (f : unit -> PURE a wp)
+      (g : (x : a) -> prog_tree b pre itm)
+      (h : (y : b) -> prog_tree c (itm y) post)
+   : squash (equiv (bind (TbindP _ _ _ _ wp f g) h) (TbindP _ _ _ _ wp f (fun x -> bind (g x) h)))
+
+   seems false because the reverse direction of:
+     wp pt <==> (as_requires wp /\ (forall (x : a) . as_ensures wp x ==> pt x))
+   does not hold with our assumptions an wp.
+*)
 
 (***** Shape *)
+
+(**) val __begin_shape : unit
 
 noeq
 type shape_tree : (pre_n : nat) -> (post_n : nat) -> Type =
@@ -308,3 +356,90 @@ val repr_ST_of_M_shape
       (#post_n : nat) (s : M.shape_tree (L.length pre) post_n)
    : Lemma (requires M.tree_cond_has_shape c s)
            (ensures  prog_has_shape (repr_ST_of_M t c) (shape_ST_of_M s))
+
+
+(*** Binders flattening *)
+
+let flatten_prog_k_id #a #post #pre' (t' : prog_tree a pre' post) : prog_tree a pre' post
+  = t'
+
+let rec flatten_prog
+      #a #pre #post (t : prog_tree a pre post)
+  : Tot (prog_tree a pre post) (decreases %[t; 1])
+  = flatten_prog_aux t flatten_prog_k_id
+
+and flatten_prog_aux
+      #a  #pre #post (t : prog_tree a pre post)
+      #a1 #post1 (k : ((#pre' : pre_t) -> (t' : prog_tree a pre' post) -> prog_tree a1 pre' post1))
+  : Tot (prog_tree a1 pre post1) (decreases %[t; 0])
+  = match t with
+  | Tequiv _ _ _ | Tspec _ _ _ _ _ | Tret _ _ _ -> k t
+  | Tframe a pre post frame f ->
+             k (Tframe a pre post frame (flatten_prog f))
+  | Tbind  a b pre itm post f g ->
+             flatten_prog_aux f (fun #pre' f' ->
+               Tbind a a1 pre' itm post1 f' (fun (x : a) ->
+                 flatten_prog_aux (g x) k))
+  | TbindP a b pre post wp f g ->
+             // we do not flatten the TbindP since we would need [equiv_Tbind_assoc_Tbind]
+             k (TbindP a b pre post wp f (fun (x : a) ->
+               flatten_prog (g x)))
+
+
+let flatten_shape_k_id #post_n #pre'_n (t' : shape_tree pre'_n post_n) : shape_tree pre'_n post_n
+  = t'
+
+let rec flatten_shape
+      #pre_n #post_n (t : shape_tree pre_n post_n)
+  : Tot (shape_tree pre_n post_n) (decreases %[t; 1])
+  = flatten_shape_aux t flatten_shape_k_id
+
+and flatten_shape_aux
+      #pre_n #post_n (t : shape_tree pre_n post_n)
+      #post1_n (k : ((#pre'_n : nat) -> (t' : shape_tree pre'_n post_n) -> shape_tree pre'_n post1_n))
+  : Tot (shape_tree pre_n post1_n) (decreases %[t; 0])
+  = match t with
+  | Sequiv _ _ | Sspec _ _ | Sret _ -> k t
+  | Sframe _ _ frame_n f ->
+             k (Sframe _ _ frame_n (flatten_shape f))
+  | Sbind  pre_n itm_n post_n f g ->
+             flatten_shape_aux f (fun #pre'_n f' ->
+               Sbind pre'_n itm_n post1_n f' (flatten_shape_aux g k))
+  | SbindP _ _ g ->
+             k (SbindP _ _ (flatten_shape g))
+
+
+
+val flatten_equiv
+      (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree u#a u#b a pre post)
+  : Lemma (equiv (flatten_prog t) t)
+
+val flatten_equiv_aux
+      (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree u#a u#b a pre post)
+      (#a1 : Type) (#post1 : post_t a1)
+      (k : ((#pre' : pre_t) -> (t' : prog_tree a pre' post) -> prog_tree a1 pre' post1))
+      (k_equiv : (pre' : pre_t) -> (t'0 : prog_tree a pre' post) -> (t'1 : prog_tree a pre' post) ->
+                     Lemma (requires equiv t'0 t'1) (ensures equiv (k t'0) (k t'1)))
+      (k_bind  : ((a0 : Type u#a) -> (pre' : pre_t) -> (itm : post_t a0) ->
+                      (f : prog_tree a0 pre' itm) -> (g : ((x : a0) -> (prog_tree a (itm x) post))) ->
+                     Lemma (equiv (k (Tbind a0 a pre' itm post f g))
+                                  (Tbind a0 a1 pre' itm post1 f (fun x -> k (g x))))))
+  : Lemma (equiv (flatten_prog_aux t k) (k t))
+
+val flatten_prog_shape
+      (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree u#a u#b a pre post)
+      (#post_n : nat) (s : shape_tree (L.length pre) post_n)
+   : Lemma (requires prog_has_shape t s)
+           (ensures  prog_has_shape (flatten_prog t) (flatten_shape s))
+
+val flatten_prog_shape_aux
+      (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree u#a u#b a pre post)
+      (#post_n : nat) (s : shape_tree (L.length pre) post_n)
+      (#a1 : Type) (#post1 : post_t a1)
+      (k_t : ((#pre' : pre_t) -> (t' : prog_tree a pre' post) -> prog_tree u#a u#b a1 pre' post1))
+      (post1_n : nat {post_has_len post1 post1_n})
+      (k_s : ((#pre'_n : nat) -> (s' : shape_tree pre'_n post_n) -> shape_tree pre'_n post1_n))
+      (k_hyp : (pre' : pre_t) -> (t' : prog_tree a pre' post) -> (s' : shape_tree (L.length pre') post_n) ->
+                   Lemma (requires prog_has_shape t' s') (ensures prog_has_shape (k_t t') (k_s s')))
+   : Lemma (requires prog_has_shape t s)
+           (ensures  prog_has_shape (flatten_prog_aux t k_t) (flatten_shape_aux s k_s))
