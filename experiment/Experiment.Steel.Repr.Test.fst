@@ -175,7 +175,8 @@ let test0_SF (r : ref nat) (x_ini : nat) : SF.prog_tree _ _ =
   SF.repr_Fun_of_ST (test0_ST r) (test0_shape_ST r) Fl.(cons x_ini nil)
 
 let normal_tree_SF : list norm_step = [
-    delta_only [`%SF.repr_Fun_of_ST; `%SF.post_Fun_of_ST; `%SF.postl_Fun_of_ST; `%SF.post_bij;
+    delta_only [`%SF.repr_Fun_of_ST; `%SF.shape_Fun_of_ST;
+                `%SF.post_Fun_of_ST; `%SF.postl_Fun_of_ST; `%SF.post_bij;
                 `%ST.Mkprog_shape?.post_len; `%ST.Mkprog_shape?.shp;
                 `%SF.Mkpost_bij_t'?.len_Fun; `%SF.Mkpost_bij_t'?.idx_Fun; `%SF.Mkpost_bij_t'?.idx_ST;
                 `%Ll.initi; `%L.index; `%L.hd; `%L.tl; `%L.tail; `%L.length;
@@ -198,6 +199,19 @@ let normal_tree_SF : list norm_step = [
               norm normal_shape_ST;
               norm normal_tree_SF;
               qed ())*)
+
+unfold
+let test0_shape_SF (r : ref nat) (x_ini : nat) : SF.prog_shape (test0_SF r x_ini)
+  =
+    (**) SF.repr_Fun_of_ST_shape (test0_ST r) (test0_shape_ST r) Fl.(cons x_ini nil);
+    SF.mk_prog_shape (test0_SF r x_ini) (SF.shape_Fun_of_ST (test0_shape_ST r).shp)
+
+(*let _ = fun r x_ini ->
+  assert (print_util (test0_shape_SF r x_ini))
+    by T.(norm normal_shape_ST;
+          norm normal_tree_SF;
+          fail "print")*)
+
 
 unfold
 let test0_Fun (r : ref nat) (x_ini : nat) = 

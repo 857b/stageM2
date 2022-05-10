@@ -230,8 +230,7 @@ let rec prog_has_shape (#a : Type u#a) (#pre : pre_t u#b) (#post : post_t u#a u#
                                     post_n = post'_n + L.length frame /\
                                     s == Sframe (L.length pre) post'_n (L.length frame) s_f /\
                                     prog_has_shape f s_f
-    | Tspec  _ pre post _ _       -> s == Sspec  (L.length pre) post_n /\
-                                    (forall (x : a) . L.length (post x) == post_n)
+    | Tspec  _ pre post _ _       -> s == Sspec  (L.length pre) post_n
     | Tret   _ _ post             -> post_n = L.length pre /\
                                     s == Sret   _
     | Tbind  a b pre itm post f g -> exists (itm_n : nat)

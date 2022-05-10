@@ -207,8 +207,6 @@ dist/Makefile.basic: $(ALL_KRML_FILES) c/*
 	  -add-include '<stdint.h>' \
 	  -add-include '"krml/internal/target.h"'
 	  @#-dstructs > _local/krml.out 2>&1
-	@#Suppress KaRaMel invocation command from output files
-	@for f in dist/*.h dist/*.c ; do (sed -ne '3P' "$$f" | grep -q "^  KaRaMeL invocation:") && sed -i -e '3,5d' "$$f" ; done; exit 0
 
 extract:dist/Makefile.basic
 

@@ -63,6 +63,36 @@ let return (#s : tys) (#a : s.t) ($x : s.v a) : prog_tree s a
 let bind (#s : tys) (#a #b : s.t) (f : prog_tree s a) (g : s.v a -> prog_tree s b) : prog_tree s b
   = Tbind a b f g
 
+
+(***** Shape *)
+
+type shape_tree : Type0 =
+  | Snew | Sasrt | Sasum | Sspec | Sret
+  | Sbind  : (f : shape_tree) -> (g : shape_tree) -> shape_tree
+  | SbindP : (g : shape_tree) -> shape_tree
+
+let rec prog_has_shape (#ts : tys) (#a : ts.t) (t : prog_tree u#t u#v u#r u#a ts a) (s : shape_tree)
+  : Tot prop (decreases t)
+  = match t returns prop with
+  | Tnew _           -> s == Snew
+  | Tasrt _          -> s == Sasrt
+  | Tasum _          -> s == Sasum
+  | Tspec _ _ _      -> s == Sspec
+  | Tret  _ _        -> s == Sret
+  | Tbind a _ f g    -> exists (s_f s_g : shape_tree) .
+                       s == Sbind s_f s_g /\
+                       prog_has_shape f s_f /\
+                      (forall (x : ts.v a) . prog_has_shape (g x) s_g)
+  | TbindP a _ _ f g -> exists (s_g : shape_tree) .
+                       s == SbindP s_g /\
+                      (forall (x : a) . prog_has_shape (g x) s_g)
+
+type prog_shape (#ts : tys) (#a : ts.t) (t : prog_tree ts a) =
+  s : shape_tree { prog_has_shape t s }
+
+
+(*** Semantics *)
+
 /// We do not ensure [tree_req f] in the post-condition of [Tbind]. This is equivalent (assuming the
 /// pre-condition, as in [equiv]) but it is simpler for reasoning about some program transformations.
 /// For instance, if one ensures [tree_req f] for the bind, the post-condition of `let x = f in x` is equivalent
@@ -92,7 +122,7 @@ and tree_ens (#s : tys) (#a : s.t) (t : prog_tree s a)
   | TbindP a _ wp _ g -> fun y -> (exists (x : a) . as_ensures wp x /\ tree_ens (g x) y)
 
 
-(*** Equivalence *)
+(***** Equivalence *)
 
 let equiv (#s : tys) (#a : s.t) (f g : prog_tree s a) : prop =
   (tree_req f <==> tree_req g) /\
@@ -112,7 +142,7 @@ let equiv_trans (#s : tys) (#a : s.t) (f g h : prog_tree s a)
   = ()
 
 
-(*** Weakest-precondition *)
+(***** Weakest-precondition *)
 
 module MP = FStar.Monotonic.Pure
 module T  = FStar.Tactics
