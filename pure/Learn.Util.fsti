@@ -22,6 +22,10 @@ let iff_refl (a b : Type0) :
   Lemma (requires a == b) (ensures a <==> b)
   = ()
 
+let eq2_trans #t (x z : t) (y : t) (p0 : squash (x == y)) (p1 : squash (y == z))
+  : Lemma (x == z)
+  = ()
+
 
 unfold
 let cast (#a b : Type) (x : a) : Pure b (requires a == b) (ensures fun y -> y == x)

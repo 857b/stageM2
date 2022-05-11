@@ -1,169 +1,55 @@
 module Experiment.Repr.Fun
 
-module U = Learn.Util
-
-/// [tys] describes a family of types, indexed by [t]. Those types are used for the returned values of programs.
-/// - [v] map the index to the associated type
-/// - [r ty] is a "concrete" representation of [v ty]
-/// - [unit] should be associated to a type with an unique element [emp]
-/// - [all] and [ex] are representations of the universal and existential quantification. They are used when
-///   generating the VC. They must be equivalent to a quantification on [v ty]
-noeq
-type tys' = {
-  t : Type u#t;
-  v : t -> Type u#v;
-  r : t -> Type u#r;
-  v_of_r : (#ty : t) -> r ty -> v ty;
-  r_of_v : (#ty : t) -> v ty -> r ty;
-  unit : t;
-  emp  : v unit;
-  all  : (ty : t) -> (v ty -> Type0) -> Type0;
-  ex   : (ty : t) -> (v ty -> Type0) -> Type0; 
-}
-
-type tys = s : tys' {
-  (forall (ty : s.t) (x : s.v ty) . {:pattern (s.v_of_r (s.r_of_v x))} s.v_of_r (s.r_of_v x) == x) /\
-  (forall (x : s.v s.unit) . x == s.emp) /\
-  (forall (ty : s.t) (f : s.v ty -> Type0) . {:pattern (s.all ty f)} s.all ty f <==> (forall (x : s.v ty) . f x)) /\
-  (forall (ty : s.t) (f : s.v ty -> Type0) . {:pattern (s.ex  ty f)} s.ex  ty f <==> (exists (x : s.v ty) . f x))
-}
-
-let can_tys : tys u#(v+1) u#v u#v = {
-  t = Type u#v;
-  v = (fun ty -> ty);
-  r = (fun ty -> ty);
-  v_of_r = (fun x -> x);
-  r_of_v = (fun x -> x);
-  unit = U.unit';
-  emp  = U.Unit';
-  all  = (fun ty p -> forall (x : ty) . p x);
-  ex   = (fun ty p -> exists (x : ty) . p x)
-}
-
-noeq
-type prog_tree (s : tys u#t u#v u#r) : s.t -> Type u#(max t v r a + 1) =
-  | Tnew   : (a : s.t) -> prog_tree s a
-  | Tasrt  : (p : prop) -> prog_tree s s.unit
-  | Tasum  : (p : prop) -> prog_tree s s.unit
-  | Tspec  : (a : s.t) -> (pre : pure_pre) -> (post : pure_post (s.v a)) ->
-             prog_tree s a
-  | Tret   : (a : s.t) -> (x : s.r a) -> prog_tree s a
-  | Tbind  : (a : s.t) -> (b : s.t) ->
-             (f : prog_tree s a) -> (g : s.v a -> prog_tree s b) ->
-             prog_tree s b
-  (* [a] could be of type [s.t] *)
-  | TbindP : (a : Type u#a) -> (b : s.t) ->
-             (wp : pure_wp a) -> (x : unit -> PURE a wp) -> (g : a -> prog_tree s b) ->
-             prog_tree s b
-
-
-let return (#s : tys) (#a : s.t) ($x : s.v a) : prog_tree s a
-  = Tret a (s.r_of_v x)
-
-let bind (#s : tys) (#a #b : s.t) (f : prog_tree s a) (g : s.v a -> prog_tree s b) : prog_tree s b
-  = Tbind a b f g
-
-
-(***** Shape *)
-
-type shape_tree : Type0 =
-  | Snew | Sasrt | Sasum | Sspec | Sret
-  | Sbind  : (f : shape_tree) -> (g : shape_tree) -> shape_tree
-  | SbindP : (g : shape_tree) -> shape_tree
-
-let rec prog_has_shape (#ts : tys) (#a : ts.t) (t : prog_tree u#t u#v u#r u#a ts a) (s : shape_tree)
-  : Tot prop (decreases t)
-  = match t returns prop with
-  | Tnew _           -> s == Snew
-  | Tasrt _          -> s == Sasrt
-  | Tasum _          -> s == Sasum
-  | Tspec _ _ _      -> s == Sspec
-  | Tret  _ _        -> s == Sret
-  | Tbind a _ f g    -> exists (s_f s_g : shape_tree) .
-                       s == Sbind s_f s_g /\
-                       prog_has_shape f s_f /\
-                      (forall (x : ts.v a) . prog_has_shape (g x) s_g)
-  | TbindP a _ _ f g -> exists (s_g : shape_tree) .
-                       s == SbindP s_g /\
-                      (forall (x : a) . prog_has_shape (g x) s_g)
-
-type prog_shape (#ts : tys) (#a : ts.t) (t : prog_tree ts a) =
-  s : shape_tree { prog_has_shape t s }
-
-
-(*** Semantics *)
-
-/// We do not ensure [tree_req f] in the post-condition of [Tbind]. This is equivalent (assuming the
-/// pre-condition, as in [equiv]) but it is simpler for reasoning about some program transformations.
-/// For instance, if one ensures [tree_req f] for the bind, the post-condition of `let x = f in x` is equivalent
-/// to the post-condition of `f` only when the pre-condition holds.
-/// The same holds for [as_requires wp] in the post-condition of [TbindP].
-
-let rec tree_req (#s : tys) (#a : s.t) (t : prog_tree s a)
-  : Tot pure_pre (decreases t)
-  = match t with
-  | Tnew   _          -> True
-  | Tasrt  p          -> p
-  | Tasum  _          -> True
-  | Tspec  _ pre _    -> pre
-  | Tret   _ _        -> True
-  | Tbind  a b f g    -> tree_req f /\ s.all a (fun (x : s.v a) -> tree_ens f x ==> tree_req (g x))
-  | TbindP a _ wp _ g -> wp (fun x -> tree_req (g x))
-
-and tree_ens (#s : tys) (#a : s.t) (t : prog_tree s a)
-  : Tot (pure_post (s.v a)) (decreases t)
-  = match t with
-  | Tnew   _          -> fun _  -> True
-  | Tasrt  p          -> fun _(*()*) -> True (* p ?*)
-  | Tasum  p          -> fun _(*()*) -> p
-  | Tspec  a _ post   -> post
-  | Tret   _ x        -> fun r  -> r == s.v_of_r x
-  | Tbind  a _ f g    -> fun y  -> s.ex a (fun (x : s.v a) -> tree_ens f x /\ tree_ens (g x) y)
-  | TbindP a _ wp _ g -> fun y -> (exists (x : a) . as_ensures wp x /\ tree_ens (g x) y)
+module T = FStar.Tactics
+open FStar.Classical.Sugar
+open FStar.Calc
 
 
 (***** Equivalence *)
 
-let equiv (#s : tys) (#a : s.t) (f g : prog_tree s a) : prop =
-  (tree_req f <==> tree_req g) /\
-  (tree_req f ==> (forall (x : s.v a) . tree_ens f x <==> tree_ens g x))
+#push-options "--ifuel 0 --fuel 1"
+let equiv_Tbind
+      (#s : tys) (#a #b : s.t)
+      (f f' : prog_tree a) (g g' : (x : s.v a) -> prog_tree b)
+      (eq_f : squash (equiv f f')) (eq_g : (x : s.v a) -> squash (equiv (g x) (g' x)))
+  : Lemma (equiv (Tbind a b f g) (Tbind a b f' g'))
+  = 
+    FStar.Classical.forall_intro_squash_gtot eq_g;
+    assert (equiv (Tbind a b f g) (Tbind a b f' g'))
+      by T.(//unfold one level of tree_ens / tree_req
+            norm [delta_only [`%equiv; `%tree_req; `%tree_ens]; zeta];
+            norm [iota];
+            smt ())
 
+let equiv_TbindP
+      (#s : tys) (#a : Type) (#b : s.t) (wp : pure_wp a) (f : unit -> PURE a wp)
+      (g g' : (x : a) -> prog_tree b)
+      (eq_g : (x : a) -> squash (equiv (g x) (g' x)))
+  : Lemma (equiv (TbindP a b wp f g) (TbindP a b wp f g'))
+  =
+    FStar.Classical.forall_intro_squash_gtot eq_g;
+    MP.elim_pure_wp_monotonicity wp;
+    assert (equiv (TbindP a b wp f g) (TbindP a b wp f g'))
+      by T.(norm [delta_only [`%equiv; `%tree_req; `%tree_ens]; zeta];
+            norm [iota];
+            smt ())
 
-let equiv_refl (#s : tys) (#a : s.t) (f : prog_tree s a)
-  : Lemma (equiv f f)
-  = ()
+let equiv_Tbind_assoc_Tbind
+      (#s : tys) (#a #b #c : s.t)
+      (f : prog_tree #s a) (g : (x : s.v a) -> prog_tree b) (h : (y : s.v b) -> prog_tree c)
+  : Lemma (equiv (bind (bind f g) h) (bind f (fun x -> bind (g x) h)))
+  =
+    assert (equiv (bind (bind f g) h) (bind f (fun x -> bind (g x) h)))
+      by T.(norm [delta_only [`%equiv; `%tree_req; `%tree_ens; `%bind]; zeta];
+            norm [iota];
+            smt ())
+#pop-options
 
-let equiv_sym (#s : tys) (#a : s.t) (f g : prog_tree s a)
-  : Lemma (requires equiv f g) (ensures equiv g f)
-  = ()
-
-let equiv_trans (#s : tys) (#a : s.t) (f g h : prog_tree s a)
-  : Lemma (requires equiv f g /\ equiv g h) (ensures equiv f h)
-  = ()
-
+(**) let __end_section_equiv = ()
 
 (***** Weakest-precondition *)
 
-module MP = FStar.Monotonic.Pure
-module T  = FStar.Tactics
-module U  = Learn.Util
-open FStar.Classical.Sugar
-
-
-let rec tree_wp (#s : tys) (#a : s.t) (t : prog_tree s a)
-  : Tot (pure_wp (s.v a)) (decreases t)
-  = match t with
-  | Tnew  a           -> MP.as_pure_wp (fun pt -> s.all a (fun (x : s.v a) -> pt x))
-  | Tasrt p           -> MP.as_pure_wp (fun pt -> p /\ (p ==> pt s.emp))
-  | Tasum p           -> MP.as_pure_wp (fun pt -> p ==> pt s.emp)
-  | Tspec a pre post  -> MP.as_pure_wp (fun pt -> pre /\ s.all a (fun (x : s.v a) -> post x ==> pt x))
-  | Tret  _ x         -> MP.as_pure_wp (fun pt -> pt (s.v_of_r x))
-  | Tbind a _ f g     -> MP.elim_pure_wp_monotonicity_forall ();
-                        MP.as_pure_wp (fun pt -> tree_wp f (fun (x : s.v a) -> tree_wp (g x) pt))
-  | TbindP a _ wp _ g -> MP.elim_pure_wp_monotonicity_forall ();
-                        MP.as_pure_wp (fun pt -> wp (fun (x : a) -> tree_wp (g x) pt))
-
-let rec tree_wp_sound (#s : tys) (#a : s.t) (t : prog_tree s a) (post : pure_post (s.v a))
+let rec tree_wp_sound (#s : tys) (#a : s.t) (t : prog_tree #s a) (post : pure_post (s.v a))
   : Lemma (requires tree_wp t post)
           (ensures  tree_req t /\ (forall (x : s.v a) . tree_ens t x ==> post x))
           (decreases t)
@@ -184,3 +70,133 @@ let rec tree_wp_sound (#s : tys) (#a : s.t) (t : prog_tree s a) (post : pure_pos
         with introduce _ ==> _ with _ . tree_wp_sound (g x) post;
       assert (tree_req (TbindP a b wp xf g) == (wp req1)) by T.(trefl ());
       U.prop_equal (fun p -> p) (wp req1) (tree_req (TbindP a b wp xf g))
+
+
+(*** Returns elimination *)
+
+unfold
+let equiv_with_fun (#st : tys) (#a #b : st.t) (f : prog_tree #st a) (g : prog_tree #st b) (h : st.v a -> st.v b)
+  : prop
+  = (tree_req g <==> tree_req f) /\
+    (forall (y : st.v b) . tree_req f ==>
+       (tree_ens g y <==> (exists (x : st.v a) . tree_ens f x /\ y == h x)))
+
+let equiv_bind_ret (#st : tys) (#a #b : st.t) (f : prog_tree #st a) (g : st.v a -> st.v b) (f' : prog_tree #st b)
+  : Lemma (requires equiv (Tbind _ _ f (elim_returns_k_ret g)) f')
+          (ensures  equiv_with_fun f f' g)
+  = ()
+
+let fseq (#a #b #c : Type) (f : a -> b) (g : b -> c) (x : a) = g (f x)
+
+let equiv_ret_ret (#st : tys) (#a #b #c : st.t) (f : st.v a -> st.v b) (g : st.v b -> st.v c) (x : st.v a)
+  : Lemma (equiv (Tbind _ _ (elim_returns_k_ret f x) (elim_returns_k_ret g))
+                 (elim_returns_k_ret (fseq f g) x))
+  = ()
+
+#push-options "--ifuel 0"
+let equiv_bind_ret_ret (#st : tys) (#a #b #c : st.t) (f : prog_tree #st a)
+                       (g : st.v a -> st.v b) (h : st.v b -> st.v c)
+  : Lemma (equiv (Tbind _ _ (Tbind _ _ f (elim_returns_k_ret g)) (elim_returns_k_ret h))
+                 (Tbind _ _ f (elim_returns_k_ret (fseq g h))))
+  =
+    let gh (x : st.v a) = Tbind _ _ (elim_returns_k_ret g x) (elim_returns_k_ret h) in 
+    calc (equiv) {
+      Tbind _ _ (Tbind _ _ f (elim_returns_k_ret g)) (elim_returns_k_ret h);
+    equiv { equiv_Tbind_assoc_Tbind f (elim_returns_k_ret g) (elim_returns_k_ret h) }
+      Tbind _ _ f gh;
+    equiv { equiv_Tbind f f gh (elim_returns_k_ret (fseq g h)) () (equiv_ret_ret g h) }
+      Tbind _ _ f (elim_returns_k_ret (fseq g h));
+    }
+#pop-options
+
+#push-options "--ifuel 1 --z3rlimit 20"
+let rec elim_returns_equiv
+      (#st : tys) (#a : st.t) (t : prog_tree u#t u#v u#r u#a #st a) (s : prog_shape t)
+  : Lemma (ensures equiv (elim_returns t s) t) (decreases %[t; 1])
+  =
+    let id (x : st.v a) = x in
+    assert (elim_returns t s == elim_returns_aux t s (ERetKfun id)) by T.(trefl ());
+    elim_returns_equiv_aux t s (ERetKfun id)
+
+and elim_returns_equiv_aux
+      (#st : tys) (#a : st.t) (t : prog_tree u#t u#v u#r u#a #st a) (s : prog_shape t)
+      (#a1 : st.t) (k : elim_returns_k st a a1)
+  : Lemma (ensures equiv (elim_returns_aux t s k) (Tbind a a1 t (elim_returns_k_trm k)))
+          (decreases %[t; 0])
+  = match t with
+  | Tnew _ | Tasrt _ | Tasum _ | Tspec _ _ _ -> ()
+  | Tret _ _ -> ()
+
+  | Tbind a b f g ->
+           let t = Tbind a b f g in
+           let Sbind s_f s_g = s in
+           let s = Sbind s_f s_g in
+           let k1_f (_ : squash (Sret? s_g)) (kf : st.v b -> st.v a1) (x : st.v a) =
+             kf (st.v_of_r (Tret?.x (g x)))                       in
+           let k1_t (x : st.v a) = elim_returns_aux (g x) s_g k   in
+           assert (elim_returns_aux t s k == (
+             match s_g, k with
+              | Sret true, ERetKfun kf -> elim_returns_aux f s_f (ERetKfun (k1_f () kf))
+              | _ -> elim_returns_aux f s_f (ERetKtrm k1_t)
+             )) by T.(trefl ());
+
+           begin match s_g, k with
+           | Sret true, ERetKfun kf ->
+              let k1_f = k1_f () kf                           in
+              let gf (x : st.v a) = st.v_of_r (Tret?.x (g x)) in
+              calc (equiv) {
+                elim_returns_aux t s k;
+              == { assert (elim_returns_aux t (Sbind s_f (Sret true)) (ERetKfun kf)
+                         == elim_returns_aux f s_f (ERetKfun k1_f))
+                      by T.(trefl ()) }
+                elim_returns_aux f s_f (ERetKfun k1_f);
+              equiv { elim_returns_equiv_aux f s_f (ERetKfun k1_f) }
+                Tbind _ _ f (elim_returns_k_ret k1_f);
+              == { assert (Tbind _ _ f (elim_returns_k_ret k1_f)
+                        == Tbind _ _ f (elim_returns_k_ret (fseq gf kf)))
+                     by T.(trefl ()) }
+                Tbind _ _ f (elim_returns_k_ret (fseq gf kf));
+              equiv { equiv_bind_ret_ret f gf kf }
+                Tbind _ _ (Tbind _ _ f (elim_returns_k_ret gf)) (elim_returns_k_ret kf);
+              equiv { equiv_Tbind f f (elim_returns_k_ret gf) g () (fun x -> ());
+                      equiv_Tbind (Tbind _ _ f (elim_returns_k_ret gf)) t
+                                  (elim_returns_k_ret kf) (elim_returns_k_ret kf)
+                                  () (fun x -> ()) }
+                Tbind _ _ t (elim_returns_k_trm k);
+              }
+           | _ ->
+              let k2 (x : st.v a) = Tbind _ _ (g x) (elim_returns_k_trm k) in
+              calc (equiv) {
+                elim_returns_aux t s k;  
+              == { }
+                elim_returns_aux f s_f (ERetKtrm k1_t);
+              equiv { elim_returns_equiv_aux f s_f (ERetKtrm k1_t) }
+                Tbind _ _ f k1_t;
+              equiv { equiv_Tbind f f k1_t k2 () (fun x -> elim_returns_equiv_aux (g x) s_g k) }
+                Tbind _ _ f k2;
+              equiv { equiv_Tbind_assoc_Tbind f g (elim_returns_k_trm k) }
+                Tbind _ _ t (elim_returns_k_trm k);
+              }
+           end
+
+  | TbindP a b wp f g ->
+           let t = TbindP a b wp f g in
+           let SbindP s_g = s        in
+           let s = SbindP s_g        in
+           begin match k with
+           | ERetKfun kf ->
+              let g1 (x : a) = elim_returns_aux (g x) s_g (ERetKfun #st #b kf) in
+              assert (elim_returns_aux t s (ERetKfun kf) == TbindP _ _ wp f g1)
+                by T.(trefl ());
+              introduce forall (x : a) . equiv_with_fun (g x) (g1 x) kf
+                with (elim_returns_equiv_aux (g x) s_g (ERetKfun #st #b kf);
+                      equiv_bind_ret (g x) kf (g1 x));
+              MP.elim_pure_wp_monotonicity wp
+           | ERetKtrm kt ->
+               let g1 (x : a) = elim_returns (g x) s_g in
+               assert (elim_returns_aux t s (ERetKtrm kt) == Tbind _ _ (TbindP _ _ wp f g1) kt)
+                 by T.(trefl ());
+               equiv_TbindP wp f g1 g (fun x -> elim_returns_equiv (g x) s_g);
+               equiv_Tbind (TbindP _ _ wp f g1) (TbindP _ _ wp f g) kt kt () (fun _ -> ())
+           end
+#pop-options

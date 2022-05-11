@@ -74,9 +74,9 @@ let post_Fun_of_ST__spec #a post pre_n post_n
          (assert (post' == U.eta post') by T.(trefl ())) (_ by T.(trefl ()))
          (fun x -> Ll.list_extensionality (post' x) (post x) (fun i -> ()))
 
-let post_Fun_of_ST__ret #a post post_n
+let post_Fun_of_ST__ret #a post smp_ret post_n
   =
-    let post' = post_Fun_of_ST post (ST.Sret post_n) in
+    let post' = post_Fun_of_ST post (ST.Sret smp_ret post_n) in
     U.funext_eta post' (U.eta post)
          (assert (post' == U.eta post') by T.(trefl ())) (_ by T.(trefl ()))
          (fun x -> Ll.list_extensionality (post' x) (post x) (fun i -> ()))
@@ -484,8 +484,8 @@ and repr_Fun_of_ST_ens
       Fl.flist_extensionality (sel_Fun_of_ST post s.shp x sl1) sl1 (fun _ -> ())
     end
     begin fun (*ST.Tret*) a x post -> fun s sl0 x sl1 ->
-      let ST.Sret post_n = s.shp in
-      post_Fun_of_ST__ret post post_n;
+      let ST.Sret smp_ret post_n = s.shp in
+      post_Fun_of_ST__ret post smp_ret post_n;
       Fl.flist_extensionality (sel_Fun_of_ST post s.shp x sl1) sl1 (fun _ -> ())
     end
     begin fun (*ST.Tbind*) a b pre itm post f g -> fun s sl0 y sl2 ->

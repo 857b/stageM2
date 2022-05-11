@@ -204,7 +204,7 @@ type shape_tree : (pre_n : nat) -> (post_n : nat) -> Type =
              shape_tree (pre_n + frame_n) (post_n + frame_n)
   | Sspec  : (pre_n : nat) -> (post_n : nat) ->
              shape_tree pre_n post_n
-  | Sret   : (n : nat) ->
+  | Sret   : (smp_ret : bool) -> (n : nat) ->
              shape_tree n n
   | Sbind  : (pre_n : nat) -> (itm_n : nat) -> (post_n : nat) ->
              (f : shape_tree pre_n itm_n) -> (g : shape_tree itm_n post_n) ->
@@ -231,8 +231,9 @@ let rec prog_has_shape (#a : Type u#a) (#pre : pre_t u#b) (#post : post_t u#a u#
                                     s == Sframe (L.length pre) post'_n (L.length frame) s_f /\
                                     prog_has_shape f s_f
     | Tspec  _ pre post _ _       -> s == Sspec  (L.length pre) post_n
-    | Tret   _ _ post             -> post_n = L.length pre /\
-                                    s == Sret   _
+    | Tret   _ _ post             -> exists (smp_ret : bool) .
+                                    post_n = L.length pre /\
+                                    s == Sret   smp_ret _
     | Tbind  a b pre itm post f g -> exists (itm_n : nat)
                                       (s_f : shape_tree (L.length pre) itm_n)
                                       (s_g : shape_tree itm_n          post_n) .
@@ -263,7 +264,7 @@ let rec prog_has_shape' (#a : Type u#a) (#pre : pre_t u#b) (#post : post_t u#a u
                                      (forall (x : a) . post_n = L.length (post x))
                                   | _ -> False)
   | Tret   _ _ post             -> (match s with
-                                  | Sret   _ -> (forall (x : a) . post_n = L.length (post x))
+                                  | Sret   _ _ -> (forall (x : a) . post_n = L.length (post x))
                                   | _ -> False)
   | Tbind  a b pre itm post f g -> (match s with
                                   | Sbind _ itm_n _ s_f s_g ->
@@ -328,9 +329,9 @@ let rec shape_ST_of_M (#pre_n : nat) (#post_n : nat) (s : M.shape_tree pre_n pos
         Sbind _ _ _ (Sequiv (pre_n  + frame_n) p0) (
         Sbind _ _ _ (Sframe pre_n post_n frame_n (Sspec  pre_n post_n)) (
         Sbind _ _ _ (Sequiv (post_n + frame_n) p1)
-                    (Sret   (post_n + frame_n))))
+                    (Sret   true (post_n + frame_n))))
   | M.Sret n p ->
-        Sbind _ _ _ (Sequiv n p) (Sret n)
+        Sbind _ _ _ (Sequiv n p) (Sret false n)
   | M.Sbind _ _ _ f g -> Sbind  _ _ _ (shape_ST_of_M f) (shape_ST_of_M g)
   | M.SbindP _ _ g    -> SbindP _ _ (shape_ST_of_M g)
                     
@@ -358,6 +359,8 @@ val repr_ST_of_M_shape
 
 
 (*** Binders flattening *)
+
+// TODO? simplify using something similar to [Repr.Fun.elim_returns]
 
 let flatten_prog_k_id #a #post #pre' (t' : prog_tree a pre' post) : prog_tree a pre' post
   = t'
@@ -398,7 +401,7 @@ and flatten_shape_aux
       #post1_n (k : ((#pre'_n : nat) -> (t' : shape_tree pre'_n post_n) -> shape_tree pre'_n post1_n))
   : Tot (shape_tree pre_n post1_n) (decreases %[t; 0])
   = match t with
-  | Sequiv _ _ | Sspec _ _ | Sret _ -> k t
+  | Sequiv _ _ | Sspec _ _ | Sret _ _ -> k t
   | Sframe _ _ frame_n f ->
              k (Sframe _ _ frame_n (flatten_shape f))
   | Sbind  pre_n itm_n post_n f g ->

@@ -41,6 +41,41 @@ let normal_flatten_prog : list norm_step = [
              by T.(norm normal_flatten_prog; fail "print")*)
 
 
+////////// test_elim_returns //////////
+
+let test_elim_returns : Fun.prog_tree #Fun.can_tys int = Fun.(
+  (**) let wp pt = pt 1 in
+  (**) FStar.Monotonic.Pure.intro_pure_wp_monotonicity wp;
+  y <-- TbindP int int wp (fun () -> 1)
+                     (fun x -> return (x + 1));
+  return (y + 2))
+
+unfold
+let test_elim_returns_shape_tree : Fun.shape_tree = Fun.(
+  Sbind (SbindP (Sret true)) (Sret true))
+
+let test_elim_returns_shape : Fun.prog_shape #Fun.can_tys #int test_elim_returns
+  =
+    (**) assert (Fun.prog_has_shape' test_elim_returns test_elim_returns_shape_tree)
+           by T.(norm [delta_only [`%Fun.prog_has_shape']; delta_qualifier ["unfold"]; zeta; iota; simplify];
+                 smt ());
+    test_elim_returns_shape_tree
+
+let normal_elim_returns : list norm_step = [
+    delta_only [`%Fun.elim_returns; `%Fun.elim_returns_aux; `%Fun.elim_returns_k_trm; `%Fun.elim_returns_k_ret;
+                `%Fun.Mktys'?.v_of_r; `%Fun.Mktys'?.r_of_v;
+                `%Fun.can_tys];
+    delta_qualifier ["unfold"];
+    iota; zeta
+  ]
+
+(*let () =
+  assert (print_util (Fun.elim_returns test_elim_returns test_elim_returns_shape))
+    by T.(norm [delta_only [`%test_elim_returns; `%test_elim_returns_shape]];
+          norm normal_elim_returns;
+          fail "print")*)
+
+
 ////////// test0 //////////
 
 unfold
@@ -231,6 +266,41 @@ let normal_repr_Fun_of_Steel : list norm_step = [
               norm normal_repr_Fun_of_Steel;
               qed ())*)
 
+(* TODO *)
+let normal_Fun_elim_returns : list norm_step = [
+    delta_only [`%Fun.elim_returns; `%Fun.elim_returns_aux; `%Fun.elim_returns_k_trm; `%Fun.elim_returns_k_ret;
+                `%SF.shape_Fun_of_Steel; `%SF.Mkprog_shape?.post_len; `%SF.Mkprog_shape?.shp];
+    delta_qualifier ["unfold"];
+    iota; zeta; primops
+  ]
+
+let normal_after_Fun_elim_returns : list norm_step = [
+    delta_only [`%SF.sl_tys;
+                `%Fun.Mktys'?.v_of_r;   `%SF.sl_v_of_r; `%Fun.Mktys'?.r_of_v; `%SF.sl_r_of_v;
+                `%SF.Mksl_tys_t?.val_t; `%SF.Mksl_tys_t?.sel_t;
+                (* TODO : replace the record sl_tys_v by a function type to avoid reduction *)
+                `%SF.Mksl_tys_v?.val_v; `%SF.Mksl_tys_v?.sel_v;
+                `%SF.Mksl_tys_r?.vl;    `%SF.Mksl_tys_r?.sl;
+                `%Fl.cons; `%Fl.nil; `%Fl.dlist_of_f; `%Fl.flist_of_d; `%Dl.initi; `%Dl.index;
+                `%L.length; `%Ll.initi;
+                `%SF.shape_Fun_of_Steel; `%SF.Mkprog_shape?.post_len; `%SF.Mkprog_shape?.shp];
+    delta_qualifier ["unfold"];
+    iota; zeta; primops
+  ]
+
+(*let _ = fun r x_ini ->
+    (**) SF.repr_Fun_of_Steel_shape (test0_SF r x_ini) (test0_shape_SF r x_ini);
+    assert (print_util (Fun.elim_returns (test0_Fun r x_ini)
+                                         (SF.shape_Fun_of_Steel (test0_shape_SF r x_ini).shp)))
+        by T.(norm normal_tree_ST;
+              norm normal_shape_ST;
+              norm normal_tree_SF;
+              norm normal_repr_Fun_of_Steel;
+              let _ = repeatn 3 (fun () -> norm normal_Fun_elim_returns;
+                                        norm [delta; iota]) in
+              norm normal_after_Fun_elim_returns;
+              fail "print")*)
+
 unfold
 let test0_wp (r : ref nat) (x_ini : nat) =
   Fun.tree_wp (test0_Fun r x_ini) (fun res -> res.val_v >= 0)
@@ -278,7 +348,7 @@ let test1_shape_tree_ST : ST.shape_tree 2 2 = ST.(
  (Sbind _ _ _ (Sequiv 2 (Perm.perm_f_swap #2 0))
  (Sbind _ _ _ (Sframe _ _ 1 (Sspec  1 1))
  (Sbind _ _ _ (Sequiv 2 (Perm.perm_f_swap #2 0))
-              (Sret   2)))))
+              (Sret   true 2)))))
 
 
 let normal_shape_ST' : list norm_step = [
