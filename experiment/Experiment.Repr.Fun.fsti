@@ -255,12 +255,12 @@ val tree_wp_sound (#s : tys) (#a : s.t) (t : prog_tree #s a) (post : pure_post (
 (*** Returns elimination *)
 
 /// This transformation aims to eliminate the [Tret] introduced by previous transformations (Steel.Repr.M ->
-/// Steel.Repr.ST -> Steel.Repr.Fun).
+/// Steel.Repr.ST -> Steel.Repr.SF).
 /// We do not try to handle all possible simplifications but rather to have a transformation that works in our cases.
 /// It currently performs a binders flattening (similar to the one on Steel.Repr.ST), with a special handling of
 /// returns in order to be able to push them below [TbindP].
 /// We only simplify the returns marked with [smp_ret] in the shape, that is, the returns introduced by the
-/// transformations. (TODO: test)
+/// previous transformations. (TODO: test)
 
 noeq
 type elim_returns_k (st : tys) (a a1 : st.t) =
