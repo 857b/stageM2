@@ -1,8 +1,11 @@
 module Experiment.Repr.Fun
 
 module U  = Learn.Util
+module T = FStar.Tactics
 module MP = FStar.Monotonic.Pure
 
+
+(*** Parameter *)
 
 /// [tys] describes a family of types, indexed by [t]. Those types are used for the returned values of programs.
 /// - [v] map the index to the associated type
@@ -23,14 +26,33 @@ type tys' = {
   ex   : (ty : t) -> (v ty -> Type0) -> Type0; 
 }
 
-type tys = s : tys' {
+let tys_hyp (s : tys') : prop =
   (forall (ty : s.t) (x : s.v ty) . {:pattern (s.v_of_r (s.r_of_v x))} s.v_of_r (s.r_of_v x) == x) /\
   (forall (x : s.v s.unit) . x == s.emp) /\
   (forall (ty : s.t) (f : s.v ty -> Type0) . {:pattern (s.all ty f)} s.all ty f <==> (forall (x : s.v ty) . f x)) /\
   (forall (ty : s.t) (f : s.v ty -> Type0) . {:pattern (s.ex  ty f)} s.ex  ty f <==> (exists (x : s.v ty) . f x))
+
+type tys = s : tys' {tys_hyp s}
+
+/// [tys_lam] is used to unpack the values when building a function.
+/// Since we need to use it for post-conditions and trees we requires two versions (because of universes and Ghost
+/// effect).
+noeq
+type tys_lam' (s : tys u#t u#v u#r) = {
+  lam_prop : (#src : s.t) -> (f : pure_post (s.v src)) -> pure_post (s.v src);
+  lam_tree : (#src : s.t) -> (#trg : Type u#a) -> (f : s.v src -> trg) -> (s.v src -> trg);
 }
 
-let can_tys : tys u#(v+1) u#v u#v = {
+let tys_lam_id (#s : tys) (lm : tys_lam' s) : prop =
+  (forall (src : s.t) (f : pure_post (s.v src)) . lm.lam_prop f == (fun (x : s.v src) -> f x)) /\
+  (forall (src : s.t) (trg : Type) (f : s.v src -> trg) . lm.lam_tree f == (fun (x : s.v src) -> f x))
+
+type tys_lam (s : tys) = lm : tys_lam' s {tys_lam_id lm}
+
+/// Canonical instantiation of [tys]
+
+unfold
+let can_tys' : tys' u#(v+1) u#v u#v = {
   t = Type u#v;
   v = (fun ty -> ty);
   r = (fun ty -> ty);
@@ -41,6 +63,29 @@ let can_tys : tys u#(v+1) u#v u#v = {
   all  = (fun ty p -> forall (x : ty) . p x);
   ex   = (fun ty p -> exists (x : ty) . p x)
 }
+
+let can_tys : tys u#(v+1) u#v u#v =
+  (**) assert (tys_hyp can_tys') by T.(norm [delta]; smt ());
+  can_tys'
+
+unfold
+let can_lam' (s : tys) : tys_lam' s = {
+  lam_prop = (fun f -> (fun x -> f x));
+  lam_tree = (fun f -> (fun x -> f x))
+}
+
+let can_lam (s : tys) : tys_lam s =
+  let lm = can_lam' s in
+  (**) assert (forall (src : s.t) (f : pure_post (s.v src)) .
+  (**)           lm.lam_prop f == (fun (x : s.v src) -> f x))
+  (**)  by T.(let _ = forall_intros () in trefl ());
+  (**) assert (forall (src : s.t) (trg : Type) (f : s.v src -> trg) .
+  (**)           lm.lam_tree #src #trg f == (fun (x : s.v src) -> f x))
+  (**)   by T.(let _ = forall_intros () in trefl ());
+  lm
+
+
+(*** [prog_tree] *)
 
 noeq
 type prog_tree (#s : tys u#t u#v u#r) : s.t -> Type u#(max t v r a + 1) =
@@ -233,45 +278,55 @@ let elim_returns_k_trm (#st : tys) (#a #a1 : st.t) (k : elim_returns_k st a a1)
   | ERetKtrm kt -> kt
 
 let rec elim_returns
-      (#st : tys) (#a : st.t) (t : prog_tree u#t u#v u#r u#a #st a) (s : prog_shape t)
+      (#st : tys) (lm : tys_lam u#t u#v u#r u#(max t v r a + 1) st)
+      (#a : st.t) (t : prog_tree u#t u#v u#r u#a #st a) (s : prog_shape t)
   : Tot (prog_tree u#t u#v u#r u#a #st a) (decreases %[t; 1])
-  = elim_returns_aux t s (ERetKfun id)
+  = elim_returns_aux lm t s (ERetKfun id)
 
 and elim_returns_aux
-      (#st : tys) (#a : st.t) (t : prog_tree u#t u#v u#r u#a #st a) (s : prog_shape t)
+      (#st : tys) (lm : tys_lam u#t u#v u#r u#(max t v r a + 1) st)
+      (#a : st.t) (t : prog_tree u#t u#v u#r u#a #st a) (s : prog_shape t)
       (#a1 : st.t) (k : elim_returns_k st a a1)
   : Tot (prog_tree u#t u#v u#r u#a #st a1) (decreases %[t; 0])
-  = match t with
-  | Tnew _ | Tasrt _ | Tasum _ | Tspec _ _ _ ->
-         Tbind _ _ t (elim_returns_k_trm k)
+  =
+  let bind (#a : st.t) (#b : st.t) (f : prog_tree #st a) (g : st.v a -> prog_tree #st b) : prog_tree #st b
+    = Tbind a b f (lm.lam_tree g)
+  in
+  match t with
+  | Tnew _ | Tasrt _ | Tasum _ ->
+         bind t (elim_returns_k_trm k)
+  | Tspec a pre post ->
+         bind (Tspec a pre (lm.lam_prop post)) (elim_returns_k_trm k)
   | Tret a x ->
          let Sret smp_ret = s in
          if smp_ret then elim_returns_k_trm k (st.v_of_r x)
          else begin match k with
          | ERetKfun kf -> Tret a1 (st.r_of_v (kf (st.v_of_r x)))
-         | ERetKtrm kt -> Tbind _ _ (Tret a x) kt
+         | ERetKtrm kt -> bind (Tret a x) kt
          end
   | Tbind a b f g ->
          let Sbind s_f s_g = s in
          begin match s_g, k with
          | Sret true, ERetKfun kf ->
                let k1 (x : st.v a) = kf (st.v_of_r (Tret?.x (g x))) in
-               elim_returns_aux f s_f (ERetKfun k1)
-         | _ -> let k1 (x : st.v a) = elim_returns_aux (g x) s_g k in
-               elim_returns_aux f s_f (ERetKtrm k1)
+               elim_returns_aux lm f s_f (ERetKfun k1)
+         | _ -> let k1 (x : st.v a) = elim_returns_aux lm (g x) s_g k in
+               elim_returns_aux lm f s_f (ERetKtrm k1)
          end
   | TbindP a b wp f g ->
          let SbindP s_g = s in
          begin match k with
-         | ERetKfun kf -> TbindP a a1 wp f (fun (x : a) -> elim_returns_aux (g x) s_g (ERetKfun kf))
-         | ERetKtrm kt -> Tbind b a1 (TbindP a b wp f (fun (x : a) -> elim_returns (g x) s_g)) kt
+         | ERetKfun kf -> TbindP a a1 wp f (fun (x : a) -> elim_returns_aux lm (g x) s_g (ERetKfun kf))
+         | ERetKtrm kt -> bind #b #a1 (TbindP a b wp f (fun (x : a) -> elim_returns lm (g x) s_g)) kt
          end
 
 val elim_returns_equiv
-      (#st : tys) (#a : st.t) (t : prog_tree u#t u#v u#r u#a #st a) (s : prog_shape t)
-  : Lemma (equiv (elim_returns t s) t)
+      (#st : tys) (lm : tys_lam u#t u#v u#r u#(max t v r a + 1) st)
+      (#a : st.t) (t : prog_tree u#t u#v u#r u#a #st a) (s : prog_shape t)
+  : Lemma (equiv (elim_returns lm t s) t)
 
 val elim_returns_equiv_aux
-      (#st : tys) (#a : st.t) (t : prog_tree u#t u#v u#r u#a #st a) (s : prog_shape t)
+      (#st : tys) (lm : tys_lam u#t u#v u#r u#(max t v r a + 1) st)
+      (#a : st.t) (t : prog_tree u#t u#v u#r u#a #st a) (s : prog_shape t)
       (#a1 : st.t) (k : elim_returns_k st a a1)
-  : Lemma (equiv (elim_returns_aux t s k) (Tbind a a1 t (elim_returns_k_trm k)))
+  : Lemma (equiv (elim_returns_aux lm t s k) (Tbind a a1 t (elim_returns_k_trm k)))

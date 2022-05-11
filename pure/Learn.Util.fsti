@@ -1,5 +1,7 @@
 module Learn.Util
 
+module T = FStar.Tactics
+
 val hide_prop : prop -> prop
 
 val hide_propI (p : prop) : Lemma (requires p) (ensures hide_prop p)
@@ -50,16 +52,30 @@ let app_on (#a : Type) (x : a) (b : Type) (f : a -> b) = f x
 [@@ __util_func__]
 let eta (#a:Type) (#b: a -> Type) (f: (x:a -> b x)) = fun x -> f x
 
+[@@ __util_func__]
+let eta_gtot (#a:Type) (#b: a -> Type) (f: (x:a -> GTot (b x))) = fun x -> f x
+
 val funext_on_eta (#a : Type) (#b: a -> Type) (f g : (x:a -> b x))
-                  (hp : (x:a -> Lemma (f x == g x)))
+                  (hp : (x:a -> squash (f x == g x)))
   : squash (eta f == eta g)
+
+val funext_on_eta_gtot (#a : Type) (#b: a -> Type) (f g : (x:a -> GTot (b x)))
+                  (hp : (x:a -> squash (f x == g x)))
+  : squash (eta_gtot f == eta_gtot g)
+
 
 (* TODO? automatically discharge equalities with trefl : with_tactic ? *)
 let funext_eta (#a : Type) (#b : a -> Type) (f g : (x:a -> b x))
                (ef : squash (f == eta f)) (eg : squash (g == eta g))
-               (eq : (x:a -> Lemma (f x == g x)))
+               (eq : (x:a -> squash (f x == g x)))
   : Lemma (f == g)
   = funext_on_eta f g eq
+
+let funext_eta_gtot (#a : Type) (#b : a -> Type) (f g : (x:a -> GTot (b x)))
+               (ef : squash (f == eta_gtot f)) (eg : squash (g == eta_gtot g))
+               (eq : (x:a -> squash (f x == g x)))
+  : Lemma (f == g)
+  = funext_on_eta_gtot f g eq
 
 
 /// [unit] for an arbitrary universe
@@ -68,3 +84,7 @@ type unit' : Type u#a = | Unit' : unit'
 /// Using [let () = block_red in t] will prevent the heuristic used for zeta-normalisation from unfolding
 /// recursive functions in [t] until [block_red] is unfolded.
 let block_red : unit = ()
+
+/// try to clear each binder
+let clear_all () : T.Tac unit =
+  T.(iter (fun bd -> try clear bd with | _ -> ()) (FStar.List.rev (cur_binders ())))

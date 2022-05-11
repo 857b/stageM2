@@ -307,7 +307,6 @@ val post_Fun_of_ST__ret
   : Lemma (post_Fun_of_ST post (ST.Sret smp_ret post_n) == U.eta post)
 
 
-(* TODO? markers *)
 let rec repr_Fun_of_ST
       (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
       (t : ST.prog_tree a pre post)
@@ -570,10 +569,30 @@ let sl_tys' : Fun.tys' u#(max a b + 1) u#(max a (b + 1)) u#(max a (b + 1)) = {
   ex   = sl_ex;
 }
 
+val sl_tys_hyp : unit -> Lemma (Fun.tys_hyp (sl_tys' u#a u#b))
+
 let sl_tys : Fun.tys u#(max a b + 1) u#(max a (b + 1)) u#(max a (b + 1)) =
-  (**) introduce forall (x : sl_tys'.v sl_tys'.unit) . x == sl_tys'.emp
-  (**)   with Fl.nil_uniq x.sel_v;
+  (**) sl_tys_hyp ();
   sl_tys'
+
+
+let delayed_sl_uncurrify
+      (#val_t : Type) (#sel_t : post_t val_t) (#dst : Type)
+      (f : (v : val_t) -> (sls : Fl.flist (sel_t v)) -> dst)
+      (x : sl_tys_v ({val_t; sel_t})) : dst
+  = f x.val_v x.sel_v 
+
+unfold
+let sl_tys_lam' : Fun.tys_lam' sl_tys = {
+  lam_prop = (fun #src f -> delayed_sl_uncurrify #src.val_t #src.sel_t (fun val_v sel_v -> f ({val_v; sel_v})));
+  lam_tree = (fun #src f -> delayed_sl_uncurrify #src.val_t #src.sel_t (fun val_v sel_v -> f ({val_v; sel_v})));
+}
+
+val sl_tys_lam_id : unit -> Lemma (Fun.tys_lam_id sl_tys_lam')
+
+let sl_tys_lam : Fun.tys_lam sl_tys =
+  (**) sl_tys_lam_id ();
+  sl_tys_lam'
 
 
 (***** Translation of the representation *)

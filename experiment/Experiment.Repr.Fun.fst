@@ -111,19 +111,23 @@ let equiv_bind_ret_ret (#st : tys) (#a #b #c : st.t) (f : prog_tree #st a)
 
 #push-options "--ifuel 1 --z3rlimit 20"
 let rec elim_returns_equiv
-      (#st : tys) (#a : st.t) (t : prog_tree u#t u#v u#r u#a #st a) (s : prog_shape t)
-  : Lemma (ensures equiv (elim_returns t s) t) (decreases %[t; 1])
+      (#st : tys) (lm : tys_lam st) (#a : st.t) (t : prog_tree #st a) (s : prog_shape t)
+  : Lemma (ensures equiv (elim_returns lm t s) t) (decreases %[t; 1])
   =
     let id (x : st.v a) = x in
-    assert (elim_returns t s == elim_returns_aux t s (ERetKfun id)) by T.(trefl ());
-    elim_returns_equiv_aux t s (ERetKfun id)
+    assert (elim_returns lm t s == elim_returns_aux lm t s (ERetKfun id)) by T.(trefl ());
+    elim_returns_equiv_aux lm t s (ERetKfun id)
 
 and elim_returns_equiv_aux
-      (#st : tys) (#a : st.t) (t : prog_tree u#t u#v u#r u#a #st a) (s : prog_shape t)
+      (#st : tys) (lm : tys_lam st) (#a : st.t) (t : prog_tree #st a) (s : prog_shape t)
       (#a1 : st.t) (k : elim_returns_k st a a1)
-  : Lemma (ensures equiv (elim_returns_aux t s k) (Tbind a a1 t (elim_returns_k_trm k)))
+  : Lemma (ensures equiv (elim_returns_aux lm t s k) (Tbind a a1 t (elim_returns_k_trm k)))
           (decreases %[t; 0])
-  = match t with
+  =
+  let bind (#a : st.t) (#b : st.t) (f : prog_tree #st a) (g : st.v a -> prog_tree #st b) : prog_tree #st b
+    = Tbind a b f (lm.lam_tree g)
+  in
+  match t with
   | Tnew _ | Tasrt _ | Tasum _ | Tspec _ _ _ -> ()
   | Tret _ _ -> ()
 
@@ -133,11 +137,11 @@ and elim_returns_equiv_aux
            let s = Sbind s_f s_g in
            let k1_f (_ : squash (Sret? s_g)) (kf : st.v b -> st.v a1) (x : st.v a) =
              kf (st.v_of_r (Tret?.x (g x)))                       in
-           let k1_t (x : st.v a) = elim_returns_aux (g x) s_g k   in
-           assert (elim_returns_aux t s k == (
+           let k1_t (x : st.v a) = elim_returns_aux lm (g x) s_g k   in
+           assert (elim_returns_aux lm t s k == (
              match s_g, k with
-              | Sret true, ERetKfun kf -> elim_returns_aux f s_f (ERetKfun (k1_f () kf))
-              | _ -> elim_returns_aux f s_f (ERetKtrm k1_t)
+              | Sret true, ERetKfun kf -> elim_returns_aux lm f s_f (ERetKfun (k1_f () kf))
+              | _ -> elim_returns_aux lm f s_f (ERetKtrm k1_t)
              )) by T.(trefl ());
 
            begin match s_g, k with
@@ -145,12 +149,12 @@ and elim_returns_equiv_aux
               let k1_f = k1_f () kf                           in
               let gf (x : st.v a) = st.v_of_r (Tret?.x (g x)) in
               calc (equiv) {
-                elim_returns_aux t s k;
-              == { assert (elim_returns_aux t (Sbind s_f (Sret true)) (ERetKfun kf)
-                         == elim_returns_aux f s_f (ERetKfun k1_f))
+                elim_returns_aux lm t s k;
+              == { assert (elim_returns_aux lm t (Sbind s_f (Sret true)) (ERetKfun kf)
+                         == elim_returns_aux lm f s_f (ERetKfun k1_f))
                       by T.(trefl ()) }
-                elim_returns_aux f s_f (ERetKfun k1_f);
-              equiv { elim_returns_equiv_aux f s_f (ERetKfun k1_f) }
+                elim_returns_aux lm f s_f (ERetKfun k1_f);
+              equiv { elim_returns_equiv_aux lm f s_f (ERetKfun k1_f) }
                 Tbind _ _ f (elim_returns_k_ret k1_f);
               == { assert (Tbind _ _ f (elim_returns_k_ret k1_f)
                         == Tbind _ _ f (elim_returns_k_ret (fseq gf kf)))
@@ -167,12 +171,12 @@ and elim_returns_equiv_aux
            | _ ->
               let k2 (x : st.v a) = Tbind _ _ (g x) (elim_returns_k_trm k) in
               calc (equiv) {
-                elim_returns_aux t s k;  
+                elim_returns_aux lm t s k;
               == { }
-                elim_returns_aux f s_f (ERetKtrm k1_t);
-              equiv { elim_returns_equiv_aux f s_f (ERetKtrm k1_t) }
+                elim_returns_aux lm f s_f (ERetKtrm k1_t);
+              equiv { elim_returns_equiv_aux lm f s_f (ERetKtrm k1_t) }
                 Tbind _ _ f k1_t;
-              equiv { equiv_Tbind f f k1_t k2 () (fun x -> elim_returns_equiv_aux (g x) s_g k) }
+              equiv { equiv_Tbind f f k1_t k2 () (fun x -> elim_returns_equiv_aux lm (g x) s_g k) }
                 Tbind _ _ f k2;
               equiv { equiv_Tbind_assoc_Tbind f g (elim_returns_k_trm k) }
                 Tbind _ _ t (elim_returns_k_trm k);
@@ -185,18 +189,18 @@ and elim_returns_equiv_aux
            let s = SbindP s_g        in
            begin match k with
            | ERetKfun kf ->
-              let g1 (x : a) = elim_returns_aux (g x) s_g (ERetKfun #st #b kf) in
-              assert (elim_returns_aux t s (ERetKfun kf) == TbindP _ _ wp f g1)
+              let g1 (x : a) = elim_returns_aux lm (g x) s_g (ERetKfun #st #b kf) in
+              assert (elim_returns_aux lm t s (ERetKfun kf) == TbindP _ _ wp f g1)
                 by T.(trefl ());
               introduce forall (x : a) . equiv_with_fun (g x) (g1 x) kf
-                with (elim_returns_equiv_aux (g x) s_g (ERetKfun #st #b kf);
+                with (elim_returns_equiv_aux lm (g x) s_g (ERetKfun #st #b kf);
                       equiv_bind_ret (g x) kf (g1 x));
               MP.elim_pure_wp_monotonicity wp
            | ERetKtrm kt ->
-               let g1 (x : a) = elim_returns (g x) s_g in
-               assert (elim_returns_aux t s (ERetKtrm kt) == Tbind _ _ (TbindP _ _ wp f g1) kt)
+               let g1 (x : a) = elim_returns lm (g x) s_g in
+               assert (elim_returns_aux lm t s (ERetKtrm kt) == bind (TbindP _ _ wp f g1) kt)
                  by T.(trefl ());
-               equiv_TbindP wp f g1 g (fun x -> elim_returns_equiv (g x) s_g);
+               equiv_TbindP wp f g1 g (fun x -> elim_returns_equiv lm (g x) s_g);
                equiv_Tbind (TbindP _ _ wp f g1) (TbindP _ _ wp f g) kt kt () (fun _ -> ())
            end
 #pop-options

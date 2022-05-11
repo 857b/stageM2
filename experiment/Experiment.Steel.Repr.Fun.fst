@@ -551,6 +551,43 @@ let __begin_repr_fun_of_steel = ()
 
 module Fun = Experiment.Repr.Fun
 
+
+let sl_tys_hyp () : Lemma (Fun.tys_hyp (sl_tys' u#a u#b)) =
+  introduce forall (x : sl_tys'.v sl_tys'.unit) . x == sl_tys'.emp
+    with Fl.nil_uniq x.sel_v;
+  assert (Fun.tys_hyp sl_tys') by T.(norm [delta_only [`%Fun.tys_hyp]])
+
+let sl_tys_lam_id ()
+  : Lemma (Fun.tys_lam_id sl_tys_lam')
+  =
+    let s  = sl_tys      in
+    let lm = sl_tys_lam' in
+    introduce forall (src : sl_tys_t) (f : pure_post (sl_tys_v src)) .
+            lm.lam_prop f == (fun (x : sl_tys_v src) -> f x)
+    with begin
+      let {val_t; sel_t} = src <: sl_tys_t in
+      U.funext_eta_gtot (sl_tys_lam'.lam_prop #({val_t; sel_t}) f)
+                   (fun (x : sl_tys_v ({val_t; sel_t})) -> f x)
+        (_ by T.(trefl ())) (_ by T.(trefl())) (fun x -> ());
+      U.prop_equal (fun (src' : sl_tys_t {src' == src}) ->
+                      sl_tys_lam'.lam_prop f == (fun (x : sl_tys_v src') -> f x))
+                   ({val_t; sel_t}) src
+    end;
+  introduce forall (src : sl_tys_t) (trg : Type) (f : sl_tys_v src -> trg).
+              lm.lam_tree #src #trg f == (fun (x : sl_tys_v src) -> f x)
+    with begin
+      let {val_t; sel_t} = src <: sl_tys_t in
+      U.funext_eta (sl_tys_lam'.lam_tree #({val_t; sel_t}) #trg f)
+                   (fun (x : sl_tys_v ({val_t; sel_t})) -> f x)
+        (_ by T.(trefl ())) (_ by T.(trefl())) (fun x -> ());
+      U.prop_equal (fun (src' : sl_tys_t {src' == src}) ->
+                      sl_tys_lam'.lam_tree #src' #trg f == (fun (x : sl_tys_v src') -> f x))
+                   ({val_t; sel_t}) src
+    end;
+  assert (Fun.tys_lam_id #s lm)
+    by T.(norm [delta_only [`%Fun.tys_lam_id; `%sl_tys; `%Fun.Mktys'?.t; `%Fun.Mktys'?.v]])
+
+
 #push-options "--z3rlimit 40 --ifuel 1 --fuel 1"
 let rec repr_Fun_of_Steel_req #val_t #sel_t (t : prog_tree val_t sel_t)
   : Lemma (ensures tree_req t <==> Fun.tree_req (repr_Fun_of_Steel t))
