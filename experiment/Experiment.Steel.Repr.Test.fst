@@ -19,10 +19,6 @@ open Steel.FractionalPermission
 open Steel.Reference
 
 
-irreducible
-let print_util (#a : Type) (x : a) : prop = True
-
-
 ////////// test_flatten //////////
 
 unfold
@@ -37,7 +33,7 @@ let normal_flatten_prog : list norm_step = [
     iota; zeta
   ]
 
-(*let () = assert (print_util (ST.flatten_prog test_flatten))
+(*let () = assert (U.print_util (ST.flatten_prog test_flatten))
              by T.(norm normal_flatten_prog; fail "print")*)
 
 
@@ -70,7 +66,7 @@ let normal_elim_returns : list norm_step = [
   ]
 
 (*let () =
-  assert (print_util (Fun.elim_returns (Fun.can_lam Fun.can_tys) test_elim_returns test_elim_returns_shape))
+  assert (U.print_util (Fun.elim_returns (Fun.can_lam Fun.can_tys) test_elim_returns test_elim_returns_shape))
     by T.(norm [delta_only [`%test_elim_returns; `%test_elim_returns_shape]];
           norm normal_elim_returns;
           fail "print")*)
@@ -133,7 +129,7 @@ let normal_vp : list norm_step = [
   ]
 
 (*let _ = fun r ->
-  assert (print_util (test r).repr_tree) by T.(norm normal_tree_steps; qed ())*)
+  assert (U.print_util (test r).repr_tree) by T.(norm normal_tree_steps; qed ())*)
 
 unfold
 let test0_equiv (r : ref nat) : M.vequiv ([vptr' r full_perm]) [vptr' r full_perm] =
@@ -183,7 +179,7 @@ let normal_tree_ST : list norm_step = [
   ]
 
 (*let _ = fun r ->
-   assert (print_util (test0_ST r))
+   assert (U.print_util (test0_ST r))
        by T.(norm normal_tree_ST; qed ())*)
 
 unfold
@@ -202,7 +198,7 @@ let normal_shape_ST : list norm_step = [
   ]
 
 (*let _ = fun r ->
-   assert (print_util (test0_shape_ST r))
+   assert (U.print_util (test0_shape_ST r))
        by T.(norm normal_shape_ST; qed ())*)
 
 unfold
@@ -229,7 +225,7 @@ let normal_tree_SF : list norm_step = [
   ]
 
 (*let _ = fun r x_ini ->
-    assert (print_util (test0_SF r x_ini))
+    assert (U.print_util (test0_SF r x_ini))
         by T.(norm normal_tree_ST;
               norm normal_shape_ST;
               norm normal_tree_SF;
@@ -242,7 +238,7 @@ let test0_shape_SF (r : ref nat) (x_ini : nat) : SF.prog_shape (test0_SF r x_ini
     SF.mk_prog_shape (test0_SF r x_ini) (SF.shape_SF_of_ST (test0_shape_ST r).shp)
 
 (*let _ = fun r x_ini ->
-  assert (print_util (test0_shape_SF r x_ini))
+  assert (U.print_util (test0_shape_SF r x_ini))
     by T.(norm normal_shape_ST;
           norm normal_tree_SF;
           fail "print")*)
@@ -259,7 +255,7 @@ let normal_repr_Fun_of_SF : list norm_step = [
   ]
 
 (*let _ = fun r x_ini ->
-    assert (print_util (test0_Fun r x_ini))
+    assert (U.print_util (test0_Fun r x_ini))
         by T.(norm normal_tree_ST;
               norm normal_shape_ST;
               norm normal_tree_SF;
@@ -297,9 +293,9 @@ let normal_after_Fun_elim_returns : list norm_step = [
 
 (*let _ = fun r x_ini ->
     (**) SF.repr_Fun_of_SF_shape (test0_SF r x_ini) (test0_shape_SF r x_ini);
-    assert (print_util (Fun.elim_returns SF.sl_tys_lam (test0_Fun r x_ini)
+    assert (U.print_util (Fun.elim_returns SF.sl_tys_lam (test0_Fun r x_ini)
                                          (SF.shape_Fun_of_SF (test0_shape_SF r x_ini).shp)))
-        by T.(U.clear_all ();
+        by T.(Learn.Tactics.Util.clear_all ();
               norm normal_tree_ST;
               norm normal_shape_ST;
               norm normal_tree_SF;
@@ -326,7 +322,7 @@ let normal_spec_Fun : list norm_step = [
   ]
 
 (*let _ = fun r x_ini ->
-    assert (print_util (test0_wp r x_ini))
+    assert (U.print_util (test0_wp r x_ini))
         by T.(norm normal_tree_ST;
               norm normal_shape_ST;
               norm normal_tree_SF;
@@ -398,7 +394,7 @@ let norm_repr_SF_of_ST1 : list norm_step
      iota; zeta; primops]
 
 (*let _ = fun b_ini x_ini ->
-  assert (print_util (test1_SF b_ini x_ini))
+  assert (U.print_util (test1_SF b_ini x_ini))
     by T.(norm norm_test_Fun;
           norm norm_repr_Fun_of_ST1;
           qed ())*)
@@ -421,7 +417,7 @@ let norm_repr_Fun_of_SF : list norm_step
      iota; zeta; primops]
 
 (*let _ = fun b_ini x_ini ->
-  assert (print_util (test1_Fun b_ini x_ini))
+  assert (U.print_util (test1_Fun b_ini x_ini))
     by T.(norm norm_test_Fun;
           norm norm_repr_Fun_of_ST;
           norm norm_repr_Fun_of_SF;
@@ -452,7 +448,7 @@ let normal_tree_Fun : list norm_step = [
   ]
 
 (*let _ =
-  assert (print_util test2_Fun)
+  assert (U.print_util test2_Fun)
     by T.(norm normal_tree_Fun;
           qed ())*)
 
@@ -463,7 +459,7 @@ let test2_wp =
 
 (*#push-options "--print_full_names"
 let _ =
-  assert (print_util test2_wp)
+  assert (U.print_util test2_wp)
     by T.(norm normal_tree_Fun;
           norm normal_spec_Fun;
           qed ())

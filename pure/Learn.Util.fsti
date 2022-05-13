@@ -1,7 +1,5 @@
 module Learn.Util
 
-module T = FStar.Tactics
-
 val hide_prop : prop -> prop
 
 val hide_propI (p : prop) : Lemma (requires p) (ensures hide_prop p)
@@ -85,6 +83,5 @@ type unit' : Type u#a = | Unit' : unit'
 /// recursive functions in [t] until [block_red] is unfolded.
 let block_red : unit = ()
 
-/// try to clear each binder
-let clear_all () : T.Tac unit =
-  T.(iter (fun bd -> try clear bd with | _ -> ()) (FStar.List.rev (cur_binders ())))
+
+let print_util (#a : Type) (x : a) : prop = True

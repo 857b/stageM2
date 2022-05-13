@@ -120,6 +120,16 @@ let injective  (#a #b : Type) (f : a -> b) : prop =
 
 let surjective (#a #b : Type) (f : a -> b) : prop = forall (y : b) . exists (x : a) . f x == y
 
+let injectiveI (#a #b : Type) (f : a -> b)
+               (prf : (x : a) -> (x' : a) -> Lemma (requires f x == f x') (ensures x == x'))
+  : Lemma (injective f)
+  = FStar.Classical.forall_intro_2 (FStar.Classical.move_requires_2 prf)
+
+let surjectiveI (#a #b : Type) (f : a -> b)
+                (wit : (y : b) -> Ghost a (requires True) (ensures fun x -> f x == y))
+  : Lemma (surjective f)
+  = introduce forall (y : b) . exists (x : a) . f x == y with (let _ = wit y in ())
+
 let inv_l_injective (#a #b : Type) (f : a -> b) (g : b -> a)
   : Lemma (requires forall (x : a) . g (f x) == x) (ensures injective f)
   = ()
@@ -140,18 +150,21 @@ let pigeonhole_fun (n m: nat) (f : Fin.fin n -> Fin.fin m)
 let fin_injective_surjective (n m : nat) (f : Fin.fin n -> Fin.fin m)
   : Lemma (requires n >= m /\ injective f) (ensures surjective f)
   =
-    introduce forall (y : Fin.fin m) . exists (x : Fin.fin n) . f x == y
-    with begin
+    surjectiveI f begin fun y ->
       let f_sq = Seq.init n f in
-      match Fin.find f_sq (fun y' -> y' = y) 0 with
-      | Some x -> ()
+      match Fin.find f_sq (fun y' -> y' = y) 0 returns (Fin.fin n) with
+      | Some x -> x
       | None -> introduce forall i . ~(f i = y)
                  with introduce _ ==> _
                  with _ . assert (Seq.index f_sq i = y);
                let f' (i:Fin.fin n) : Fin.fin (m-1) = if f i > y then f i - 1 else f i in
                let i0, i1 = pigeonhole_fun n (m-1) f' in
-               assert False
+               false_elim ()
     end
+
+let fin_injective_le (n m : nat) (f : Fin.fin n -> Fin.fin m)
+  : Lemma (requires injective f) (ensures n <= m)
+  = if n > m then let _ = pigeonhole_fun n m f in ()
 
 let surjective_invert_r (#a : eqtype) (n : nat) (f : Fin.fin n -> a)
       (x : a) : Pure (Fin.fin n) (requires surjective f) (ensures fun y -> f y = x)
@@ -169,10 +182,11 @@ let fin_surjective_injective (n m : nat) (f : Fin.fin n -> Fin.fin m)
   = let g : Fin.fin m -> Fin.fin n = surjective_invert_r n f in
     assert (forall (x : Fin.fin m) . {:pattern f (g x)} f (g x) = x);
     fin_injective_surjective m n g;
-    introduce forall (y y' : Fin.fin n) . f y = f y' ==> y = y'
-      with introduce _ ==> _
-      with _ . assert (exists x x' . g x = y /\ g x' = y')
+    injectiveI f (fun y y' -> assert (exists x x' . g x = y /\ g x' = y'))
 
+let fin_surjective_ge (n m : nat) (f : Fin.fin n -> Fin.fin m)
+  : Lemma (requires surjective f) (ensures n >= m)
+  = fin_injective_le m n (surjective_invert_r n f)
 
 type perm_f (n : nat) = f : Fext.(Fin.fin n ^-> Fin.fin n) {U.hide_prop (injective f)}
 

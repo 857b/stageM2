@@ -4,9 +4,10 @@ open FStar.Calc
 open FStar.Classical.Sugar
 open FStar.List.Pure
 
-module U    = Learn.Util
-module T    = FStar.Tactics
-module Tuq  = Learn.Tactics.Unsquash
+module U   = Learn.Util
+module T   = FStar.Tactics
+module Tuq = Learn.Tactics.Unsquash
+module Fin = FStar.Fin
 
 
 let list_extensionality (#a : Type)
@@ -17,6 +18,19 @@ let list_extensionality (#a : Type)
     introduce forall (i : nat {i < length l0}) . index l0 i == index l1 i
       with pf i;
     index_extensionality l0 l1
+
+
+(* [mem_findi] *)
+
+let rec mem_findi (#a : eqtype) (x : a) (l : list a)
+  : Pure (Fin.fin (length l))
+         (requires mem x l)
+         (ensures fun i -> index l i = x)
+         (decreases l)
+  = let hd :: tl = l in
+    if x = hd then 0
+    else 1 + mem_findi x tl
+
 
 (* [map] *)
 
@@ -41,6 +55,16 @@ let rec map_append #a #b (f : a -> b) l0 l1
     | [] -> ()
     | _ :: tl -> map_append f tl l1
 
+/// Those lemmas are equivalent to the ones of the standard library but use a
+/// requires clause instead of an implication.
+let memP_map_intro (#a #b: Type) (f: a -> Tot b) (x: a) (l: list a)
+  : Lemma (requires memP x l) (ensures memP (f x) (map f l))
+  = FStar.List.memP_map_intro f x l
+
+let memP_map_elim (#a #b: Type) (f: a -> Tot b) (y: b) (l: list a)
+  : Lemma (requires memP y (map f l)) (ensures (exists (x : a) . memP x l /\ f x == y))
+  = FStar.List.memP_map_elim f y l
+
 
 (* [append] *)
 
@@ -49,6 +73,21 @@ let rec append_index (#a:Type) (l1 l2 : list a) (i : nat{i < length l1 + length 
   = match l1 with
     | [] -> ()
     | _ :: tl -> if i = 0 then () else append_index tl l2 (i-1)
+
+
+(* [filteri] *)
+
+let rec filteri_aux (#a : Type) (#len : nat) (f : Fin.fin len -> a -> bool)
+                    (i : nat{i <= len}) (l : llist a (len - i))
+  : Tot (list a) (decreases l)
+  = match l with
+  | [] -> []
+  | x :: xs -> if f i x then x :: filteri_aux f (i + 1) xs
+             else filteri_aux f (i + 1) xs
+
+let filteri (#a : Type) (#len : nat) (f : Fin.fin len -> a -> bool) (l : llist a len)
+  : list a
+  = filteri_aux f 0 l
 
 
 (* [rev'] *)

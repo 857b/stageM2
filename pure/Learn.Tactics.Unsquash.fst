@@ -3,15 +3,7 @@ module Learn.Tactics.Unsquash
 module F = FStar.Reflection.Formula
 
 open FStar.Tactics
-
-private
-let __pose (goal:Type) (#t:Type) (x : t) (f : t -> goal) : goal = f x
-
-let pose' (t:term) : Tac binder =
-    apply (`__pose (`#(cur_goal ())));
-    exact t;
-    intro ()
-
+open Learn.Tactics.Util
 
 (* [allI] : introduces [forall (x : t) . p x] with [x:t |- squash (p x)] *)
 
@@ -28,8 +20,8 @@ let __allD_sq #t (#pred : t -> Type0) (h : squash (forall x. pred x)) : x:t -> s
   fun x -> ()
 
 let allD_keep (fa : term) : Tac binder =
-  try pose' (`__allD_sq (`#fa)) with | _ ->
-  try pose' (`__allD    (`#fa)) with | _ ->
+  try pose (`__allD_sq (`#fa)) with | _ ->
+  try pose (`__allD    (`#fa)) with | _ ->
   fail "allD: could not unsquash"
 
 let allD (fa : binder) : Tac binder =
@@ -58,8 +50,8 @@ let __impD_sq (#a #b : Type) (h : squash (a ==> b)) : squash a -> squash b =
   fun pa -> ()
 
 let impD_keep (ip : term) : Tac binder =
-  try pose' (`__impD_sq (`#ip)) with | _ ->
-  try pose' (`__impD    (`#ip)) with | _ ->
+  try pose (`__impD_sq (`#ip)) with | _ ->
+  try pose (`__impD    (`#ip)) with | _ ->
   fail "impD: could not unsquash"
 
 let impD (ip : binder) : Tac binder =
@@ -115,8 +107,8 @@ let __andD1_sq (#a #b : Type) (h : squash (a /\ b)) : (squash a) & (squash b) =
   (), ()
 
 let andD1_keep (cj : term) : Tac binder =
-  try pose' (`__andD1_sq (`#cj)) with | _ ->
-  try pose' (`__andD1    (`#cj)) with | _ ->
+  try pose (`__andD1_sq (`#cj)) with | _ ->
+  try pose (`__andD1    (`#cj)) with | _ ->
   fail "andD1: could not unsquash"
 
 let andD1 (cj : binder) : Tac binder =
