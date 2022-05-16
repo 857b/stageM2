@@ -123,11 +123,11 @@ let rec repr_ST_of_M_req (#a : Type) (t : M.prog_tree a)
                tree_req (repr_ST_of_M _ c) sl0;
              }
 
-  | TCret #a #x  pre post  p ->
-             U.f_equal tree_req (repr_ST_of_M _ (TCret #a #x pre post p))
+  | TCret #a #x #sl_hint  pre post  p ->
+             U.f_equal tree_req (repr_ST_of_M _ (TCret #a #x #sl_hint pre post p))
                                 (repr_ST_of_M _ c);
-             assert (M.tree_req _ (TCret #a #x pre post p) sl0 == True) by T.(trefl ());
-             assert (tree_req (repr_ST_of_M _ (TCret #a #x pre post p)) sl0 <==> True)
+             assert (M.tree_req _ (TCret #a #x #sl_hint pre post p) sl0 == True) by T.(trefl ());
+             assert (tree_req (repr_ST_of_M _ (TCret #a #x #sl_hint pre post p)) sl0 <==> True)
                     by T.(norm_tree_spec (); smt ())
 
   | TCbind #a #b #f #g  pre itm post  cf cg ->
@@ -207,20 +207,20 @@ and repr_ST_of_M_ens (#a : Type) (t : M.prog_tree a)
                tree_ens (repr_ST_of_M _ c) sl0 res sl1;
              }
 
-  | TCret #a #x  pre post  p ->
+  | TCret #a #x #sl_hint  pre post  p ->
              calc (<==>) {
-               M.tree_ens _ (TCret #a #x pre post p) sl0 res sl1;
-             <==> { assert (M.tree_ens _ (TCret #a #x pre post p) sl0 res sl1 <==>
+               M.tree_ens _ (TCret #a #x #sl_hint pre post p) sl0 res sl1;
+             <==> { assert (M.tree_ens _ (TCret #a #x #sl_hint pre post p) sl0 res sl1 <==>
                            (res == x /\ sl1 == extract_vars p sl0))
                       by T.(norm [delta_only [`%M.tree_ens]; zeta; iota]; smt ()) }
                res == x /\ sl1 == extract_vars p sl0;
              <==> {}
                res == x /\ sl1 == Fl.apply_pequiv (vequiv_sl p) sl0;
-             <==> { assert (tree_ens (repr_ST_of_M _ (TCret #a #x pre post p)) sl0 res sl1 <==>
+             <==> { assert (tree_ens (repr_ST_of_M _ (TCret #a #x #sl_hint pre post p)) sl0 res sl1 <==>
                            (res == x /\ sl1 == Fl.apply_pequiv (vequiv_sl p) sl0))
                       by T.(norm_tree_spec (); smt ()) }
-               tree_ens (repr_ST_of_M _ (TCret #a #x pre post p)) sl0 res sl1;
-             <==> { U.f_equal tree_ens (repr_ST_of_M _ (TCret #a #x pre post p))
+               tree_ens (repr_ST_of_M _ (TCret #a #x #sl_hint pre post p)) sl0 res sl1;
+             <==> { U.f_equal tree_ens (repr_ST_of_M _ (TCret #a #x #sl_hint pre post p))
                                     (repr_ST_of_M _ c) }
                tree_ens (repr_ST_of_M _ c) sl0 res sl1;
              }
@@ -288,9 +288,9 @@ let rec repr_ST_of_M_shape
             assert (prog_has_shape' (repr_ST_of_M t (TCspec #a #pre #post #req #ens pre1 post1 frame p0 p1))
                                     (shape_ST_of_M (M.Sspec pre_n post_n frame_n p0' p1')))
                 by T.(norm repr_ST_of_M_shape__norm; smt ())
-  | TCret #a #x pre post p ->
+  | TCret #a #x #sl_hint  pre post p ->
             let M.Sret n p' = s in
-            assert (prog_has_shape' (repr_ST_of_M t (TCret #a #x pre post p))
+            assert (prog_has_shape' (repr_ST_of_M t (TCret #a #x #sl_hint pre post p))
                                     (shape_ST_of_M (M.Sret n p')))
                 by T.(norm repr_ST_of_M_shape__norm; smt ())
   | TCbind #a #b #f #g _ _ _ cf cg ->

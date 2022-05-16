@@ -255,10 +255,10 @@ let repr_of_steel_steel
     Steel.Effect.Atomic.return x
 
 let return_steel
-      (a : Type) (x : a)
+      (a : Type) (x : a) (sl_hint : post_t a)
       (pre : pre_t) (post : post_t a)
       (p : vequiv pre (post x))
-  : (let c = TCret #a #x pre post p in
+  : (let c = TCret #a #x #sl_hint pre post p in
      repr_steel_t a pre post (tree_req _ c) (tree_ens _ c))
   = fun () ->
     (**) steel_change_vequiv p;

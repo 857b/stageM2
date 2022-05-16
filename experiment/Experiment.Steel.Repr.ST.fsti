@@ -312,7 +312,7 @@ let rec repr_ST_of_M (#a : Type) (t : M.prog_tree u#a a)
                     (vprop_list_sels_t (post' x))
                     (vequiv_sl (p1 x));;
              Tret _ x (post_ST_of_M post')
-  | TCret #a #x  pre post  p ->
+  | TCret #a #x #_  pre post  p ->
              Tequiv (vprop_list_sels_t pre) (vprop_list_sels_t (post x)) (vequiv_sl p);;
              Tret _ x (post_ST_of_M post)
   | TCbind #a #b #f #g  pre itm post  cf cg ->

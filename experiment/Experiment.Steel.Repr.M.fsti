@@ -169,7 +169,8 @@ type prog_tree : (a : Type u#a) -> Type u#(max (a+1) 2) =
   | Tspec  : (a : Type u#a) -> (pre : pre_t) -> (post : post_t a) ->
              (req : req_t pre) -> (ens : ens_t pre a post) ->
              prog_tree a
-  | Tret   : (a : Type u#a) -> (x : a) -> prog_tree a
+  | Tret   : (a : Type u#a) -> (x : a) -> (sl_hint : post_t a) ->
+             prog_tree a
   | Tbind  : (a : Type u#a) -> (b : Type u#a) ->
              (f : prog_tree a) -> (g : a -> prog_tree b) ->
              prog_tree b
@@ -193,10 +194,10 @@ type tree_cond : (#a : Type u#a) -> (t : prog_tree a) -> (pre : pre_t) -> (post 
               (p0 : vequiv pre' L.(pre @ frame)) ->
               (p1 : ((x : a) -> vequiv (post x @ frame) (post' x))) ->
               tree_cond (Tspec a pre post req ens) pre' post'
-  | TCret   : (#a : Type u#a) -> (#x : a) ->
+  | TCret   : (#a : Type u#a) -> (#x : a) -> (#sl_hint : post_t a) ->
               (pre : pre_t) -> (post : post_t a) ->
               (p : vequiv pre (post x)) ->
-              tree_cond (Tret a x) pre post
+              tree_cond (Tret a x sl_hint) pre post
   | TCbind  : (#a : Type u#a) -> (#b : Type u#a) -> (#f : prog_tree a) -> (#g : (a -> prog_tree b)) ->
               (pre : pre_t) -> (itm : post_t a) -> (post : post_t b) ->
               (cf : tree_cond f pre itm) -> (cg : ((x : a) -> tree_cond (g x) (itm x) post)) ->
@@ -406,22 +407,26 @@ let repr_of_steel (#a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) 
 
 
 val return_steel
-      (a : Type) (x : a)
+      (a : Type) (x : a) (sl_hint : post_t a)
       (pre : pre_t) (post : post_t a)
       (p : vequiv pre (post x))
-  : (let c = TCret #a #x pre post p in
+  : (let c = TCret #a #x #sl_hint pre post p in
      repr_steel_t a pre post (tree_req _ c) (tree_ens _ c))
 
 [@@ __tree_reduce__]
-let return (#a : Type) (x :a)
+let return_hint (#a : Type) (x : a) (sl_hint : post_t a)
   : repr a
   = {
-    repr_tree  = Tret a x;
+    repr_tree  = Tret a x sl_hint;
     repr_steel = (fun pre0 post0 c ->
         let TCret pre post p = c in
         U.cast (repr_steel_t a pre0 post0 (tree_req _ c) (tree_ens _ c))
-               (return_steel a x pre post p))
+               (return_steel a x sl_hint pre post p))
   }
+
+[@@ __tree_reduce__]
+let return (#a : Type) (x : a) : repr a
+  = return_hint x (fun _ -> [])
 
 
 val bind_steel

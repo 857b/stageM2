@@ -639,25 +639,40 @@ let __build_TCspec_p
              (fun x -> serialize_perm (cond_sol_all_to_equiv (cs1 x)))
 
 
+/// By default, if the post-condition of a [M.Tret] has to be inferred, we simply choose [fun _ -> pre]. That is,
+/// we do not introduce any dependency in the returned value.
+/// It is possible to modify this behaviour by annotating the [M.Tret] with [sl_hint : M.post_t a], which
+/// specifies some vprops that should depend on the returned value (it does not need to mention the vprops that
+/// do not depend on the returned value).
+/// The default behaviour is obtained with [sl_hint = fun _ -> []].
+/// This hint is ignored if the post-condition is known from the context ([__build_TCret_p]).
+/// See [_test_build_tree_cond__Tret_u_0] for a minimal example where it is needed.
 [@@ __tac_helper__]
 private
 let __build_TCret_u
-      (#a : Type) (#x : a)
+      (#a : Type) (#x : a) (#sl_hint : M.post_t a)
       (#pre : M.pre_t)
+      (cs : cond_sol false (sl_hint x) pre)
+      
       (n : extract_term (L.length pre))
-  : M.tree_cond (M.Tret a x) pre (fun _ -> pre)
+      (p : __extract_perm (cond_sol_to_equiv cs))
+
+  : M.tree_cond (M.Tret a x sl_hint) pre (fun x -> L.(sl_hint x @ cond_sol_unmatched_v cs))
   =
-    M.TCret pre (fun _ -> pre) (Perm.id_n (len pre))
+    M.TCret pre (fun x -> L.(sl_hint x @ cond_sol_unmatched_v cs))
+            (serialize_perm (cond_sol_to_equiv cs))
 
 [@@ __tac_helper__]
 private
 let __build_TCret_p
-      (#a : Type) (#x : a)
+      (#a : Type) (#x : a) (#sl_hint : M.post_t a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (cs : cond_sol true (post x) pre)
+
       (n : extract_term (L.length pre))
       (p : __extract_perm (cond_sol_all_to_equiv cs))
-  : M.tree_cond (M.Tret a x) pre post
+
+  : M.tree_cond (M.Tret a x sl_hint) pre post
   =
     M.TCret #a #x pre post (serialize_perm (cond_sol_all_to_equiv cs))
 
@@ -689,16 +704,17 @@ let build_TCspec (post : bool) : Tac shape_tree_t
 
 let build_TCret (post : bool) : Tac shape_tree_t
   = if post then begin
-       apply_raw (`__build_TCret_p);
-       build_cond_sol true
-    end else
-      apply_raw (`__build_TCret_u);
+      apply_raw (`__build_TCret_p);
+      build_cond_sol true
+    end else begin
+      let cs = fresh_uvar None in
+      apply_raw (`(__build_TCret_u (`#cs)));
+      unshelve cs;
+      build_cond_sol false
+    end;
 
     let n = tc_extract_nat () in
-    let p : list int =
-      if post then tc_extract_perm n
-      else Ll.initi 0 n id
-    in
+    let p = tc_extract_perm n in
     (|n, n, PSret n p|)
 
 let rec build_TCbind (post : bool) : Tac shape_tree_t
@@ -843,12 +859,12 @@ let _test_TCspec_p (v0 v1 v2 : vprop') (vx : int -> vprop')
 let _test_TCret_u (v0 v1 : vprop') : squash True =
   _ by (let post' = fresh_uvar (Some (`(M.post_t int))) in
         let _,_ =
-          build (`(M.tree_cond (M.Tret int 42) [(`@v0); (`@v1)] (`#post')))
+          build (`(M.tree_cond (M.Tret int 42 (fun _ -> [])) [(`@v0); (`@v1)] (`#post')))
           (fun () -> build_TCret false)
         in ())
 
 let _test_TCret_p (v0 : vprop') (vx0 vx1 : int -> vprop')
-  : M.tree_cond (M.Tret int 42)
+  : M.tree_cond (M.Tret int 42 (fun _ -> []))
                 ([v0; vx0 42; vx1 42]) (fun x -> [v0; vx1 x; vx0 42])
   = _ by (let _ = build_TCret true in ())
 
@@ -941,39 +957,50 @@ let _ = fun v0 v1 vx0 vx1 ->
           norm_cond_sol ();
           dump "print")
 
-// This example fails because the resolution of the innermost [M.Tret] has to infer its post. In this case the
-// inferred post is simply the current vprops, ignoring the returned value (i.e. [fun _ -> pre] in [__build_TCret_u]).
-// But at this point pre is [vx0 x] where [x] is bound, the inferred post is thus [fun _ -> [vx0 x]] which
-// depends on [x].
+
+/// This example fails because the resolution of the innermost [M.Tret] has to infer its post. In this case the
+/// inferred post is simply the current vprops, ignoring the returned value (i.e. [fun _ -> pre] in [__build_TCret_u]).
+/// But at this point pre is [vx0 x] where [x] is bound, the inferred post is thus [fun _ -> [vx0 x]] which
+/// depends on [x].
 [@@expect_failure [228]]
-let _test_build_tree_cond_1 (vx0 : int -> vprop')
+let _test_build_tree_cond__Tret_u_0 (vx0 : int -> vprop')
   : M.tree_cond
         (M.Tbind int int
-            (M.Tbind int int (specT int [] (fun x -> [vx0 x])) (fun x -> M.Tret int x))
-            (fun x -> M.Tret int x))
+            (M.Tbind int int (specT int [] (fun x -> [vx0 x])) (fun x -> M.Tret int x (fun _ -> [])))
+            (fun x -> M.Tret int x (fun _ -> [])))
         [] (fun x -> [vx0 x])
   = _ by (norm_test (); let _ = build_tree_cond true in ())
 
-// This example works because the resolution of [M.Tret] is given the expected post (the post of the whole
-// program), [fun x' -> [vx0 x']].
-let _test_build_tree_cond_2 (vx0 : int -> vprop')
+/// This example works because the resolution of [M.Tret] is given the expected post (the post of the whole
+/// program), [fun x' -> [vx0 x']].
+let _test_build_tree_cond__Tret_u_1 (vx0 : int -> vprop')
   : M.tree_cond
-        (M.Tbind int int (specT int [] (fun x -> [vx0 x])) (fun x -> M.Tret int x))
+        (M.Tbind int int (specT int [] (fun x -> [vx0 x])) (fun x -> M.Tret int x (fun _ -> [])))
         [] (fun x -> [vx0 x])
   = _ by (norm_test (); let _ = build_tree_cond true in ())
 
-// This example fails because we cannot find a [v0] in the pre.
+/// This example works because we annotate the innermost [M.Tret] with an hint.
+let _test_build_tree_cond__Tret_u_2 (v0 : vprop') (vx0 : int -> vprop')
+  : M.tree_cond
+        (M.Tbind int int
+            (M.Tbind int int (specT int [] (fun x -> [v0; vx0 x])) (fun x -> M.Tret int x (fun x' -> [vx0 x'])))
+            (fun x -> M.Tret int x (fun _ -> [])))
+        [] (fun x -> [v0; vx0 x])
+  = _ by (norm_test (); let _ = build_tree_cond true in ())
+
+
+/// This example fails because we cannot find a [v0] in the pre.
 [@@expect_failure [228]]
-let _test_build_tree_cond_3 (v0 : vprop')
+let _test_build_tree_cond__not_found (v0 : vprop')
   : M.tree_cond
         (specT int [v0] (fun _ -> []))
         [] (fun _ -> [])
   = _ by (norm_test (); let _ = build_tree_cond true in ())
 
-// This example fails because we obtain [fun _ -> [v0]] as post which is not unifiable with the expected post
-// [fun _ -> []]
+/// This example fails because we obtain [fun _ -> [v0]] as post which is not unifiable with the expected post
+/// [fun _ -> []]
 [@@expect_failure [228]]
-let _test_build_tree_cond_4 (v0 : vprop')
+let _test_build_tree_cond__post (v0 : vprop')
   : M.tree_cond
         (specT int [] (fun _ -> [v0]))
         [] (fun _ -> [])
