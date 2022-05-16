@@ -611,233 +611,58 @@ let pequiv_sym #a (#l0 #l1 : list a) (f : pequiv l0 l1) : pequiv l1 l0
     U.cast #(perm_f (length l0)) (perm_f (length l1)) (inv_f f)
 
 
-(*** [perm_t] *)
+(***** [perm_f_list] *)
 
-/// representation of the permutation that maps [i] to [index l i]
-type perm_t (len : nat) : Type =
-  l : list (i : nat {i < len}) { length l = len(*Redundant but useful*) /\ (forall (i : nat {i < len}) . count i l = 1) }
+type perm_f_list (n : nat) = l : list (Fin.fin n) {length l = n /\ injective (index l)}
 
-(*
-let perm_t_to_fun (#len : nat) (p : perm_t len) : i:nat{i<len} -> i:nat{i<len}
-  = index p
+let perm_f_to_list (#n : nat) (f : perm_f n) : perm_f_list n
+  = (**) U.hide_propD (injective f);
+    initi 0 n f
 
-let rec findi (#a : Type) (f : a -> bool) (l : list a)
-  : Pure nat (requires existsb f l) (ensures fun i -> i < length l /\ f (index l i))
-  = let x :: xs = l in
-    if f x then 0
-    else findi f xs + 1
+let perm_f_of_list (#n : nat) (l : perm_f_list n) : perm_f n
+  = mk_perm_f n (index l)
 
-let rec index_mem (#a : eqtype) (l : list a) (i : nat{i < length l})
-  : Lemma (ensures mem (index l i) l) (decreases i)
-  = let _ :: tl = l in
-    if i = 0 then () else index_mem tl (i - 1)
+let perm_f_of_to_list (#n : nat) (f : perm_f n)
+  : Lemma (perm_f_of_list (perm_f_to_list f) == f)
+          [SMTPat (perm_f_of_list (perm_f_to_list f))]
+  = perm_f_extensionality (perm_f_of_list (perm_f_to_list f)) f (fun i -> ())
 
-let rec count_one (#a : eqtype) (x : a) (l : list a) (i0 i1 : (i:nat{i < length l /\ index l i = x}))
-  : Lemma (requires count x l <= 1) (ensures i0 = i1) (decreases l)
-  = let _ :: tl = l in
-    if i0 = 0 && i1 = 0 then ()
-    else if i0 > 0 && i1 > 0 then count_one x tl (i0 - 1) (i1 - 1)
-    else begin
-      mem_count tl x;
-      if i0 > 0 then index_mem tl (i0 - 1);
-      if i1 > 0 then index_mem tl (i1 - 1);
-      assert False
-    end
+let perm_f_eq (#n : nat) (p0 p1 : perm_f n)
+  : Tot (b : bool {b <==> p0 == p1})
+  = 
+    (**) perm_f_of_to_list p0;
+    (**) perm_f_of_to_list p1;
+    perm_f_to_list p0 = perm_f_to_list p1
 
-let rec count_one_r (#a : eqtype) (x : a) (l : list a)
-  : Lemma (requires forall (i0 i1 : (i:nat{i < length l /\ index l i = x})) . i0 = i1)
-          (ensures count x l <= 1)
-          (decreases l)
+#push-options "--fuel 1 --ifuel 1"
+let rec check_list_injective (n : nat) (l : list int) (mask : llist bool n)
+  : Pure bool (requires True)
+              (ensures fun b -> b ==> (
+                (forall (i : Fin.fin (length l)) . {:pattern (index l i)}
+                  let x = index l i in 0 <= x /\ x < n /\ index mask x) /\
+                injective #(Fin.fin (length l)) (index l)
+              ))
+              (decreases l)
   = match l with
-  | [] -> ()
-  | hd :: tl ->
-      if hd = x then begin
-        if count x tl = 0 then ()
-        else begin
-          mem_count tl x; mem_existsb (fun y -> y = x) tl;
-          let i1 = findi (fun y -> y = x) tl in
-          eliminate forall (i0 i1 : (i:nat{i < length l /\ index l i = x})) . i0 = i1
-            with 0 (i1+1)
-        end
-      end else begin
-        introduce forall (i0 i1 : (i:nat{i < length tl /\ index tl i = x})) . i0 = i1
-          with eliminate forall (i0 i1 : (i:nat{i < length l /\ index l i = x})) . i0 = i1
-          with (i0+1) (i1+1);
-        count_one_r x tl
-      end
-
-
-let perm_t_to_fun_inv (#len : nat) (p : perm_t len) : i:nat{i<len} -> j:nat{j<len /\ perm_t_to_fun p j = i}
-  = fun i -> mem_count p i; mem_existsb (fun i' -> i' = i) p;
-          findi (fun i' -> i' = i) p
-
-/// This direction is given by the refinement on the result type of [perm_t_to_fun_inv]
-let perm_t_to_fun_inv_r (#len : nat) (p : perm_t len) (i : nat{i < len})
-  : Lemma (perm_t_to_fun p (perm_t_to_fun_inv p i) = i)
-  = ()
-
-let perm_t_to_fun_inv_l (#len : nat) (p : perm_t len) (i : nat{i < len})
-  : Lemma (perm_t_to_fun_inv p (perm_t_to_fun p i) = i)
-          [SMTPat (perm_t_to_fun_inv p (perm_t_to_fun p i))]
-  = count_one (index p i) p i (perm_t_to_fun_inv p (perm_t_to_fun p i))
-
-
-let perm_t_of_fun_inj (len : nat) (f : (i:nat{i<len}) -> (i:nat{i<len}))
-  : Pure (perm_t len) (requires injective f)
-                      (ensures fun p -> Fext.feq (perm_t_to_fun p) f)
-  = let p = initi 0 len f in
-    introduce forall (y : nat {y < len}) . count y p = 1
-      with begin
-           count_one_r y p;
-           fin_injective_surjective len f;
-           eliminate exists (x : nat {x < len}) . f x = y
-             returns mem y p
-             with _ . index_mem p x;
-           mem_count p y
-      end;
-    p
-
-let perm_t_of_fun (len : nat) (f : (i:nat{i<len}) -> (i:nat{i<len})) (g : (i:nat{i<len}) -> (i:nat{i<len}))
-  : Pure (perm_t len) (requires forall (i:nat{i<len}) . g (f i) == i)
-                      (ensures fun p -> Fext.feq (perm_t_to_fun p) f)
-  = inv_l_injective f g;
-    perm_t_of_fun_inj len f
-
-
-let invert_perm (#len : nat) (p : perm_t len) : r : perm_t len { Fext.feq (perm_t_to_fun r) (perm_t_to_fun_inv p) }
-  = perm_t_of_fun len (perm_t_to_fun_inv p) (perm_t_to_fun p)
-
-
-/// classical permutation application:
-/// l'[p(x)] = l[x]    <==>    l'[y] = l[p^-1(y)]
-let apply_perm (#a : Type) (#len : nat) (p : perm_t len) (l : list a)
-  : Pure (list a) (requires length l = len) (ensures fun l' -> length l' = len)
-  =
-    let f (i : nat {i < len}) = index l (perm_t_to_fun_inv p i) in
-    initi 0 len f
-
-let apply_index_map (#a : Type) (len : nat) (idxs : list (i : nat {i < len})) (l : list a)
-  : Pure (list a) (requires length l = len) (ensures fun l' -> length l' = length idxs)
-  =
-    let len' = length idxs in
-    let f (i : nat {i < len'}) = index l (index idxs i) in
-    initi 0 len' f
-
-/// l'[i] = l[p[i]]
-let apply_perm_r (#a : Type) (#len : nat) (p : perm_t len) (l : list a)
-  : Pure (list a) (requires length l = len) (ensures fun l' -> length l' = len)
-  = apply_index_map len p l
-
-let apply_perm_r_idx (#a : Type) (#len : nat) (p : perm_t len) (l : list a) (i : nat {i < len})
-  : Lemma (requires length l = len)
-          (ensures  index (apply_perm_r p l) i == index l (index p i))
-  = ()
-
-let apply_perm_eq_r (#a : Type) (#len : nat) (p : perm_t len) (l : list a {length l = len})
-  : Lemma (apply_perm p l == apply_perm_r (invert_perm p) l)
-  = index_extensionality (apply_perm p l) (apply_perm_r (invert_perm p) l)
-
-/// p0; p1  i.e.  x |-> p1 (p0 x)
-let compose_perm (#len : nat) (p0 p1 : perm_t len)
-  : Tot (perm_t len)
-  = let p x = perm_t_to_fun p1 (perm_t_to_fun p0 x) in
-    let p_inv y = perm_t_to_fun_inv p0 (perm_t_to_fun_inv p1 y) in
-    perm_t_of_fun len p p_inv
-
-let invert_compose_perm (#len : nat) (p0 p1 : perm_t len)
-  : Lemma (invert_perm (compose_perm p0 p1) = compose_perm (invert_perm p1) (invert_perm p0))
-  = index_extensionality (invert_perm (compose_perm p0 p1)) (compose_perm (invert_perm p1) (invert_perm p0))
-
-let compose_perm_as_apply_r (#len : nat) (p0 p1 : perm_t len)
-  : Lemma (compose_perm p0 p1 == apply_perm_r p0 p1)
-  = index_extensionality (compose_perm p0 p1) (apply_perm_r p0 p1)
-
-let apply_r_compose_perm (#a : Type) (#len : nat) (p0 p1 : perm_t len) (l : list a)
-  : Lemma (requires length l == len)
-          (ensures  apply_perm_r (compose_perm p0 p1) l == apply_perm_r p0 (apply_perm_r p1 l))
-  =
-    introduce forall (i : nat {i < len}).
-        index (apply_perm_r (compose_perm p0 p1) l) i == index (apply_perm_r p0 (apply_perm_r p1 l)) i
-      with begin
-        calc (==) {
-          index (apply_perm_r (compose_perm p0 p1) l) i;
-        == {}
-          index l (index (compose_perm p0 p1) i);
-        == {}
-          index l (index p1 (index p0 i));
-        };
-        calc (==) {
-          index (apply_perm_r p0 (apply_perm_r p1 l)) i;
-        == {}
-          index (apply_perm_r p1 l) (index p0 i);
-        == {apply_perm_r_idx p1 l (index p0 i)}
-          index l (index p1 (index p0 i));
-        }
-      end;
-    index_extensionality (apply_perm_r (compose_perm p0 p1) l) (apply_perm_r p0 (apply_perm_r p1 l))
-
-let apply_compose_perm (#a : Type) (#len : nat) (p0 p1 : perm_t len) (l : list a)
-  : Lemma (requires length l == len)
-          (ensures  apply_perm (compose_perm p0 p1) l == apply_perm p1 (apply_perm p0 l))
-  =
-  calc (==) {
-    apply_perm (compose_perm p0 p1) l;
-  == {apply_perm_eq_r (compose_perm p0 p1) l}
-    apply_perm_r (invert_perm (compose_perm p0 p1)) l;
-  == {invert_compose_perm p0 p1}
-    apply_perm_r (compose_perm (invert_perm p1) (invert_perm p0)) l;
-  == {apply_r_compose_perm (invert_perm p1) (invert_perm p0) l}
-    apply_perm_r (invert_perm p1) (apply_perm_r (invert_perm p0) l);
-  == {apply_perm_eq_r p0 l; apply_perm_eq_r p1 (apply_perm p0 l)}
-    apply_perm p1 (apply_perm p0 l);
-  }
-
-
-let perm_id_f (len : nat) (j:nat{j<len}) : j:nat{j<len}
-  = j
-
-let perm_id (len : nat)
-  : Pure (perm_t len) (requires True)
-         (ensures fun p -> Fext.feq (perm_t_to_fun p) (perm_id_f len))
-  = perm_t_of_fun len (perm_id_f len) (perm_id_f len)
-
-let perm_id_apply (#a : Type) (len : nat) (l : list a)
-  : Lemma (requires length l = len)
-          (ensures  apply_perm (perm_id len) l == l)
-          [SMTPat (apply_perm (perm_id len) l)]
-  =
-    index_extensionality (apply_perm (perm_id len) l) l
-
-
-
-let perm_swap_f (len : nat) (i : nat{i<=len-2}) (j:nat{j<len}) : j:nat{j<len}
-  = if j = i then i+1 else if j=i+1 then i else j
-
-let perm_swap (len : nat) (i : nat)
-  : Pure (perm_t len) (requires i <= len - 2)
-         (ensures fun p -> Fext.feq (perm_t_to_fun p) (perm_swap_f len i))
-  = perm_t_of_fun len (perm_swap_f len i) (perm_swap_f len i)
-
-#push-options "--z3rlimit 60"
-(* The verification time varies a lot. TODO: more robust proof *)
-let perm_swap_apply_r (#a : Type) (len : nat) (i : nat) (l0 : list a) (x y : a) (l1 : list a)
-  : Lemma (requires length l0 = i /\ length l0 + length l1 + 2 = len)
-          (ensures  length (l0 @ x :: y :: l1) = len /\
-                    apply_perm_r (perm_swap len i) (l0 @ x :: y :: l1) == l0 @ y :: x :: l1)
-  = append_length l0 (x :: y :: l1);
-    append_length l0 (y :: x :: l1);
-    introduce forall (j : nat) . j < len ==>
-              index (apply_perm_r (perm_swap len i) (l0 @ x :: y :: l1)) j == index (l0 @ y :: x :: l1) j
-      with introduce _ ==> _
-      with _. (append_index l0 (y :: x :: l1) j;
-               let r = index (apply_perm_r (perm_swap len i) (l0 @ x :: y :: l1)) j in
-               assert (r == index (l0 @ x :: y :: l1) (perm_swap_f len i j));
-               append_index l0 (x :: y :: l1) (perm_swap_f len i j);
-               if j < i        then assert (r == index l0 j)
-               else if j = i   then assert (r == y)
-               else if j = i+1 then assert (r == x)
-               else assert (r == index l1 (j-i-2))
-               );
-    index_extensionality (apply_perm_r (perm_swap len i) (l0 @ x :: y :: l1)) (l0 @ y :: x :: l1)
+  | [] -> true
+  | x :: xs -> if 0 <= x && x < n && index mask x && check_list_injective n xs (set x false mask)
+             then begin
+               injectiveI #(Fin.fin (length (x :: xs))) (index (x :: xs)) (fun i i' -> ());
+               true
+             end else false
 #pop-options
-*)
+
+let perm_f_list_checked (#n : nat) (l : list int)
+  : option (perm_f_list n)
+  = if length l = n && check_list_injective n l (initi 0 n (fun _ -> true))
+    then begin
+      (introduce forall (x : int) . mem x l ==> 0 <= x /\ x < n
+        with introduce _ ==> _
+        with _ . let _ = mem_findi x l in ());
+      let l' : list (Fin.fin n) = list_ref #int #(fun x -> 0 <= x /\ x < n) l in
+      injectiveI (index l') (fun i i' ->
+        assert (index l' i  == index l i );
+        assert (index l' i' == index l i')
+      );
+      Some l'
+    end else None

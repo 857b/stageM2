@@ -326,12 +326,12 @@ let rec shape_ST_of_M (#pre_n : nat) (#post_n : nat) (s : M.shape_tree pre_n pos
   : Tot (shape_tree pre_n post_n) (decreases s)
   = match s with
   | M.Sspec pre_n post_n frame_n p0 p1 ->
-        Sbind _ _ _ (Sequiv (pre_n  + frame_n) p0) (
+        Sbind _ _ _ (Sequiv (pre_n  + frame_n) (Perm.perm_f_of_list p0)) (
         Sbind _ _ _ (Sframe pre_n post_n frame_n (Sspec  pre_n post_n)) (
-        Sbind _ _ _ (Sequiv (post_n + frame_n) p1)
+        Sbind _ _ _ (Sequiv (post_n + frame_n) (Perm.perm_f_of_list p1))
                     (Sret   true (post_n + frame_n))))
   | M.Sret n p ->
-        Sbind _ _ _ (Sequiv n p) (Sret false n)
+        Sbind _ _ _ (Sequiv n (Perm.perm_f_of_list p)) (Sret false n)
   | M.Sbind _ _ _ f g -> Sbind  _ _ _ (shape_ST_of_M f) (shape_ST_of_M g)
   | M.SbindP _ _ g    -> SbindP _ _ (shape_ST_of_M g)
                     

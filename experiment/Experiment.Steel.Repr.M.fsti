@@ -209,13 +209,12 @@ type tree_cond : (#a : Type u#a) -> (t : prog_tree a) -> (pre : pre_t) -> (post 
 
 (**** Shape *)
 
-noeq
 type shape_tree : (pre_n : nat) -> (post_n : nat) -> Type =
   | Sspec  : (pre_n : nat) -> (post_n : nat) -> (frame_n : nat) ->
-             (p0 : Perm.perm_f (pre_n  + frame_n)) ->
-             (p1 : Perm.perm_f (post_n + frame_n)) ->
+             (p0 : Perm.perm_f_list (pre_n  + frame_n)) ->
+             (p1 : Perm.perm_f_list (post_n + frame_n)) ->
              shape_tree (pre_n + frame_n) (post_n + frame_n)
-  | Sret   : (n : nat) -> (p : Perm.perm_f n) ->
+  | Sret   : (n : nat) -> (p : Perm.perm_f_list n) ->
              shape_tree n n
   | Sbind  : (pre_n : nat) -> (itm_n : nat) -> (post_n : nat) ->
              (f : shape_tree pre_n itm_n) -> (g : shape_tree itm_n post_n) ->
@@ -234,18 +233,24 @@ let rec tree_cond_has_shape (#a : Type) (#pre : pre_t) (#post0 : post_t a) (#t :
                                     | Sspec pre_n post_n frame_n p0' p1' ->
                                       pre_n = L.length pre /\
                                       frame_n = L.length frame /\
-                                      U.cast #(Perm.perm_f L.(length pre1)) (Perm.perm_f (pre_n + frame_n))
-                                         p0 == p0' /\
+                                      Ll.list_eq
+                                        (Perm.perm_f_to_list
+                                          (U.cast #(Perm.perm_f L.(length pre1)) (Perm.perm_f (pre_n + frame_n))
+                                            p0))
+                                        p0' /\
                                      (forall (x : a) .
                                        L.length (post  x) = post_n /\
                                        L.length (post1 x) = post_n + frame_n /\ (* already implied ? *)
-                                       U.cast #(Perm.perm_f L.(length (post x @ frame)))
-                                               (Perm.perm_f (post_n + frame_n))
-                                         (p1 x) == p1')
+                                       Ll.list_eq
+                                         (Perm.perm_f_to_list
+                                           (U.cast #(Perm.perm_f L.(length (post x @ frame)))
+                                                    (Perm.perm_f (post_n + frame_n))
+                                                    (p1 x)))
+                                         p1')
                                     | _ -> False)
   | TCret #a pre post p           -> (match s with
                                     | Sret n p' ->
-                                      p == p' /\
+                                      Ll.list_eq (Perm.perm_f_to_list #n p) p' /\
                                      (forall (x : a) . L.length (post x) = n)
                                     | _ -> False)
   | TCbind #a #b pre itm post f g -> (match s with
@@ -259,6 +264,15 @@ let rec tree_cond_has_shape (#a : Type) (#pre : pre_t) (#post0 : post_t a) (#t :
                                       (forall (x : a) . tree_cond_has_shape (g x) s_g) /\
                                       (forall (y : b) . L.length (post y) = post_n)
                                     | _ -> False)
+
+noeq
+type prog_shape (#a : Type) (#pre : pre_t) (#post : post_t a) (#t : prog_tree a) (c : tree_cond t pre post) = {
+  post_len : nat;
+  shp      : (s : shape_tree (L.length pre) post_len {tree_cond_has_shape c s});
+}
+
+type prog_cond (#a : Type) (t : prog_tree a) (pre : pre_t) (post : post_t a) =
+  c : tree_cond t pre post & prog_shape c
 
 
 (**** requires / ensures *)

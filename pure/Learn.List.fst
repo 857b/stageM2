@@ -19,6 +19,12 @@ let list_extensionality (#a : Type)
       with pf i;
     index_extensionality l0 l1
 
+let rec list_eq (#a : eqtype) (l0 l1 : list a)
+  : Tot (b : bool {b <==> l0 = l1}) (decreases l0)
+  = match l0, l1 with
+  | [], [] -> true
+  | x :: xs, y :: ys -> x = y && list_eq xs ys
+  | _ -> false
 
 (* [mem_findi] *)
 
