@@ -839,7 +839,14 @@ unfold
 let specT (a : Type) (pre : M.pre_t) (post : M.post_t a) : M.prog_tree a
   = M.Tspec a pre post (fun _ -> True) (fun _ _ _ -> True)
 
-let norm_test () : Tac unit = norm [delta_qualifier ["unfold"]]
+let rec repeat_n (n : nat) (t : M.prog_tree unit) : M.prog_tree unit
+  = if n = 0 then M.Tret unit () (fun _ -> [])
+    else M.Tbind unit unit t (fun () -> repeat_n (n-1) t)
+
+let norm_test () : Tac unit
+  = norm [delta_only [`%repeat_n; `%Ll.initi];
+          delta_qualifier ["unfold"];
+          iota; zeta; primops]
 
 
 let _test_TCspec_u (v0 v1 : vprop') : squash True =
@@ -952,10 +959,17 @@ let _test_build_prog_cond_0 (v0 v1 : vprop') (vx0 vx1 : int -> vprop')
 
 let _ = fun v0 v1 vx0 vx1 ->
   assert (U.print_util (_test_build_prog_cond_0 v0 v1 vx0 vx1))
-      by (norm [delta_only [`%_test_build_prog_cond_0]];
-          norm_test ();
-          norm_cond_sol ();
+      by (norm [delta_only [`%_test_build_prog_cond_0]; delta_attr [`%__tac_helper__]];
           dump "print")
+
+(*let _test_build_prog_cond_1 (v : int -> vprop')
+  : M.prog_cond
+        (repeat_n 100 (specT unit (Ll.initi 0 2 v) (fun () -> Ll.initi 0 2 (fun i -> v (1 - i)))))
+        (Ll.initi 0 5 v) (fun () -> Ll.initi 0 5 v)
+  = _ by (norm_test ();
+          let t = timer_start "buil_prog_cond" in
+          build_prog_cond ();
+          timer_stop t)*)
 
 
 /// This example fails because the resolution of the innermost [M.Tret] has to infer its post. In this case the

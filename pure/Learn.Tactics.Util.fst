@@ -7,6 +7,27 @@ open FStar.Tactics
 
 irreducible let __tac_helper__ : unit = ()
 
+
+type timer = {
+  start_ms : int;
+  timer_name : string;
+}
+
+let timer_start (name : string) : Tac timer =
+  { start_ms = curms (); timer_name = name }
+
+let timer_stop_msg (t : timer) (end_ms : int) : Tac unit =
+  print ("time "^t.timer_name^": "^string_of_int (end_ms - t.start_ms)^"ms")
+
+let timer_stop (t : timer) : Tac unit =
+  timer_stop_msg t (curms ())
+
+let timer_enter (t : timer) (name : string) : Tac timer =
+  let cms = curms () in
+  timer_stop_msg t cms;
+  { start_ms = cms; timer_name = name }
+
+
 [@@ __tac_helper__]
 private
 let __pose (goal:Type) (#t:Type) (x : t) (f : t -> goal) : goal = f x

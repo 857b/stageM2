@@ -17,9 +17,15 @@ open Steel.Effect
 open Steel.Effect.Atomic
 open Steel.FractionalPermission
 open Steel.Reference
+open Learn.Tactics.Util
 
 
-let clean : unit -> Tactics.Tac unit = Learn.Tactics.Util.clear_all
+irreducible let __test__ : unit = ()
+let norm_test () = T.norm [delta_qualifier ["unfold"]; delta_attr [`%__test__]]
+
+let clean () : Tactics.Tac unit =
+  Learn.Tactics.Util.clear_all ();
+  norm_test ()
 
 ////////// test_flatten //////////
 
@@ -108,11 +114,12 @@ let steel_read (r : ref nat)
             (steel_read0 r)
             (_ by T.(trefl ()))
 
-unfold let r_read (r : ref nat) : M.repr nat =
+[@@ __test__]
+let r_read (r : ref nat) : M.repr nat =
   M.repr_of_steel (read_pre r) (read_post r) (read_req r) (read_ens r) (steel_read r)
 
 
-unfold
+[@@ __test__]
 let test0_M (r : ref nat) : M.repr nat = M.(
   x <-- r_read r;
   return x)
@@ -134,28 +141,28 @@ let normal_vp : list norm_step = [
   assert (U.print_util (test r).repr_tree) by T.(norm normal_tree_steps; qed ())*)
 
 unfold
-let test0_equiv (r : ref nat) : M.vequiv ([vptr' r full_perm]) [vptr' r full_perm] =
-  Perm.id_n 1
+let test0_equiv (r : ref nat) (v : vprop') : M.vequiv ([vptr' r full_perm; v]) [vptr' r full_perm; v] =
+  Perm.id_n 2
 
-unfold
-let test0_cond (r : ref nat)
-  : M.tree_cond (test0_M r).repr_tree [vptr' r full_perm] (fun _ -> [vptr' r full_perm])
+[@@ __test__]
+let test0_cond (r : ref nat) (v : vprop')
+  : M.tree_cond (test0_M r).repr_tree [vptr' r full_perm; v] (fun _ -> [vptr' r full_perm; v])
   = _ by T.(
     apply (`M.TCbind);
-     (apply (`(M.TCspec _ (read_post (`@r)) []));
-       (norm normal_vp; exact (`test0_equiv (`@r)));
+     (apply (`(M.TCspec [vptr' (`@r) full_perm; (`@v)] (fun _ -> [vptr' (`@r) full_perm; (`@v)]) [(`@v)]));
+       (norm normal_vp; exact (`test0_equiv (`@r) (`@v)));
        (let x = intro () in
-        norm normal_vp; (* TODO: @ is not unfolded *)
-        exact (`test0_equiv (`@r))));
+        norm normal_vp; (* FIXME: @ is not unfolded *)
+        exact (`test0_equiv (`@r) (`@v))));
      (let x = intro () in
       apply (`M.TCret);
-       (norm normal_vp; exact (`test0_equiv (`@r))));
+       (norm normal_vp; exact (`test0_equiv (`@r) (`@v))));
   qed ())
 
-unfold
-let test0_shape_M : M.shape_tree 1 1 = M.(
-  Sbind _ _ _ (M.Sspec 1 1 0 (Perm.perm_f_to_list (Perm.id_n 1)) (Perm.perm_f_to_list (Perm.id_n 1)))
-              (M.Sret 1 (Perm.perm_f_to_list (Perm.id_n 1))))
+[@@ __test__]
+let test0_shape_M : M.shape_tree 2 2 = M.(
+  Sbind _ _ _ (M.Sspec 1 1 1 (Perm.perm_f_to_list (Perm.id_n 2)) (Perm.perm_f_to_list (Perm.id_n 2)))
+              (M.Sret 2 (Perm.perm_f_to_list (Perm.id_n 2))))
 
 let normal_shape_M : list norm_step = [
     delta_only [`%M.tree_cond_has_shape; `%L.length; `%Perm.perm_f_to_list; `%Ll.list_eq; `%Ll.initi];
@@ -163,13 +170,14 @@ let normal_shape_M : list norm_step = [
     iota; zeta; simplify; primops
   ]
 
-let test0_M_has_shape (r : ref nat)
-  : squash (M.tree_cond_has_shape (test0_cond r) test0_shape_M)
+let test0_M_has_shape (r : ref nat) (v : vprop')
+  : squash (M.tree_cond_has_shape (test0_cond r v) test0_shape_M)
   = _ by T.(norm normal_shape_M; smt ())
 
 
-unfold
-let test0_ST (r : ref nat) = ST.flatten_prog (ST.repr_ST_of_M (test0_M r).repr_tree (test0_cond r))
+[@@ __test__]
+let test0_ST (r : ref nat) (v : vprop') =
+  ST.flatten_prog (ST.repr_ST_of_M (test0_M r).repr_tree (test0_cond r v))
 
 let normal_tree_ST : list norm_step = [
     delta_only [`%ST.repr_ST_of_M; `%ST.bind; `%ST.post_ST_of_M; `%M.vprop_list_sels_t;
@@ -184,14 +192,14 @@ let normal_tree_ST : list norm_step = [
    assert (U.print_util (test0_ST r))
        by T.(norm normal_tree_ST; fail "print")*)
 
-unfold
-let test0_shape_ST (r : ref nat) : ST.prog_shape (test0_ST r)
+[@@ __test__]
+let test0_shape_ST (r : ref nat) (v : vprop') : ST.prog_shape (test0_ST r v)
   = 
-    (**) test0_M_has_shape r;
-    (**) ST.repr_ST_of_M_shape (test0_M r).repr_tree (test0_cond r) test0_shape_M;
+    (**) test0_M_has_shape r v;
+    (**) ST.repr_ST_of_M_shape (test0_M r).repr_tree (test0_cond r v) test0_shape_M;
     let s = ST.shape_ST_of_M test0_shape_M in
-    (**) ST.flatten_prog_shape (ST.repr_ST_of_M (test0_M r).repr_tree (test0_cond r)) s;
-    ST.mk_prog_shape (test0_ST r) (ST.flatten_shape s)
+    (**) ST.flatten_prog_shape (ST.repr_ST_of_M (test0_M r).repr_tree (test0_cond r v)) s;
+    ST.mk_prog_shape (test0_ST r v) (ST.flatten_shape s)
 
 let normal_shape_ST : list norm_step = [
     delta_only [`%ST.shape_ST_of_M; `%ST.flatten_shape; `%ST.flatten_shape_aux; `%ST.flatten_shape_k_id;
@@ -204,9 +212,9 @@ let normal_shape_ST : list norm_step = [
    assert (U.print_util (test0_shape_ST r))
        by T.(norm normal_shape_ST; fail "print")*)
 
-unfold
-let test0_SF (r : ref nat) (x_ini : nat) : SF.prog_tree _ _ =
-  SF.repr_SF_of_ST (test0_ST r) (test0_shape_ST r) Fl.(cons x_ini nil)
+[@@ __test__]
+let test0_SF (r : ref nat) (v : vprop') (x_ini : nat) (v_ini : v.t) : SF.prog_tree _ _ =
+  SF.repr_SF_of_ST (test0_ST r v) (test0_shape_ST r v) Fl.(cons x_ini (cons v_ini nil))
 
 let normal_tree_SF : list norm_step = [
     delta_only [`%SF.repr_SF_of_ST; `%SF.shape_SF_of_ST;
@@ -235,11 +243,11 @@ let normal_tree_SF : list norm_step = [
               norm normal_tree_SF;
               fail "print")*)
 
-unfold
-let test0_shape_SF (r : ref nat) (x_ini : nat) : SF.prog_shape (test0_SF r x_ini)
+[@@ __test__]
+let test0_shape_SF (r : ref nat) (v : vprop') (x_ini : nat) (v_ini : v.t) : SF.prog_shape (test0_SF r v x_ini v_ini)
   =
-    (**) SF.repr_SF_of_ST_shape (test0_ST r) (test0_shape_ST r) Fl.(cons x_ini nil);
-    SF.mk_prog_shape (test0_SF r x_ini) (SF.shape_SF_of_ST (test0_shape_ST r).shp)
+    (**) SF.repr_SF_of_ST_shape (test0_ST r v) (test0_shape_ST r v) Fl.(cons x_ini (cons v_ini nil));
+    SF.mk_prog_shape (test0_SF r v x_ini v_ini) (SF.shape_SF_of_ST (test0_shape_ST r v).shp)
 
 (*let _ = fun r x_ini ->
   assert (U.print_util (test0_shape_SF r x_ini))
@@ -249,9 +257,9 @@ let test0_shape_SF (r : ref nat) (x_ini : nat) : SF.prog_shape (test0_SF r x_ini
           fail "print")*)
 
 
-unfold
-let test0_Fun (r : ref nat) (x_ini : nat) = 
-  SF.repr_Fun_of_SF (test0_SF r x_ini)
+[@@ __test__]
+let test0_Fun (r : ref nat) (v : vprop') (x_ini : nat) (v_ini : v.t) = 
+  SF.repr_Fun_of_SF (test0_SF r v x_ini v_ini)
 
 let normal_repr_Fun_of_SF : list norm_step = [
     delta_only [`%SF.repr_Fun_of_SF];
@@ -283,37 +291,45 @@ let normal_Fun_elim_returns : list norm_step = [
                 `%SF.Mksl_tys_v?.val_v;     `%SF.Mksl_tys_v?.sel_v;
                 `%SF.Mksl_tys_r?.vl;        `%SF.Mksl_tys_r?.sl;
                 `%Fun.Tret?.x;
-                `%SF.sl_v_of_r; `%SF.sl_r_of_v
+                `%SF.sl_r_of_v; `%SF.sl_v_of_r;
+                `%Fl.cons; `%Fl.nil; `%Fl.dlist_of_f; `%Fl.flist_of_d'; `%Dl.initi; `%Dl.index;
+                `%L.length; `%L.index; `%L.hd; `%L.tl; `%L.tail; `%Ll.initi
                 ];
     delta_qualifier ["unfold"];
     iota; zeta; primops
   ]
 
 let normal_after_Fun_elim_returns : list norm_step = [
-    delta_only [`%SF.delayed_sl_uncurrify;
-                `%Fl.cons; `%Fl.nil; `%Fl.dlist_of_f; `%Fl.flist_of_d; `%Dl.initi; `%Dl.index;
-                `%L.length; `%L.index; `%L.hd; `%L.tl; `%L.tail; `%Ll.initi];
+    delta_only [`%SF.delayed_sl_uncurrify];
     delta_qualifier ["unfold"];
     iota; zeta; primops
   ]
 
-(*let _ = fun r x_ini ->
-    (**) SF.repr_Fun_of_SF_shape (test0_SF r x_ini) (test0_shape_SF r x_ini);
-    assert (U.print_util (Fun.elim_returns SF.sl_tys_lam (test0_Fun r x_ini)
-                                         (SF.shape_Fun_of_SF (test0_shape_SF r x_ini).shp)))
+(*let _ = fun r v x_ini v_ini ->
+    (**) SF.repr_Fun_of_SF_shape (test0_SF r v x_ini v_ini) (test0_shape_SF r v x_ini v_ini);
+    assert (U.print_util (Fun.elim_returns SF.sl_tys_lam (test0_Fun r v x_ini v_ini)
+                                         (SF.shape_Fun_of_SF (test0_shape_SF r v x_ini v_ini).shp)))
         by T.(clean ();
+              let t = timer_start "tree_ST"  in
               norm normal_tree_ST;
+              let t = timer_enter t "shape_ST" in
               norm normal_shape_ST;
+              let t = timer_enter t "tree_SF"  in
               norm normal_tree_SF;
+              let t = timer_enter t "tree_Fun" in
               norm normal_repr_Fun_of_SF;
+              let t = timer_enter t "shape_Fun" in
               norm normal_shape_Fun;
+              let t = timer_enter t "elim_returns_0" in
               norm normal_Fun_elim_returns;
+              let t = timer_enter t "elim_returns_1" in
               norm normal_after_Fun_elim_returns;
+              timer_stop t;
               fail "print")*)
 
 unfold
-let test0_wp (r : ref nat) (x_ini : nat) =
-  Fun.tree_wp (test0_Fun r x_ini) (fun res -> res.val_v >= 0)
+let test0_wp (r : ref nat) (v : vprop') (x_ini : nat) (v_ini : v.t) =
+  Fun.tree_wp (test0_Fun r v x_ini v_ini) (fun res -> res.val_v >= 0)
 
 let normal_spec_Fun : list norm_step = [
     delta_only [`%Fun.tree_wp; `%Fl.partial_app_flist;

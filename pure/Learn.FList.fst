@@ -45,9 +45,33 @@ let flist_extensionality (#ts : ty_list) (xs ys : flist ts)
     FStar.Classical.forall_intro_squash_gtot pf;
     Fext.extensionality (Fin.fin (L.length ts)) (L.index ts) xs ys
 
+let nil_uniq (xs : flist [])
+  : Lemma (xs == nil)
+  = flist_extensionality xs nil (fun _ -> false_elim ())
+
+let as_cons (#t : Type) (#ts : ty_list) (xs : flist (t :: ts))
+  : Lemma (xs == cons #t (head xs) #ts (tail xs))
+  = flist_extensionality xs (cons #t (head xs) #ts (tail xs)) (fun _ -> ())
+
 
 let flist_of_d (#ts : ty_list) (l : Dl.dlist ts) : flist ts
   = mk_flist ts (Dl.index l)
+
+let rec flist_of_d' (#ts : ty_list) (l : Dl.dlist ts)
+  : Tot (flist ts) (decreases l)
+  = match l with
+  | Dl.DNil -> nil
+  | Dl.DCons _ x0 _ xs -> let f = flist_of_d' xs in cons x0 f
+
+let rec flist_of_d'_eq (#ts : Dl.ty_list) (l : Dl.dlist ts)
+  : Lemma (ensures flist_of_d' l == flist_of_d l) (decreases l)
+          [SMTPat (flist_of_d' l)]
+  = match l with
+  | Dl.DNil -> nil_uniq (flist_of_d l)
+  | Dl.DCons t0 x0 ts xs ->
+              flist_of_d'_eq xs;
+              flist_extensionality (cons x0 (flist_of_d' xs)) (flist_of_d l) (fun i -> ())
+
 
 let dlist_of_f (#ts : ty_list) (f : flist ts) : Dl.dlist ts
   = Dl.initi_ty ts f
@@ -159,14 +183,6 @@ let apply_pequiv_sym_eq_iff (#ts0 #ts1 : ty_list) (f : Perm.pequiv ts0 ts1) (xs 
 let partial_app_flist (src0 : Type u#s) (src : ty_list u#s) (dst : Type u#d) (f : flist (src0 :: src) -> dst)
                       (x : src0) (xs : flist src) : dst
   = f (cons #src0 x #src xs)
-
-let nil_uniq (xs : flist [])
-  : Lemma (xs == nil)
-  = flist_extensionality xs nil (fun _ -> false_elim ())
-
-let as_cons (#t : Type) (#ts : ty_list) (xs : flist (t :: ts))
-  : Lemma (xs == cons #t (head xs) #ts (tail xs))
-  = flist_extensionality xs (cons #t (head xs) #ts (tail xs)) (fun _ -> ())
 
 let rec consify (#ts : ty_list) (xs : flist ts)
   : Tot (flist ts) (decreases ts)

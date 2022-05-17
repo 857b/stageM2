@@ -491,9 +491,11 @@ type sl_tys_r (ty : sl_tys_t u#a u#b) : Type u#(max a (b + 1)) = {
   sl : Dl.dlist (ty.sel_t vl)
 }
 
+/// By using [Fl.flist_of_d'] instead of [Fl.flist_of_d], we force the normalization of [x.sl], which improves
+/// the normalization time of [elim_returns].
 let sl_v_of_r (#ty : sl_tys_t u#a u#b) (x : sl_tys_r ty) : sl_tys_v ty = {
   val_v = x.vl;
-  sel_v = Fl.flist_of_d x.sl;
+  sel_v = Fl.flist_of_d' x.sl;
 }
 
 let sl_r_of_v (#ty : sl_tys_t u#a u#b) (x : sl_tys_v ty) : sl_tys_r ty = {
