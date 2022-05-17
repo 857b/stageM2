@@ -504,6 +504,48 @@ and repr_SF_of_ST_ens
     end s sl0 res sl1
 #pop-options
 
+#push-options "--ifuel 0 --fuel 0"
+let repr_SF_of_ST_rall_equiv
+      (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
+      (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
+      (sl0 : Fl.flist pre)
+  : Lemma ((ST.tree_req t sl0 <==> tree_req (repr_SF_of_ST_rall t s sl0)) /\
+           (forall (x : a) (sl1 : Fl.flist (post x)) .
+             ST.tree_ens t sl0 x sl1 <==> tree_ens (repr_SF_of_ST_rall t s sl0) x sl1))
+  =
+    calc (<==>) {
+      tree_req (repr_SF_of_ST_rall t s sl0);
+    <==> { _ by T.(apply_lemma (`U.iff_refl); trefl ()) }
+      tree_req (repr_SF_of_ST t s sl0) /\
+        (forall x sl1' . tree_ens (repr_SF_of_ST t s sl0) x sl1' ==> True);
+    <==> { }
+      tree_req (repr_SF_of_ST t s sl0);
+    <==> { repr_SF_of_ST_req t s sl0 }
+      ST.tree_req t sl0;
+    };
+
+    introduce forall (x : a) (sl1 : Fl.flist (post x)) .
+        ST.tree_ens t sl0 x sl1 <==> tree_ens (repr_SF_of_ST_rall t s sl0) x sl1
+    with begin
+      calc (<==>) {
+        tree_ens (repr_SF_of_ST_rall t s sl0) x sl1;
+      <==> { _ by T.(apply_lemma (`U.iff_refl); trefl ()) }
+        exists x' (sl1' : post_v (post_SF_of_ST post s.shp) x') .
+          tree_ens (repr_SF_of_ST t s sl0) x' sl1' /\
+         (x == x' /\ sl1 == Fl.flist_of_d (Fl.dlist_of_f (sel_ST_of_SF t s sl0 x' sl1')));
+      <==> { }
+        exists (sl1' : post_v (post_SF_of_ST post s.shp) x) .
+        tree_ens (repr_SF_of_ST t s sl0) x sl1' /\ sl1 == sel_ST_of_SF t s sl0 x sl1';
+      <==> { FStar.Classical.forall_intro (sel_SF_ST_SF t s sl0 x);
+           FStar.Classical.forall_intro (post_eq_src_iff (post_src_of_shape t s x) (post_bij s.shp) sl0) }
+        tree_ens (repr_SF_of_ST t s sl0) x (sel_SF_of_ST post s.shp x sl1) /\
+        post_eq_src (post_src_of_shape t s x) sl0 sl1;
+      <==> { repr_SF_of_ST_ens t s sl0 x sl1 }
+        ST.tree_ens t sl0 x sl1;
+      }
+    end
+#pop-options
+
 
 #push-options "--fuel 3 --z3rlimit 30"
 let rec repr_SF_of_ST_shape
@@ -541,6 +583,15 @@ let rec repr_SF_of_ST_shape
         = repr_SF_of_ST_shape (g x) (s_g x) sl0
       in ()
     end s sl0
+#pop-options
+
+#push-options "--fuel 2"
+let repr_SF_of_ST_rall_shape
+  (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
+  (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
+  (sl0 : Fl.flist pre)
+  : Lemma (prog_has_shape (repr_SF_of_ST_rall t s sl0) (shape_SF_of_ST_rall s.shp))
+  = repr_SF_of_ST_shape t s sl0
 #pop-options
 
 #pop-options

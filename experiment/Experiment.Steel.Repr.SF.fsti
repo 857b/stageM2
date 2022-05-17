@@ -350,6 +350,16 @@ let rec repr_SF_of_ST
             let sl1 = sel_ST_of_SF (g x) s_g sl0 y sl1' in
             return_SF_post_of_ST post s.shp y sl1))
 
+/// A version that returns all selectors, to be used at top-level
+let repr_SF_of_ST_rall
+      (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
+      (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
+      (sl0 : Fl.flist pre)
+  : prog_tree a post
+  = Tbind a a _ _ (repr_SF_of_ST t s sl0) (fun x sl1' ->
+    let sl1 = sel_ST_of_SF t s sl0 x sl1' in
+    Tret a x post (Fl.dlist_of_f sl1))
+
 
 let rec shape_SF_of_ST
       (#pre_n #post_n : nat) (t : ST.shape_tree pre_n post_n)
@@ -370,6 +380,11 @@ let rec shape_SF_of_ST
     | ST.SbindP pre_n post_n s_g ->
             SbindP _ (Sbind _ _ (shape_SF_of_ST s_g) (Sret true post_n))
 
+let shape_SF_of_ST_rall
+      (#pre_n #post_n : nat) (t : ST.shape_tree pre_n post_n)
+  : shape_tree post_n
+  = Sbind (post_bij t).len_SF post_n
+       (shape_SF_of_ST t) (Sret true post_n)
 
 (**) val __end_repr_fun_of_st : unit
 #pop-options
@@ -446,23 +461,38 @@ let ens_equiv_rev #a #pre #post (t : ST.prog_tree a pre post) (s : ST.prog_shape
 /// The soundness (and completeness) lemmas:
 
 val repr_SF_of_ST_req
-  (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
-  (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
-  (sl0 : Fl.flist pre)
+      (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
+      (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
+      (sl0 : Fl.flist pre)
   : Lemma (req_equiv t s sl0)
 
 val repr_SF_of_ST_ens
-  (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
-  (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
-  (sl0 : Fl.flist pre) (res : a) (sl1 : Fl.flist (post res))
+      (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
+      (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
+      (sl0 : Fl.flist pre) (res : a) (sl1 : Fl.flist (post res))
   : Lemma (ens_equiv t s sl0 res sl1)
+
+val repr_SF_of_ST_rall_equiv
+      (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
+      (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
+      (sl0 : Fl.flist pre)
+  : Lemma ((ST.tree_req t sl0 <==> tree_req (repr_SF_of_ST_rall t s sl0)) /\
+           (forall (x : a) (sl1 : Fl.flist (post x)) .
+             ST.tree_ens t sl0 x sl1 <==> tree_ens (repr_SF_of_ST_rall t s sl0) x sl1))
 
 
 val repr_SF_of_ST_shape
-  (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
-  (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
-  (sl0 : Fl.flist pre)
+      (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
+      (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
+      (sl0 : Fl.flist pre)
   : Lemma (prog_has_shape (repr_SF_of_ST t s sl0) (shape_SF_of_ST s.shp))
+
+val repr_SF_of_ST_rall_shape
+      (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
+      (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
+      (sl0 : Fl.flist pre)
+  : Lemma (prog_has_shape (repr_SF_of_ST_rall t s sl0) (shape_SF_of_ST_rall s.shp))
+
 
 (*** Steel.Repr.SF --> Repr.Fun *)
 
@@ -627,7 +657,7 @@ val repr_Fun_of_SF_req (#val_t : Type) (#sel_t : post_t val_t) (t : prog_tree u#
   : Lemma (tree_req t <==> Fun.tree_req (repr_Fun_of_SF t))
 
 val repr_Fun_of_SF_ens (#val_t : Type) (#sel_t : post_t val_t) (t : prog_tree u#a u#b val_t sel_t)
-                          (val_v : val_t) (sel_v : Fl.flist (sel_t val_v))
+                       (val_v : val_t) (sel_v : Fl.flist (sel_t val_v))
   : Lemma (tree_ens t val_v sel_v <==> Fun.tree_ens (repr_Fun_of_SF t) ({val_v; sel_v}))
 
 val repr_Fun_of_SF_shape

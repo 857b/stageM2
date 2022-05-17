@@ -15,13 +15,14 @@ open FStar.Classical.Sugar
 open Steel.Effect
 open Steel.Effect.Atomic
 
-irreducible let __tree_reduce__ : unit = ()
 
+irreducible let __repr_M__ : unit = ()
 
 (***** [vprop_list] *)
 
 type vprop_list = list vprop'
 
+[@@ __reduce__]
 let rec vprop_of_list (vpl : vprop_list) : vprop =
   match vpl with
   | [] -> emp
@@ -52,7 +53,6 @@ val vprop_equiv_flat (vp : vprop)
 
 (* ALT? dependent arrrow Fin.fin n -> _ *)
 
-[@@ __tree_reduce__]
 let vprop_list_sels_t : vprop_list -> Dl.ty_list =
   L.map Mkvprop'?.t
 
@@ -163,6 +163,19 @@ type repr_steel_t (a : Type)
              (vprop_of_list pre) (fun x -> vprop_of_list (post x))
              (requires fun h0      -> req (rmem_sels pre h0))
              (ensures  fun h0 x h1 -> ens (rmem_sels pre h0) x (rmem_sels (post x) h1))
+
+inline_for_extraction
+val repr_steel_subcomp
+      (#a : Type) (#pre : pre_t) (#post : post_t a)
+      (req_f : req_t pre) (ens_f : ens_t pre a post)
+      (req_g : req_t pre) (ens_g : ens_t pre a post)
+      (pf_req : (sl0 : sl_t pre) ->
+                Lemma (requires req_g sl0) (ensures req_f sl0))
+      (pf_ens : (sl0 : sl_t pre) -> (x : a) -> (sl1 : sl_t (post x)) ->
+                Lemma (requires req_f sl0 /\ req_g sl0 /\ ens_f sl0 x sl1) (ensures ens_g sl0 x sl1))
+      (r : repr_steel_t a pre post req_f ens_f)
+  : repr_steel_t a pre post req_g ens_g
+
 
 noeq
 type prog_tree : (a : Type u#a) -> Type u#(max (a+1) 2) =
@@ -373,18 +386,20 @@ and tree_ens (#a : Type u#a) (t : prog_tree a)
 /// We define a "monad" (which does not satisfy the monad laws) on a [repr] type which contains a representation
 /// of the program as a tree and a corresponding steel function.
 
-noeq
+noeq inline_for_extraction
 type repr (a : Type) = {
   repr_tree  : prog_tree a;
   repr_steel : (pre : pre_t) -> (post : post_t a) -> (c : tree_cond repr_tree pre post) ->
                repr_steel_t a pre post (tree_req repr_tree c) (tree_ens repr_tree c)
 }
 
+[@@ __repr_M__]
 let tree_of_steel (#a : Type) (#pre : pre_t) (#post : post_t a) (#req : req_t pre) (#ens : ens_t pre a post)
                   ($f : repr_steel_t a pre post req ens)
   : prog_tree a
   = Tspec a pre post req ens
 
+inline_for_extraction
 val repr_of_steel_steel
       (a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
       (pre' : pre_t) (post' : post_t a) (frame : vprop_list)
@@ -393,7 +408,8 @@ val repr_of_steel_steel
   : (let c = TCspec #a #pre #post #req #ens pre' post' frame p0 p1 in
      repr_steel_t a pre' post' (tree_req _ c) (tree_ens _ c))
 
-[@@ __tree_reduce__]
+[@@ __repr_M__]
+inline_for_extraction
 let repr_of_steel (#a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
                   ($f : repr_steel_t a pre post req ens)
   : repr a
@@ -406,6 +422,7 @@ let repr_of_steel (#a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) 
   }
 
 
+inline_for_extraction
 val return_steel
       (a : Type) (x : a) (sl_hint : post_t a)
       (pre : pre_t) (post : post_t a)
@@ -413,7 +430,8 @@ val return_steel
   : (let c = TCret #a #x #sl_hint pre post p in
      repr_steel_t a pre post (tree_req _ c) (tree_ens _ c))
 
-[@@ __tree_reduce__]
+[@@ __repr_M__]
+inline_for_extraction
 let return_hint (#a : Type) (x : a) (sl_hint : post_t a)
   : repr a
   = {
@@ -424,11 +442,12 @@ let return_hint (#a : Type) (x : a) (sl_hint : post_t a)
                (return_steel a x sl_hint pre post p))
   }
 
-[@@ __tree_reduce__]
+[@@ __repr_M__]
+inline_for_extraction
 let return (#a : Type) (x : a) : repr a
   = return_hint x (fun _ -> [])
 
-
+inline_for_extraction
 val bind_steel
       (a : Type) (b : Type) (f : prog_tree a) (g : (a -> prog_tree b))
       (pre : pre_t) (itm : post_t a) (post : post_t b)
@@ -438,7 +457,8 @@ val bind_steel
   : (let c = TCbind #a #b #f #g pre itm post cf cg in
      repr_steel_t b pre post (tree_req _ c) (tree_ens _ c))
 
-[@@ __tree_reduce__]
+[@@ __repr_M__]
+inline_for_extraction
 let bind (#a #b : Type)
       (f : repr a) (g : a -> repr b)
   : repr b

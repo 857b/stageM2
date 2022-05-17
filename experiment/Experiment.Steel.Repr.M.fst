@@ -232,8 +232,30 @@ let steel_change_vequiv (#vs0 #vs1 : vprop_list) (#opened:Mem.inames) (f : vequi
     steel_change_vequiv_aux (L.length vs0) vs0 vs1 (Perm.perm_f_to_swap f) ()
 
 
-(***** Monad combiners *)
+inline_for_extraction
+let repr_steel_subcomp
+      (#a : Type) (#pre : pre_t) (#post : post_t a)
+      (req_f : req_t pre) (ens_f : ens_t pre a post)
+      (req_g : req_t pre) (ens_g : ens_t pre a post)
+      (pf_req : (sl0 : sl_t pre) ->
+                Lemma (requires req_g sl0) (ensures req_f sl0))
+      (pf_ens : (sl0 : sl_t pre) -> (x : a) -> (sl1 : sl_t (post x)) ->
+                Lemma (requires req_f sl0 /\ req_g sl0 /\ ens_f sl0 x sl1) (ensures ens_g sl0 x sl1))
+      (r : repr_steel_t a pre post req_f ens_f)
+  : repr_steel_t a pre post req_g ens_g
+  = 
+    (fun () ->
+      (**) let sl0 = gget (vprop_of_list pre) in
+      (**) pf_req (vpl_sels_f pre sl0);
+      let x = r () in
+      (**) let sl1 = gget (vprop_of_list (post x)) in
+      (**) pf_ens (vpl_sels_f pre sl0) x (vpl_sels_f (post x) sl1);
+      Steel.Effect.Atomic.return x)
 
+
+(***** Monad combiners *)  
+
+inline_for_extraction
 let repr_of_steel_steel
       (a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
       (pre' : pre_t) (post' : post_t a) (frame : vprop_list)
@@ -254,6 +276,7 @@ let repr_of_steel_steel
     (**) extract_vars_sym_l (p1 x) (vpl_sels_f L.(post x @ frame) sl1');
     Steel.Effect.Atomic.return x
 
+inline_for_extraction
 let return_steel
       (a : Type) (x : a) (sl_hint : post_t a)
       (pre : pre_t) (post : post_t a)
@@ -296,6 +319,7 @@ let intro_tree_ens_bind (#a #b : Type) (f : prog_tree a) (g : a -> prog_tree b)
           tree_ens (g x) (cg x) sl1 y (vpl_sels_f (post y) sl2))
     ))
 
+inline_for_extraction
 let bind_steel
       (a : Type) (b : Type) (f : prog_tree a) (g : (a -> prog_tree b))
       (pre : pre_t) (itm : post_t a) (post : post_t b)

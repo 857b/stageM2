@@ -207,6 +207,7 @@ dist/Makefile.basic: $(ALL_KRML_FILES) c/*
 	  -add-include '<stdint.h>' \
 	  -add-include '"krml/internal/target.h"'
 	  @#-dstructs > _local/krml.out 2>&1
+	  #-bundle 'Experiment.Steel.Repr.Test.Extract=Experiment.Steel.*'
 
 extract:dist/Makefile.basic
 
