@@ -80,7 +80,7 @@ endif
 
 include .depend
 
-ALL_KRML_FILES := $(filter-out $(IGNORE_KRML_FILES), $(ALL_KRML_FILES))
+ALL_KRML_FILES := $(filter-out $(IGNORE_KRML_FILES), $(ALL_KRML_FILES)) $(NO_IGNORE_KRML_FILES)
 
 # Verification
 # ------------
@@ -207,7 +207,7 @@ dist/Makefile.basic: $(ALL_KRML_FILES) c/*
 	  -add-include '<stdint.h>' \
 	  -add-include '"krml/internal/target.h"'
 	  @#-dstructs > _local/krml.out 2>&1
-	  #-bundle 'Experiment.Steel.Repr.Test.Extract=Experiment.Steel.*'
+	  @#-bundle 'Experiment.Steel.Repr.Test.Extract=Experiment.Steel.*'[rename=experiment] \
 
 extract:dist/Makefile.basic
 

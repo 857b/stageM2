@@ -9,7 +9,9 @@ module Perm = Learn.Permutation
 
 open FStar.Tactics
 open Learn.Tactics.Util
-open Steel.Effect.Common
+open Steel.Effect
+open Steel.FractionalPermission
+open Steel.Reference
 open Experiment.Steel.CondSolver
 
 
@@ -198,3 +200,31 @@ let test_build_tree_cond__post (v0 : vprop')
         [] (fun _ -> [])
   = _ by (norm_test (); let _ = build_tree_cond true in ())
 
+
+[@@expect_failure]
+let test_steel__ret_ghost_0 (r : ref int)
+  : SteelT (Ghost.erased (ref int)) (vptr r) (fun r' -> vptr (Ghost.reveal r'))
+  = Steel.Effect.Atomic.return (Ghost.hide r)
+
+let test_steel__ret_ghost_1 (r : ref int)
+  : SteelT (Ghost.erased (ref int)) (vptr r) (fun r' -> vptr (Ghost.reveal r'))
+  = let r' = Ghost.hide r in
+    Steel.Effect.Atomic.return r'
+
+[@@expect_failure]
+let test_steel__ret_f (v : int -> vprop) (x : int) (f : int -> int)
+  : SteelT int (v (f x)) (fun y -> v y)
+  = Steel.Effect.Atomic.return (f x)
+
+(* TODO : allow ghost post
+let test_build_tree_cond__ret_ghost (r : ref int)
+  : M.tree_cond
+        (M.Tret (Ghost.erased (ref int)) (Ghost.hide r) (fun _ -> []))
+        [vptr' r full_perm] (fun r' -> [vptr' (Ghost.reveal r') full_perm])
+   = _ by (norm_test (); let _ = build_tree_cond true in ())*)
+
+let test_build_tree_cond__ret_f (v : int -> vprop') (x : int) (f : int -> int)
+  : M.tree_cond
+        (M.Tret int (f x) (fun _ -> []))
+        [v (f x)] (fun y -> [v y])
+   = _ by (norm_test (); let _ = build_tree_cond true in ())

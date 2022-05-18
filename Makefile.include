@@ -26,8 +26,9 @@ IGNORE_KRML_FILES=\
 	obj/Steel_%.krml \
 	obj/Learn_Effect%.krml \
 	obj/Experiment_%.krml
-#	obj/Experiment_Steel_Reify.krml \
-#	obj/Experiment_Steel_Func.krml
+
+NO_IGNORE_KRML_FILES=#\
+	#obj/Experiment_Steel_Repr_Test_Extract.krml
 
 FSTAR_INCLUDES  = $(addprefix --include ,$(INCLUDE_DIRS))
 FSTAR_USE_HINTS = --hint_dir $(PROJECT_HOME)/hints --use_hints

@@ -69,7 +69,7 @@ let vprop_list_sels_t_eq (vs : vprop_list) (i : nat {i < L.length vs})
 
 let rec vpl_sels (vs : vprop_list) (sl : t_of (vprop_of_list vs))
   : Tot (sl_list vs) (decreases vs)
-  = match (|vs, sl|) <: (vs : vprop_list & t_of (vprop_of_list vs))  with
+  = match (|vs, sl|) <: (vs : vprop_list & t_of (vprop_of_list vs)) with
   | (|[], _|) -> Dl.DNil
   | (|v0 :: vs, (x0, xs)|) -> Dl.DCons v0.t x0 _ (vpl_sels vs xs)
 
@@ -78,16 +78,49 @@ let vpl_sels_f (vs : vprop_list) (sl : t_of (vprop_of_list vs)) : sl_t vs
   = Fl.flist_of_d (vpl_sels vs sl)
 
 unfold
-let rmem_sl_list (#p:vprop) (vs : vprop_list)
-    (h:rmem p{FStar.Tactics.with_tactic selector_tactic (can_be_split p (vprop_of_list vs) /\ True)})
+let rmem_sl_list (#p : vprop) (vs : vprop_list)
+      (h:rmem p{FStar.Tactics.with_tactic selector_tactic (can_be_split p (vprop_of_list vs) /\ True)})
   : GTot (sl_list vs)
   = vpl_sels vs (h (vprop_of_list vs))
 
-unfold let rmem_sels (#p:vprop) (vs : vprop_list)
-    (h:rmem p{FStar.Tactics.with_tactic selector_tactic (can_be_split p (vprop_of_list vs) /\ True)})
+unfold let rmem_sels (#p : vprop) (vs : vprop_list)
+      (h:rmem p{FStar.Tactics.with_tactic selector_tactic (can_be_split p (vprop_of_list vs) /\ True)})
   : GTot (sl_t vs)
   = Fl.flist_of_d (rmem_sl_list vs h)
 
+
+(* TODO? use this when interacting with Steel
+let rmem_sels' (#p : vprop) (vs : vprop_list)
+      (h : rmem p{FStar.Tactics.with_tactic selector_tactic (can_be_split p (vprop_of_list vs) /\ True)})
+      (i : Fin.fin (L.length vs))
+  : GTot (L.index vs i).t
+  =
+    (**) vprop_of_list_can_be_split vs i;
+    (**) can_be_split_trans p (vprop_of_list vs) (VUnit (L.index vs i));
+    h (VUnit (L.index vs i))
+
+// Is it provable ?
+let rmem_star_eq (#p : vprop) (v0 v1 : vprop)
+      (h : rmem p{FStar.Tactics.with_tactic selector_tactic (can_be_split p (VStar v0 v1) /\ True)})
+  : Lemma (can_be_split p v0 /\ can_be_split p v1 /\
+           h (VStar v0 v1) == (h v0, h v1))
+  =
+    can_be_split_star_l v0 v1;
+    can_be_split_star_r v0 v1;
+    can_be_split_trans p (VStar v0 v1) v0;
+    can_be_split_trans p (VStar v0 v1) v1
+
+val rmem_sl_list_eq
+      (#p : vprop) (vs : vprop_list)
+      (h:rmem p{FStar.Tactics.with_tactic selector_tactic (can_be_split p (vprop_of_list vs) /\ True)})
+      (i : Fin.fin (L.length vs))
+  : Lemma (ensures Dl.index (rmem_sl_list #p vs h) i == rmem_sels' #p vs h i) (decreases vs)
+
+val rmem_sels_eq (#p : vprop) (vs : vprop_list)
+      (h : rmem p{FStar.Tactics.with_tactic selector_tactic (can_be_split p (vprop_of_list vs) /\ True)})
+      (i : Fin.fin (L.length vs))
+  : Lemma (rmem_sels #p vs h i == rmem_sels' #p vs h i)
+*)
 
 unfold
 let split_vars (vs0 vs1 : vprop_list) (xs : sl_t (vs0 @ vs1))

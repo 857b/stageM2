@@ -379,85 +379,21 @@ let test3_M (r0 r1 : ref nat) : M.repr unit = M.(
 let test3_mem (r0 r1 : ref nat) =
   [vptr' r0 full_perm; vptr' r1 full_perm]
 
+//[@@ handle_smt_goals ]
+//let tac () = T.dump "SMT query"
+
+// This generates 2 SMT queries:
+// - the WP
+// - one for the typing of the requires and ensures clauses
 inline_for_extraction
 let test3_steel (r0 r1 : ref nat)
-  : extract (test3_M r0 r1)
+  : extract unit
       (test3_mem r0 r1) (fun _ -> test3_mem r0 r1)
       (requires fun _ -> True) (ensures fun sl0 () sl1 -> sl1 1 == sl0 0 + 1)
+      (test3_M r0 r1)
   = _ by (solve_by_wp ())
 
-
-(* TODO *)
-(*let __normal_rmem_sels : list norm_step = [
-  delta_only [`%M.rmem_sels; `%Fl.flist_of_d; `%M.rmem_sl_list; `%M.vpl_sels;
-              `%Dl.index];
-  delta_attr [`%__reduce__];
-  iota; zeta;
-]
-
-(*module T = FStar.Tactics
-[@@ handle_smt_goals ]
-let tac () = T.dump "test"
-
-let steel_subcomp
-      (#a : Type) (#pre : pre_t) (#post : post_t a)
-      (req_f : req_t pre) (ens_f : ens_t pre a post)
-      (req_g : req_t pre) (ens_g : ens_t pre a post)
-      (pf_req : (h0 : rmem pre) ->
-                Lemma (requires req_g h0) (ensures req_f h0))
-      (pf_ens : (h0 : rmem pre) -> (x : a) -> (h1 : rmem (post x)) ->
-                Lemma (requires req_f h0 /\ req_g h0 /\ ens_f h0 x h1) (ensures ens_g h0 x h1))
-      (f : unit -> Steel a pre post req_f ens_f)
-  : Steel a pre post req_g ens_g
-  =
-    (**) let h0 = get () in
-    (**) pf_req h0;
-    let x = f () in
-    (**) let h1 = get () in
-    (**) pf_ens h0 x h1;
-    Steel.Effect.Atomic.return x*)
-
-type unit_steel (a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
-  = unit -> Steel a pre post req ens
-
-let steel_subcomp_eq
-      (#a : Type) (#pre : pre_t) (#post : post_t a)
-      (req_f : req_t pre) (ens_f : ens_t pre a post)
-      (req_g : req_t pre) (ens_g : ens_t pre a post)
-      (pf_req : unit -> squash (req_f == req_g))
-      (pf_ens : unit -> squash (ens_f == ens_g))
-      (f : unit_steel a pre post req_f ens_f)
-  : unit_steel a pre post req_g ens_g
-  = pf_req ();
-    pf_ens ();
-    U.cast #(unit_steel a pre post req_f ens_f) (unit_steel a pre post req_g ens_g) f
-
-let call_repr_steel
-      (#a : Type)
-      (#pre : M.pre_t)     (#post : M.post_t a)
-      (#req : M.req_t pre) (#ens  : M.ens_t pre a post)
-      (r : M.repr_steel_t a pre post req ens)
-  : Steel a (M.vprop_of_list pre) (fun x -> M.vprop_of_list (post x))
-      (requires fun h0      -> req (norm __normal_rmem_sels (M.rmem_sels pre h0)))
-      (ensures  fun h0 x h1 -> ens (norm __normal_rmem_sels (M.rmem_sels pre h0))
-                                x
-                                (norm __normal_rmem_sels (M.rmem_sels (post x) h1)))
-  =
-    (**) let h0 = get () in
-    assume False;
-    r ()
-
-    (*steel_subcomp_eq
-      #a #(M.vprop_of_list pre) #(fun x -> M.vprop_of_list (post x))
-      (fun h0 -> req (M.rmem_sels pre h0))
-      (fun h0 x h1 -> ens (M.rmem_sels pre h0) x (M.rmem_sels (post x) h1))
-      (fun h0 -> req (norm __normal_rmem_sels (M.rmem_sels pre h0)))
-      (fun h0 x h1 -> ens (norm __normal_rmem_sels (M.rmem_sels pre h0))
-                       x
-                       (norm __normal_rmem_sels (M.rmem_sels (post x) h1)))
-      (fun () -> admit ()) (fun () -> admit ())
-      r*)
-
+// The SMT query still contains some references to test3_mem, M.vprop_list_sels_t...
 let test_3_steel_caller (r0 r1 : ref nat)
   : Steel nat (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
       (requires fun h0 -> sel r0 h0 == 5)
@@ -465,4 +401,3 @@ let test_3_steel_caller (r0 r1 : ref nat)
   =
     call_repr_steel (test3_steel r0 r1);
     read r1
-*)
