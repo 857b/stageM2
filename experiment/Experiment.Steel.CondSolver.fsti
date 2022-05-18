@@ -774,7 +774,7 @@ and build_tree_cond (post : bool) : Tac shape_tree_t
 
 
 [@@ __tac_helper__]
-private
+private inline_for_extraction
 let __build_prog_cond
       (#a : Type) (#t : M.prog_tree a) (#pre : M.pre_t) (#post : M.post_t a)
       (tc0 : M.tree_cond t pre post)
@@ -784,7 +784,9 @@ let __build_prog_cond
       (#s : M.shape_tree pre_n post_n) (_ : squash (Some s == shape_tree_of_pre ps))
       (_ : M.tree_cond_has_shape tc s)
   : M.prog_cond t pre post
-  = (|tc, {M.post_len = post_n; shp = s}|)
+  = M.({ pc_tree     = tc;
+         pc_post_len = post_n;
+         pc_shape    = s })
 
 let intro_l_True : l_True = ()
 let intro_squash_l_True : squash (l_True) = ()

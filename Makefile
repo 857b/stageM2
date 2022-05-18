@@ -196,6 +196,7 @@ dist/Makefile.basic: $(ALL_KRML_FILES) c/*
 	  $(filter %.krml,$^) \
 	  -warn-error @4@5@18 \
 	  -fparentheses \
+	  -bundle 'Experiment.Steel.Repr.Test.Extract=Experiment.Steel.*'[rename=experiment] \
 	  -bundle "$(NOEXTRACT)"\
 	  -bundle 'Learn.LowStar.List+Learn.LowStar.List.Impl=Learn.LowStar.List.*'[rename=list] \
 	  -bundle 'Learn.LowStar.Queue.Test=Learn.LowStar.Queue,Learn.LowStar.Queue.*'[rename=queue] \
@@ -206,8 +207,7 @@ dist/Makefile.basic: $(ALL_KRML_FILES) c/*
 	  -header krml_header.txt \
 	  -add-include '<stdint.h>' \
 	  -add-include '"krml/internal/target.h"'
-	  @#-dstructs > _local/krml.out 2>&1
-	  @#-bundle 'Experiment.Steel.Repr.Test.Extract=Experiment.Steel.*'[rename=experiment] \
+	  @#-dast > _local/krml.out 2>&1
 
 extract:dist/Makefile.basic
 

@@ -27,10 +27,10 @@ let prog_M_to_Fun
   : (sl0 : M.sl_t pre) ->
     Fun.prog_tree #SF.sl_tys SF.({val_t = a; sel_t = ST.post_ST_of_M post})
   =
-    let (|t_M, s_M|) = c in
+    let { pc_tree = t_M; pc_post_len = post_n; pc_shape = shp_M } = c in
     let t_ST    = ST.repr_ST_of_M t.repr_tree t_M   in
-    let shp_ST  = ST.shape_ST_of_M s_M.shp          in
-    (**) ST.repr_ST_of_M_shape t.repr_tree t_M s_M.shp;
+    let shp_ST  = ST.shape_ST_of_M shp_M            in
+    (**) ST.repr_ST_of_M_shape t.repr_tree t_M shp_M;
     let t_ST'   = ST.flatten_prog t_ST              in
     let shp_ST' = ST.flatten_shape shp_ST           in
     (**) ST.flatten_prog_shape t_ST shp_ST;
@@ -45,14 +45,14 @@ val prog_M_to_Fun_equiv
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
       (sl0 : M.sl_t pre)
-  : Lemma (M.tree_req t.repr_tree c._1 sl0 <==> Fun.tree_req (prog_M_to_Fun t c sl0) /\
-          (M.tree_req t.repr_tree c._1 sl0 ==>
+  : Lemma (M.tree_req t.repr_tree c.pc_tree sl0 <==> Fun.tree_req (prog_M_to_Fun t c sl0) /\
+          (M.tree_req t.repr_tree c.pc_tree sl0 ==>
           (forall (x : a) (sl1 : M.sl_t (post x)) .
-               (M.tree_ens t.repr_tree c._1 sl0 x sl1 <==>
+               (M.tree_ens t.repr_tree c.pc_tree sl0 x sl1 <==>
                 Fun.tree_ens (prog_M_to_Fun t c sl0) SF.({val_v = x; sel_v = sl1})))))
 
 inline_for_extraction
-val prog_M_to_Fun_extract
+let prog_M_to_Fun_extract
       (#a : Type) (t : M.repr a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
@@ -62,22 +62,31 @@ val prog_M_to_Fun_extract
                   (forall (x : a) (sl1 : M.sl_t (post x)) .
                     Fun.tree_ens (prog_M_to_Fun t c sl0) SF.({val_v = x; sel_v = sl1}) ==> ens sl0 x sl1)))
   : M.repr_steel_t a pre post req ens
+  =
+    M.repr_steel_subcomp _ _ _ _
+      (fun sl0       -> let _ = sub sl0; prog_M_to_Fun_equiv t c sl0 in ())
+      (fun sl0 x sl1 -> let _ = prog_M_to_Fun_equiv t c sl0; sub sl0 in ())
+      (t.repr_steel pre post c.pc_tree)
+
 
 inline_for_extraction
-val prog_M_to_Fun_extract_wp
+let prog_M_to_Fun_extract_wp
       (#a : Type) (t : M.repr a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
       (req : M.req_t pre) (ens : M.ens_t pre a post)
       (wp : (sl0 : M.sl_t pre) -> Lemma
-              (Fun.tree_wp (prog_M_to_Fun t c sl0) (fun res -> ens sl0 res.val_v res.sel_v)))
+              (requires req sl0)
+              (ensures Fun.tree_wp (prog_M_to_Fun t c sl0) (fun res -> ens sl0 res.val_v res.sel_v)))
   : M.repr_steel_t a pre post req ens
+  = prog_M_to_Fun_extract t c req ens
+      (fun sl0 -> wp sl0; Fun.tree_wp_sound (prog_M_to_Fun t c sl0) (fun res -> ens sl0 res.val_v res.sel_v))
 
 
 
 let __normal_M : list norm_step = [
-  delta_only [`%M.vprop_list_sels_t;      `%M.Mkrepr?.repr_tree;
-              `%M.Mkprog_shape?.post_len; `%M.Mkprog_shape?.shp;
+  delta_only [`%M.vprop_list_sels_t;     `%M.Mkrepr?.repr_tree;
+              `%M.Mkprog_cond?.pc_tree;  `%M.Mkprog_cond?.pc_post_len; `%M.Mkprog_cond?.pc_shape;
               `%L.map; `%SE.Mkvprop'?.t;
               `%prog_M_to_Fun];
   delta_attr [`%__tac_helper__; `%M.__repr_M__;
@@ -93,9 +102,8 @@ let __normal_ST : list norm_step = [
               `%ST.flatten_prog; `%ST.flatten_prog_aux; `%ST.flatten_prog_k_id;
 
               `%ST.shape_ST_of_M; `%ST.flatten_shape; `%ST.flatten_shape_aux; `%ST.flatten_shape_k_id;
-              `%M.Mkprog_shape?.post_len; `%M.Mkprog_shape?.shp;
-              `%Perm.perm_f_to_list; `%Ll.initi; `%Perm.id_n; `%Perm.mk_perm_f;
-              `%M.Mkprog_shape?.post_len; `%M.Mkprog_shape?.shp];
+              `%M.Mkprog_cond?.pc_tree;  `%M.Mkprog_cond?.pc_post_len; `%M.Mkprog_cond?.pc_shape;
+              `%Perm.perm_f_to_list; `%Ll.initi; `%Perm.id_n; `%Perm.mk_perm_f];
   delta_qualifier ["unfold"];
   delta_attr [`%SE.__steel_reduce__];
   iota; zeta; primops
@@ -164,7 +172,7 @@ let __normal_Fun_spec : list norm_step = [
 ]
 
 let __normal_vprop_list : list norm_step = [
-  delta_only [`%M.rmem_sels; `%Fl.flist_of_d; `%M.rmem_sl_list; `%M.vpl_sels;
+  delta_only [`%M.vprop_of_list; `%M.rmem_sels'; `%Fl.flist_of_d; `%M.rmem_sl_list; `%M.vpl_sels;
               `%Dl.index; `%L.length; `%L.index; `%Fl.flist];
   delta_attr [`%SE.__reduce__];
   iota; zeta;
@@ -182,11 +190,11 @@ val call_repr_steel
       (#pre : M.pre_t)     (#post : M.post_t a)
       (#req : M.req_t pre) (#ens  : M.ens_t pre a post)
       (r : M.repr_steel_t a pre post req ens)
-  : SE.Steel a (M.vprop_of_list pre) (fun x -> M.vprop_of_list (post x))
-      (requires fun h0      -> req (norm_vpl (M.rmem_sels pre h0)))
-      (ensures  fun h0 x h1 -> ens (norm_vpl (M.rmem_sels pre h0))
+  : SE.Steel a (M.vprop_of_list' pre) (fun x -> M.vprop_of_list' (post x))
+      (requires fun h0      -> req (norm_vpl (M.rmem_sels' pre h0)))
+      (ensures  fun h0 x h1 -> ens (norm_vpl (M.rmem_sels' pre h0))
                                 x
-                                (norm_vpl (M.rmem_sels (post x) h1)))
+                                (norm_vpl (M.rmem_sels' (post x) h1)))
 
 
 (***** Extracting a [M.repr_steel_t] from a [M.repr] *)
@@ -198,31 +206,43 @@ let extract (a : Type) (pre : M.pre_t) (post : M.post_t a) (req : M.req_t pre) (
   = M.repr_steel_t a pre post req ens
 
 
+[@@ __tac_helper__]
 inline_for_extraction
 let __solve_by_wp
       (#a : Type) (#t : M.repr a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (#req : M.req_t pre) (#ens : M.ens_t pre a post)
       (c : M.prog_cond t.repr_tree pre post)
-      (t_Fun : (sl0 : M.sl_t pre) -> Fun.prog_tree #SF.sl_tys SF.({val_t = a; sel_t = ST.post_ST_of_M post}))
+      (t_Fun : (sl0 : M.sl_t pre) ->
+               GTot (Fun.prog_tree #SF.sl_tys SF.({val_t = a; sel_t = ST.post_ST_of_M post})))
       (t_Fun_eq : squash (t_Fun == (fun sl0 -> prog_M_to_Fun t c sl0)))
       (wp : squash (Fl.forall_flist (M.vprop_list_sels_t pre) (fun sl0 ->
+               req sl0 ==>
                Fun.tree_wp (t_Fun sl0) (fun res -> ens sl0 res.val_v res.sel_v))))
+      (ext : M.repr_steel_t a pre post req ens)
+      (ext_eq : ext == prog_M_to_Fun_extract_wp t c req ens (fun sl0 -> ()))
   : extract a pre post req ens t
   =
-    prog_M_to_Fun_extract_wp t c req ens (fun sl0 -> ())
+    ext
 
 let solve_by_wp () : Tac unit
   =
-    let u_c = fresh_uvar None in
-    let u_t_Fun = fresh_uvar None in
-    apply_raw (`(__solve_by_wp (`#u_c) (`#u_t_Fun)));
+    let u_c        = fresh_uvar None in
+    let u_t_Fun    = fresh_uvar None in
+    let u_t_Fun_eq = fresh_uvar None in
+    let u_wp       = fresh_uvar None in
+    let u_ext      = fresh_uvar None in
+    let u_ext_eq   = fresh_uvar None in
+    apply_raw (`(__solve_by_wp (`#u_c) (`#u_t_Fun) (`#u_t_Fun_eq) (`#u_wp) (`#u_ext) (`#u_ext_eq)));
 
     let t = timer_start   "prog_cond " in
+    (* c *)
     unshelve u_c;
     norm __normal_M;
     CSl.build_prog_cond ();
 
+    (* t_Fun *)
+    unshelve u_t_Fun_eq;
     (* TODO? stage prog_M_to_Fun to avoid duplication *)
     let t = timer_enter t "normal_M  " in
     norm __normal_M;
@@ -237,7 +257,16 @@ let solve_by_wp () : Tac unit
 
     (* wp *)
     let t = timer_enter t "Fun_wp    " in
+    unshelve u_wp;
     norm __normal_M;
     norm __normal_Fun_spec;
-    timer_stop t;
-    smt ()
+    smt ();
+
+    (* ext *)
+    // We normalize the resulting Steel program so that it can be extracted
+    let t = timer_enter t "extract   " in
+    unshelve u_ext_eq;
+    norm [delta_qualifier ["inline_for_extraction"];
+          iota; zeta; primops];
+    trefl ();
+    timer_stop t

@@ -16,17 +16,19 @@ open Steel.Effect
 open Steel.Effect.Atomic
 
 
-irreducible let __repr_M__ : unit = ()
+irreducible let __repr_M__     : unit = ()
 
 (***** [vprop_list] *)
 
 type vprop_list = list vprop'
 
 [@@ __reduce__]
-let rec vprop_of_list (vpl : vprop_list) : vprop =
+let rec vprop_of_list' (vpl : vprop_list) : vprop =
   match vpl with
   | [] -> emp
-  | v :: vs -> VStar (VUnit v) (vprop_of_list vs)
+  | v :: vs -> VStar (VUnit v) (vprop_of_list' vs)
+
+let vprop_of_list = vprop_of_list'
 
 val vprop_of_list_can_be_split (vs : vprop_list) (i : nat {i < L.length vs})
   : Lemma (can_be_split (vprop_of_list vs) (VUnit (L.index vs i)))
@@ -79,15 +81,28 @@ let vpl_sels_f (vs : vprop_list) (sl : t_of (vprop_of_list vs)) : sl_t vs
 
 unfold
 let rmem_sl_list (#p : vprop) (vs : vprop_list)
-      (h:rmem p{FStar.Tactics.with_tactic selector_tactic (can_be_split p (vprop_of_list vs) /\ True)})
+      (h : rmem p{FStar.Tactics.with_tactic selector_tactic (can_be_split p (vprop_of_list vs) /\ True)})
   : GTot (sl_list vs)
   = vpl_sels vs (h (vprop_of_list vs))
 
-unfold let rmem_sels (#p : vprop) (vs : vprop_list)
-      (h:rmem p{FStar.Tactics.with_tactic selector_tactic (can_be_split p (vprop_of_list vs) /\ True)})
+unfold
+let rmem_sels (#p : vprop) (vs : vprop_list)
+      (h : rmem p{FStar.Tactics.with_tactic selector_tactic (can_be_split p (vprop_of_list vs) /\ True)})
   : GTot (sl_t vs)
   = Fl.flist_of_d (rmem_sl_list vs h)
 
+
+unfold
+let rmem_sels' (#p : vprop) (vs : vprop_list)
+      (h : rmem p {can_be_split p (vprop_of_list' vs)})
+  : GTot (sl_t vs)
+  = Fl.flist_of_d (vpl_sels vs (h (vprop_of_list' vs)))
+
+let rmem_sels_eq (#p : vprop) (vs : vprop_list)
+      (h : rmem p{FStar.Tactics.with_tactic selector_tactic (can_be_split p (vprop_of_list vs) /\ True)})
+      (i : Fin.fin (L.length vs))
+  : Lemma (rmem_sels #p vs h i == rmem_sels' #p vs h i)
+  = ()
 
 (* TODO? use this when interacting with Steel
 let rmem_sels' (#p : vprop) (vs : vprop_list)
@@ -141,6 +156,21 @@ let split_vars__cons (v0 : vprop') (vs0 vs1 : vprop_list) (x0 : v0.t) (xs : sl_l
                == (let xs0, xs1 = split_vars_list vs0 vs1 xs in
                    Dl.DCons v0.t x0 (vprop_list_sels_t vs0) xs0, xs1))
   = Ll.map_append Mkvprop'?.t vs0 vs1
+
+
+val steel_elim_vprop_of_list_append_f (#opened : Mem.inames) (vs0 vs1 : vprop_list)
+  : SteelGhost unit opened
+      (vprop_of_list L.(vs0@vs1)) (fun () -> vprop_of_list vs0 `star` vprop_of_list vs1)
+      (requires fun _ -> True)
+      (ensures fun h0 () h1 -> split_vars vs0 vs1 (rmem_sels (vs0@vs1) h0)
+                        == (rmem_sels vs0 h1, rmem_sels vs1 h1))
+
+val steel_intro_vprop_of_list_append_f (#opened : Mem.inames) (vs0 vs1 : vprop_list)
+  : SteelGhost unit opened
+      (vprop_of_list vs0 `star` vprop_of_list vs1) (fun () -> vprop_of_list L.(vs0@vs1))
+      (requires fun _ -> True)
+      (ensures fun h0 () h1 -> split_vars vs0 vs1 (rmem_sels (vs0@vs1) h1)
+                        == (rmem_sels vs0 h0, rmem_sels vs1 h0))
 
 
 (***** [vequiv] *)
@@ -198,7 +228,7 @@ type repr_steel_t (a : Type)
              (ensures  fun h0 x h1 -> ens (rmem_sels pre h0) x (rmem_sels (post x) h1))
 
 inline_for_extraction
-val repr_steel_subcomp
+let repr_steel_subcomp
       (#a : Type) (#pre : pre_t) (#post : post_t a)
       (req_f : req_t pre) (ens_f : ens_t pre a post)
       (req_g : req_t pre) (ens_g : ens_t pre a post)
@@ -208,6 +238,14 @@ val repr_steel_subcomp
                 Lemma (requires req_f sl0 /\ req_g sl0 /\ ens_f sl0 x sl1) (ensures ens_g sl0 x sl1))
       (r : repr_steel_t a pre post req_f ens_f)
   : repr_steel_t a pre post req_g ens_g
+  = 
+    (fun () ->
+      (**) let sl0 : Ghost.erased (t_of (vprop_of_list pre)) = gget (vprop_of_list pre) in
+      (**) pf_req (vpl_sels_f pre sl0);
+      let x = r () in
+      (**) let sl1 : Ghost.erased (t_of (vprop_of_list (post x))) = gget (vprop_of_list (post x)) in
+      (**) pf_ens (vpl_sels_f pre sl0) x (vpl_sels_f (post x) sl1);
+      Steel.Effect.Atomic.return x)
 
 
 noeq
@@ -312,14 +350,12 @@ let rec tree_cond_has_shape (#a : Type) (#pre : pre_t) (#post0 : post_t a) (#t :
                                       (forall (y : b) . L.length (post y) = post_n)
                                     | _ -> False)
 
-noeq
-type prog_shape (#a : Type) (#pre : pre_t) (#post : post_t a) (#t : prog_tree a) (c : tree_cond t pre post) = {
-  post_len : nat;
-  shp      : (s : shape_tree (L.length pre) post_len {tree_cond_has_shape c s});
+noeq inline_for_extraction
+type prog_cond (#a : Type) (t : prog_tree a) (pre : pre_t) (post : post_t a) = {
+  pc_tree     : tree_cond t pre post;
+  pc_post_len : nat;
+  pc_shape    : (s : shape_tree (L.length pre) pc_post_len {tree_cond_has_shape pc_tree s})
 }
-
-type prog_cond (#a : Type) (t : prog_tree a) (pre : pre_t) (post : post_t a) =
-  c : tree_cond t pre post & prog_shape c
 
 
 (**** requires / ensures *)
@@ -433,13 +469,25 @@ let tree_of_steel (#a : Type) (#pre : pre_t) (#post : post_t a) (#req : req_t pr
   = Tspec a pre post req ens
 
 inline_for_extraction
-val repr_of_steel_steel
+let repr_of_steel_steel
       (a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
       (pre' : pre_t) (post' : post_t a) (frame : vprop_list)
       (p0 : vequiv pre' L.(pre @ frame)) (p1 : ((x : a) -> vequiv (post x @ frame) (post' x)))
       ($f : repr_steel_t a pre post req ens)
   : (let c = TCspec #a #pre #post #req #ens pre' post' frame p0 p1 in
      repr_steel_t a pre' post' (tree_req _ c) (tree_ens _ c))
+  = fun () ->
+    (**) steel_change_vequiv p0;
+    (**) steel_elim_vprop_of_list_append_f pre frame;
+    let x = f () in
+    (**) steel_intro_vprop_of_list_append_f (post x) frame;
+    (**) let sl1' = gget (vprop_of_list L.(post x @ frame)) in
+    (**) steel_change_vequiv (p1 x);
+    (**) let sl1'' = gget (vprop_of_list (post' x)) in
+    (**) assert (vpl_sels_f (post' x) sl1''
+    (**)      == extract_vars (p1 x) (vpl_sels_f L.(post x @ frame) sl1'));
+    (**) extract_vars_sym_l (p1 x) (vpl_sels_f L.(post x @ frame) sl1');
+    Steel.Effect.Atomic.return x
 
 [@@ __repr_M__]
 inline_for_extraction
@@ -456,12 +504,15 @@ let repr_of_steel (#a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) 
 
 
 inline_for_extraction
-val return_steel
+let return_steel
       (a : Type) (x : a) (sl_hint : post_t a)
       (pre : pre_t) (post : post_t a)
       (p : vequiv pre (post x))
   : (let c = TCret #a #x #sl_hint pre post p in
      repr_steel_t a pre post (tree_req _ c) (tree_ens _ c))
+  = fun () ->
+    (**) steel_change_vequiv p;
+    Steel.Effect.Atomic.return x
 
 [@@ __repr_M__]
 inline_for_extraction
@@ -480,8 +531,30 @@ inline_for_extraction
 let return (#a : Type) (x : a) : repr a
   = return_hint x (fun _ -> [])
 
+
+val elim_tree_req_bind (#a #b : Type) (f : prog_tree a) (g : a -> prog_tree b)
+      (#pre : pre_t) (#post : post_t b) (#itm : post_t a)
+      (cf  : tree_cond f pre itm) (cg : (x:a) -> tree_cond (g x) (itm x) post)
+      (sl0 : t_of (vprop_of_list pre))
+  : Lemma (requires tree_req _ (TCbind #a #b #f #g pre itm post cf cg) (vpl_sels_f pre sl0))
+          (ensures  tree_req f cf (vpl_sels_f pre sl0) /\
+                    (forall (x : a) (sl1 : t_of (vprop_of_list (itm x))) .
+                      tree_ens f cf (vpl_sels_f pre sl0) x (vpl_sels_f (itm x) sl1) ==>
+                      tree_req (g x) (cg x) (vpl_sels_f (itm x) sl1)))
+
+val intro_tree_ens_bind (#a #b : Type) (f : prog_tree a) (g : a -> prog_tree b)
+      (#pre : pre_t) (#post : post_t b) (#itm : post_t a)
+      (cf  : tree_cond f pre itm) (cg : (x:a) -> tree_cond (g x) (itm x) post)
+      (sl0 : t_of (vprop_of_list pre)) (x : a) (sl1 : t_of (vprop_of_list (itm x)))
+      (y : b) (sl2 : t_of (vprop_of_list (post y)))
+  : Lemma (requires tree_req f cf (vpl_sels_f pre sl0) /\
+                    tree_ens f cf (vpl_sels_f pre sl0) x (vpl_sels_f (itm x) sl1) /\
+                    tree_ens (g x) (cg x) (vpl_sels_f (itm x) sl1) y (vpl_sels_f (post y) sl2))
+          (ensures  tree_ens _ (TCbind #a #b #f #g pre itm post cf cg)
+                             (vpl_sels_f pre sl0) y (vpl_sels_f (post y) sl2))
+
 inline_for_extraction
-val bind_steel
+let bind_steel
       (a : Type) (b : Type) (f : prog_tree a) (g : (a -> prog_tree b))
       (pre : pre_t) (itm : post_t a) (post : post_t b)
       (cf : tree_cond f pre itm) (cg : ((x : a) -> tree_cond (g x) (itm x) post))
@@ -489,6 +562,15 @@ val bind_steel
       ($rg : (x : a) -> repr_steel_t b (itm x) post (tree_req (g x) (cg x)) (tree_ens (g x) (cg x)))
   : (let c = TCbind #a #b #f #g pre itm post cf cg in
      repr_steel_t b pre post (tree_req _ c) (tree_ens _ c))
+  = fun () ->
+    (**) let sl0 = gget (vprop_of_list pre) in
+    (**) elim_tree_req_bind f g cf cg sl0;
+    let x = rf () in
+    (**) let sl1 = gget (vprop_of_list (itm x)) in
+    let y = rg x () in
+    (**) let sl2 = gget (vprop_of_list (post y)) in
+    (**) intro_tree_ens_bind f g cf cg sl0 x sl1 y sl2;
+    Steel.Effect.Atomic.return y
 
 [@@ __repr_M__]
 inline_for_extraction

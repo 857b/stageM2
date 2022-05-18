@@ -6,6 +6,7 @@ module L    = FStar.List.Pure
 module Ll   = Learn.List
 module Dl   = Learn.DList
 module Fl   = Learn.FList
+module U32  = FStar.UInt32
 module Perm = Learn.Permutation
 
 module M    = Experiment.Steel.Repr.M
@@ -84,21 +85,22 @@ let normal_elim_returns : list norm_step = [
 ////////// test0 //////////
 
 unfold
-let read_pre  (r : ref nat) : M.pre_t
+let read_pre  #a (r : ref a) : M.pre_t
   = [vptr' r full_perm]
 unfold
-let read_post (r : ref nat) : M.post_t nat
+let read_post #a (r : ref a) : M.post_t a
   = fun _ -> [vptr' r full_perm]
 unfold
-let read_req  (r : ref nat) : M.req_t (read_pre r)
+let read_req  #a (r : ref a) : M.req_t (read_pre r)
   = fun sl0 -> True
 unfold
-let read_ens  (r : ref nat) : M.ens_t (read_pre r) nat (read_post r)
+let read_ens  #a (r : ref a) : M.ens_t (read_pre r) a (read_post r)
   = fun sl0 x sl1 ->
     sl1 0 == sl0 0 /\ x == sl0 0
 
-let steel_read (r : ref nat) () :
-  Steel nat (M.vprop_of_list [vptr' r full_perm]) (fun _ -> M.vprop_of_list [vptr' r full_perm])
+inline_for_extraction
+let steel_read #a (r : ref a) () :
+  Steel a (M.vprop_of_list [vptr' r full_perm]) (fun _ -> M.vprop_of_list [vptr' r full_perm])
     (requires fun _ -> True)
     (ensures fun h0 x h1 -> let sl0 = M.rmem_sels [vptr' r full_perm] h0 in
                          let sl1 = M.rmem_sels [vptr' r full_perm] h1 in
@@ -110,10 +112,12 @@ let steel_read (r : ref nat) () :
     Steel.Effect.Atomic.return x
 
 [@@ __test__; __steel_reduce__]
-let r_read (r : ref nat) : M.repr nat =
+inline_for_extraction
+let r_read #a (r : ref a) : M.repr a =
   M.repr_of_steel (read_pre r) (read_post r) (read_req r) (read_ens r) (steel_read r)
 
-let steel_write (r : ref nat) (x : nat) ()
+inline_for_extraction
+let steel_write #a (r : ref a) (x : a) ()
   : Steel unit (M.vprop_of_list [vptr' r full_perm]) (fun _ -> M.vprop_of_list [vptr' r full_perm])
                (requires fun _ -> True) (ensures fun h0 () h1 -> M.rmem_sels [vptr' r full_perm] h1 0 == x)
   =
@@ -122,7 +126,8 @@ let steel_write (r : ref nat) (x : nat) ()
     (**) change_equal_slprop (vptr r `star` emp) (M.vprop_of_list [vptr' r full_perm])
 
 [@@ __test__; __steel_reduce__]
-let r_write (r : ref nat) (x : nat) : M.repr unit =
+inline_for_extraction
+let r_write #a (r : ref a) (x : a) : M.repr unit =
   M.repr_of_steel [vptr' r full_perm] (fun _ -> [vptr' r full_perm])
                   (fun sl0 -> True) (fun sl0 () sl1 -> sl1 0 == x)
                   (steel_write r x)
@@ -256,9 +261,11 @@ let test0_Fun (r : ref nat) (v : vprop') (x_ini : nat) (v_ini : v.t) =
               timer_stop t;
               fail "print")*)
 
-unfold
+
+(* This makes the extraction fail (even with noextract)
+unfold noextract
 let test0_wp (r : ref nat) (v : vprop') (x_ini : nat) (v_ini : v.t) =
-  Fun.tree_wp (test0_Fun r v x_ini v_ini) (fun res -> res.val_v >= 0)
+  Fun.tree_wp (test0_Fun r v x_ini v_ini) (fun res -> res.val_v >= 0)*)
 
 (*let _ = fun r p x_ini ->
     assert (U.print_util (test0_wp r (to_vprop' p) x_ini ()))
@@ -354,9 +361,9 @@ let test2_Fun =
           norm __normal_Fun;
           fail "print")*)
 
-[@@ __test__]
-let test2_wp =
-  Fun.tree_wp test2_Fun (fun x -> b2t x.val_v)
+//[@@ __test__]
+//let test2_wp =
+//  Fun.tree_wp test2_Fun (fun x -> b2t x.val_v)
 
 (*#push-options "--print_full_names"
 let _ =
@@ -371,12 +378,14 @@ let _ =
 ////////// test3 //////////
 
 [@@ __reduce__]
-let test3_M (r0 r1 : ref nat) : M.repr unit = M.(
+inline_for_extraction
+let test3_M (r0 r1 : ref U32.t) : M.repr unit = M.(
   x <-- r_read r0;
-  r_write r1 (x + 1))
+  r_write r1 U32.(x +%^ 1ul))
 
 [@@ __reduce__]
-let test3_mem (r0 r1 : ref nat) =
+inline_for_extraction
+let test3_mem (r0 r1 : ref U32.t) =
   [vptr' r0 full_perm; vptr' r1 full_perm]
 
 //[@@ handle_smt_goals ]
@@ -385,19 +394,27 @@ let test3_mem (r0 r1 : ref nat) =
 // This generates 2 SMT queries:
 // - the WP
 // - one for the typing of the requires and ensures clauses
+// TODO: req/ens : Type0 instead of prop
 inline_for_extraction
-let test3_steel (r0 r1 : ref nat)
+let test3_steel (r0 r1 : ref U32.t)
   : extract unit
       (test3_mem r0 r1) (fun _ -> test3_mem r0 r1)
-      (requires fun _ -> True) (ensures fun sl0 () sl1 -> sl1 1 == sl0 0 + 1)
+      (requires fun sl0 -> squash (U32.v (sl0 0) < 42))
+      (ensures fun sl0 () sl1 -> U32.v (sl1 1) == U32.v (sl0 0) + 1)
       (test3_M r0 r1)
   = _ by (solve_by_wp ())
 
+(*let _ = fun r0 r1 ->
+  assert (U.print_util (test3_steel r0 r1))
+    by T.(norm [delta_qualifier ["inline_for_extraction"]];
+          fail "print")*)
+
+
 // The SMT query still contains some references to test3_mem, M.vprop_list_sels_t...
-let test_3_steel_caller (r0 r1 : ref nat)
-  : Steel nat (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
-      (requires fun h0 -> sel r0 h0 == 5)
-      (ensures fun h0 x h1 -> x == 6)
+let test_3_steel_caller (r0 r1 : ref U32.t)
+  : Steel U32.t (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
+      (requires fun h0 -> sel r0 h0 == 5ul)
+      (ensures fun h0 x h1 -> x == 6ul)
   =
     call_repr_steel (test3_steel r0 r1);
     read r1

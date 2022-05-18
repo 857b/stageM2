@@ -9,16 +9,16 @@ let prog_M_to_Fun_equiv
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
       (sl0 : M.sl_t pre)
-  : Lemma (M.tree_req t.repr_tree c._1 sl0 <==> Fun.tree_req (prog_M_to_Fun t c sl0) /\
-          (M.tree_req t.repr_tree c._1 sl0 ==>
+  : Lemma (M.tree_req t.repr_tree c.pc_tree sl0 <==> Fun.tree_req (prog_M_to_Fun t c sl0) /\
+          (M.tree_req t.repr_tree c.pc_tree sl0 ==>
           (forall (x : a) (sl1 : M.sl_t (post x)) .
-               (M.tree_ens t.repr_tree c._1 sl0 x sl1 <==>
+               (M.tree_ens t.repr_tree c.pc_tree sl0 x sl1 <==>
                 Fun.tree_ens (prog_M_to_Fun t c sl0) SF.({val_v = x; sel_v = sl1})))))
   =
-    let (|t_M, s_M|) = c in
+    let { pc_tree = t_M; pc_post_len = post_n; pc_shape = shp_M } = c in
     let t_ST    = ST.repr_ST_of_M t.repr_tree t_M       in
-    let shp_ST  = ST.shape_ST_of_M s_M.shp              in
-    (**) ST.repr_ST_of_M_shape t.repr_tree t_M s_M.shp;
+    let shp_ST  = ST.shape_ST_of_M shp_M                in
+    (**) ST.repr_ST_of_M_shape t.repr_tree t_M shp_M;
     let t_ST'   = ST.flatten_prog t_ST                  in
     let shp_ST' = ST.flatten_shape shp_ST               in
     (**) ST.flatten_prog_shape t_ST shp_ST;
@@ -41,7 +41,7 @@ let prog_M_to_Fun_equiv
       Fun.tree_req t_Fun;
     };
 
-    introduce M.tree_req t.repr_tree c._1 sl0 ==>
+    introduce M.tree_req t.repr_tree c.pc_tree sl0 ==>
               (forall (x : a) (sl1 : M.sl_t (post x)) .
                 (M.tree_ens t.repr_tree t_M sl0 x sl1 <==>
                  Fun.tree_ens (prog_M_to_Fun t c sl0) SF.({val_v = x; sel_v = sl1})))
@@ -59,35 +59,6 @@ let prog_M_to_Fun_equiv
         Fun.tree_ens t_Fun SF.({val_v = x; sel_v = sl1});
       }
     end
-
-inline_for_extraction
-let prog_M_to_Fun_extract
-      (#a : Type) (t : M.repr a)
-      (#pre : M.pre_t) (#post : M.post_t a)
-      (c : M.prog_cond t.repr_tree pre post)
-      (req : M.req_t pre) (ens : M.ens_t pre a post)
-      (sub : (sl0 : M.sl_t pre) -> Lemma (requires req sl0)
-               (ensures Fun.tree_req (prog_M_to_Fun t c sl0) /\
-                  (forall (x : a) (sl1 : M.sl_t (post x)) .
-                    Fun.tree_ens (prog_M_to_Fun t c sl0) SF.({val_v = x; sel_v = sl1}) ==> ens sl0 x sl1)))
-  : M.repr_steel_t a pre post req ens
-  =
-    M.repr_steel_subcomp _ _ _ _
-      (fun sl0       -> sub sl0; prog_M_to_Fun_equiv t c sl0)
-      (fun sl0 x sl1 -> prog_M_to_Fun_equiv t c sl0; sub sl0)
-      (t.repr_steel pre post c._1)
-
-inline_for_extraction
-let prog_M_to_Fun_extract_wp
-      (#a : Type) (t : M.repr a)
-      (#pre : M.pre_t) (#post : M.post_t a)
-      (c : M.prog_cond t.repr_tree pre post)
-      (req : M.req_t pre) (ens : M.ens_t pre a post)
-      (wp : (sl0 : M.sl_t pre) -> Lemma
-              (Fun.tree_wp (prog_M_to_Fun t c sl0) (fun res -> ens sl0 res.val_v res.sel_v)))
-  : M.repr_steel_t a pre post req ens
-  = prog_M_to_Fun_extract t c req ens
-      (fun sl0 -> wp sl0; Fun.tree_wp_sound (prog_M_to_Fun t c sl0) (fun res -> ens sl0 res.val_v res.sel_v))
 
 
 (***** Calling a [M.repr_steel_t] from a Steel program *)
@@ -110,27 +81,42 @@ let steel_subcomp_eq
 
 
 inline_for_extraction
-let __call_repr_steel
+let __call_repr_steel_0
       (#a : Type)
       (#pre : M.pre_t)     (#post : M.post_t a)
       (#req : M.req_t pre) (#ens  : M.ens_t pre a post)
       (r : M.repr_steel_t a pre post req ens)
   : unit_steel a (M.vprop_of_list pre) (fun x -> M.vprop_of_list (post x))
-      (requires fun h0      -> req (norm_vpl (M.rmem_sels pre h0)))
-      (ensures  fun h0 x h1 -> ens (norm_vpl (M.rmem_sels pre h0))
+      (requires fun h0      -> req (norm_vpl (M.rmem_sels' pre h0)))
+      (ensures  fun h0 x h1 -> ens (norm_vpl (M.rmem_sels' pre h0))
                                 x
-                                (norm_vpl (M.rmem_sels (post x) h1)))
+                                (norm_vpl (M.rmem_sels' (post x) h1)))
   = steel_subcomp_eq
       #a #(M.vprop_of_list pre) #(fun x -> M.vprop_of_list (post x))
       (fun h0 -> req (M.rmem_sels pre h0))
       (fun h0 x h1 -> ens (M.rmem_sels pre h0) x (M.rmem_sels (post x) h1))
-      (fun h0 -> req (norm_vpl (M.rmem_sels pre h0)))
-      (fun h0 x h1 -> ens (norm_vpl (M.rmem_sels pre h0))
+      (fun h0 -> req (norm_vpl (M.rmem_sels' pre h0)))
+      (fun h0 x h1 -> ens (norm_vpl (M.rmem_sels' pre h0))
                        x
-                       (norm_vpl (M.rmem_sels (post x) h1)))
+                       (norm_vpl (M.rmem_sels' (post x) h1)))
       (fun () -> _ by (norm [delta_only [`%norm_vpl]]; trefl ()))
       (fun () -> _ by (norm [delta_only [`%norm_vpl]]; trefl ()))
       r
 
 inline_for_extraction
-let call_repr_steel #a #pre #post #req #ens r = __call_repr_steel r ()
+let __call_repr_steel_1
+      (#a : Type)
+      (#pre : M.pre_t)     (#post : M.post_t a)
+      (#req : M.req_t pre) (#ens  : M.ens_t pre a post)
+      (r : M.repr_steel_t a pre post req ens)
+  : unit_steel a (M.vprop_of_list' pre) (fun x -> M.vprop_of_list' (post x))
+      (requires fun h0      -> req (norm_vpl (M.rmem_sels' pre h0)))
+      (ensures  fun h0 x h1 -> ens (norm_vpl (M.rmem_sels' pre h0))
+                                x
+                                (norm_vpl (M.rmem_sels' (post x) h1)))
+  = __call_repr_steel_0 r
+
+
+// Assertion failure CheckNoUvars if calling __call_repr_steel_0
+inline_for_extraction
+let call_repr_steel #a #pre #post #req #ens r = __call_repr_steel_1 r ()
