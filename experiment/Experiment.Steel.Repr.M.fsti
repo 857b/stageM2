@@ -16,7 +16,7 @@ open Steel.Effect
 open Steel.Effect.Atomic
 
 
-irreducible let __repr_M__     : unit = ()
+irreducible let __repr_M__ : unit = ()
 
 (***** [vprop_list] *)
 
@@ -59,7 +59,10 @@ let vprop_list_sels_t : vprop_list -> Dl.ty_list =
   L.map Mkvprop'?.t
 
 unfold
-let sl_t (vs : vprop_list) : Type = Fl.flist (vprop_list_sels_t vs)
+let sl_t (vs : vprop_list) : Type = Fl.flist_g (vprop_list_sels_t vs)
+
+unfold
+let sl_f (vs : vprop_list) : Type = Fl.flist (vprop_list_sels_t vs)
 
 unfold
 let sl_list (vs : vprop_list) : Type = Dl.dlist (vprop_list_sels_t vs)
@@ -76,70 +79,57 @@ let rec vpl_sels (vs : vprop_list) (sl : t_of (vprop_of_list vs))
   | (|v0 :: vs, (x0, xs)|) -> Dl.DCons v0.t x0 _ (vpl_sels vs xs)
 
 unfold
-let vpl_sels_f (vs : vprop_list) (sl : t_of (vprop_of_list vs)) : sl_t vs
+let vpl_sels_f (vs : vprop_list) (sl : t_of (vprop_of_list vs)) : sl_f vs
   = Fl.flist_of_d (vpl_sels vs sl)
 
 unfold
-let rmem_sl_list (#p : vprop) (vs : vprop_list)
-      (h : rmem p{FStar.Tactics.with_tactic selector_tactic (can_be_split p (vprop_of_list vs) /\ True)})
+let sel_list' (#p : vprop) (vs : vprop_list)
+      (h : rmem p{can_be_split p (vprop_of_list vs)})
   : GTot (sl_list vs)
   = vpl_sels vs (h (vprop_of_list vs))
 
 unfold
-let rmem_sels (#p : vprop) (vs : vprop_list)
+let sel_list (#p : vprop) (vs : vprop_list)
       (h : rmem p{FStar.Tactics.with_tactic selector_tactic (can_be_split p (vprop_of_list vs) /\ True)})
-  : GTot (sl_t vs)
-  = Fl.flist_of_d (rmem_sl_list vs h)
-
+  : GTot (sl_list vs)
+  = sel_list' vs h
 
 unfold
-let rmem_sels' (#p : vprop) (vs : vprop_list)
-      (h : rmem p {can_be_split p (vprop_of_list' vs)})
-  : GTot (sl_t vs)
-  = Fl.flist_of_d (vpl_sels vs (h (vprop_of_list' vs)))
-
-let rmem_sels_eq (#p : vprop) (vs : vprop_list)
+let sel_f (#p : vprop) (vs : vprop_list)
       (h : rmem p{FStar.Tactics.with_tactic selector_tactic (can_be_split p (vprop_of_list vs) /\ True)})
-      (i : Fin.fin (L.length vs))
-  : Lemma (rmem_sels #p vs h i == rmem_sels' #p vs h i)
-  = ()
+  : GTot (sl_f vs)
+  = Fl.flist_of_d (sel_list vs h)
 
-(* TODO? use this when interacting with Steel
-let rmem_sels' (#p : vprop) (vs : vprop_list)
-      (h : rmem p{FStar.Tactics.with_tactic selector_tactic (can_be_split p (vprop_of_list vs) /\ True)})
-      (i : Fin.fin (L.length vs))
-  : GTot (L.index vs i).t
-  =
+unfold
+let sel (vs : vprop_list) (h : rmem (vprop_of_list vs))
+  : GTot (sl_f vs)
+  = sel_f vs h
+
+
+/// Variant to be used when interacting with Steel
+let sel' (vs : vprop_list) (h : rmem (vprop_of_list' vs))
+  : sl_t vs
+  = Fl.mk_flist_g (vprop_list_sels_t vs) (fun i ->
     (**) vprop_of_list_can_be_split vs i;
-    (**) can_be_split_trans p (vprop_of_list vs) (VUnit (L.index vs i));
-    h (VUnit (L.index vs i))
+    h (VUnit (L.index vs i)))
 
-// Is it provable ?
-let rmem_star_eq (#p : vprop) (v0 v1 : vprop)
-      (h : rmem p{FStar.Tactics.with_tactic selector_tactic (can_be_split p (VStar v0 v1) /\ True)})
-  : Lemma (can_be_split p v0 /\ can_be_split p v1 /\
-           h (VStar v0 v1) == (h v0, h v1))
-  =
-    can_be_split_star_l v0 v1;
-    can_be_split_star_r v0 v1;
-    can_be_split_trans p (VStar v0 v1) v0;
-    can_be_split_trans p (VStar v0 v1) v1
+let sel_f' (vs : vprop_list) (h : rmem (vprop_of_list' vs))
+  : GTot (sl_f vs)
+  = Fl.flist_of_g (sel' vs h)
 
-val rmem_sl_list_eq
-      (#p : vprop) (vs : vprop_list)
-      (h:rmem p{FStar.Tactics.with_tactic selector_tactic (can_be_split p (vprop_of_list vs) /\ True)})
-      (i : Fin.fin (L.length vs))
-  : Lemma (ensures Dl.index (rmem_sl_list #p vs h) i == rmem_sels' #p vs h i) (decreases vs)
+val sel_list_eq' (vs : vprop_list) (h : rmem (vprop_of_list vs))
+  : Lemma (sel_list vs h == Fl.dlist_of_f_g (sel' vs h))
 
-val rmem_sels_eq (#p : vprop) (vs : vprop_list)
-      (h : rmem p{FStar.Tactics.with_tactic selector_tactic (can_be_split p (vprop_of_list vs) /\ True)})
-      (i : Fin.fin (L.length vs))
-  : Lemma (rmem_sels #p vs h i == rmem_sels' #p vs h i)
-*)
+let sel_f_eq' (vs : vprop_list) (h : rmem (vprop_of_list vs))
+  : Lemma (sel_f vs h == sel_f' vs h)
+  = sel_list_eq' vs h
+
+val sel_eq' : squash (sel_f' == sel)
+
 
 unfold
-let split_vars (vs0 vs1 : vprop_list) (xs : sl_t (vs0 @ vs1))
-  : sl_t vs0 & sl_t vs1
+let split_vars (vs0 vs1 : vprop_list) (xs : sl_f (vs0 @ vs1))
+  : sl_f vs0 & sl_f vs1
   =
     (**) Ll.map_append Mkvprop'?.t vs0 vs1;
     Fl.splitAt_ty (vprop_list_sels_t vs0) (vprop_list_sels_t vs1) xs
@@ -162,15 +152,15 @@ val steel_elim_vprop_of_list_append_f (#opened : Mem.inames) (vs0 vs1 : vprop_li
   : SteelGhost unit opened
       (vprop_of_list L.(vs0@vs1)) (fun () -> vprop_of_list vs0 `star` vprop_of_list vs1)
       (requires fun _ -> True)
-      (ensures fun h0 () h1 -> split_vars vs0 vs1 (rmem_sels (vs0@vs1) h0)
-                        == (rmem_sels vs0 h1, rmem_sels vs1 h1))
+      (ensures fun h0 () h1 -> split_vars vs0 vs1 (sel_f (vs0@vs1) h0)
+                        == (sel_f vs0 h1, sel_f vs1 h1))
 
 val steel_intro_vprop_of_list_append_f (#opened : Mem.inames) (vs0 vs1 : vprop_list)
   : SteelGhost unit opened
       (vprop_of_list vs0 `star` vprop_of_list vs1) (fun () -> vprop_of_list L.(vs0@vs1))
       (requires fun _ -> True)
-      (ensures fun h0 () h1 -> split_vars vs0 vs1 (rmem_sels (vs0@vs1) h1)
-                        == (rmem_sels vs0 h0, rmem_sels vs1 h0))
+      (ensures fun h0 () h1 -> split_vars vs0 vs1 (sel_f (vs0@vs1) h1)
+                        == (sel_f vs0 h0, sel_f vs1 h0))
 
 
 (***** [vequiv] *)
@@ -186,20 +176,20 @@ let vequiv_sl (#vs0 #vs1 : vprop_list) (f : vequiv vs0 vs1)
 unfold
 let extract_vars (#src #dst : vprop_list)
                  (p : vequiv src dst)
-                 (xs : sl_t src)
-  : sl_t dst
+                 (xs : sl_f src)
+  : sl_f dst
   =
     Fl.apply_pequiv (vequiv_sl p) xs
 
 unfold
 let extract_vars_f (src dst frame : vprop_list)
                    (p : vequiv src L.(dst@frame))
-                   (xs : sl_t src)
-  : sl_t dst & sl_t frame
+                   (xs : sl_f src)
+  : sl_f dst & sl_f frame
   =
     split_vars dst frame (extract_vars p xs)
 
-let extract_vars_sym_l (#vs0 #vs1 : vprop_list) (f : vequiv vs0 vs1) (xs : sl_t vs0)
+let extract_vars_sym_l (#vs0 #vs1 : vprop_list) (f : vequiv vs0 vs1) (xs : sl_f vs0)
   : Lemma (extract_vars (Perm.pequiv_sym f) (extract_vars f xs) == xs)
   =
     Fl.apply_pequiv_sym_l (vequiv_sl f) xs
@@ -209,32 +199,32 @@ let extract_vars_sym_l (#vs0 #vs1 : vprop_list) (f : vequiv vs0 vs1) (xs : sl_t 
 val steel_change_vequiv (#vs0 #vs1 : vprop_list) (#opened:Mem.inames) (f : vequiv vs0 vs1)
   : SteelGhost unit opened (vprop_of_list vs0) (fun () -> vprop_of_list vs1)
       (requires fun _ -> True)
-      (ensures fun h0 () h1 -> rmem_sels vs1 h1 == extract_vars f (rmem_sels vs0 h0))
+      (ensures fun h0 () h1 -> sel_f vs1 h1 == extract_vars f (sel_f vs0 h0))
 
 (*** [prog_tree] *)
 
 type pre_t = vprop_list
 type post_t (a : Type) = a -> vprop_list
 
-type req_t (pre : pre_t) = sl_t pre -> prop
-type ens_t (pre : pre_t) (a : Type) (post : post_t a) = sl_t pre -> (x : a) -> sl_t (post x) -> prop
+type req_t (pre : pre_t) = sl_f pre -> Type0
+type ens_t (pre : pre_t) (a : Type) (post : post_t a) = sl_f pre -> (x : a) -> sl_f (post x) -> Type0
 
 type repr_steel_t (a : Type)
        (pre : pre_t) (post : post_t a)
        (req : req_t pre) (ens : ens_t pre a post) : Type
   = unit -> Steel a
              (vprop_of_list pre) (fun x -> vprop_of_list (post x))
-             (requires fun h0      -> req (rmem_sels pre h0))
-             (ensures  fun h0 x h1 -> ens (rmem_sels pre h0) x (rmem_sels (post x) h1))
+             (requires fun h0      -> req (sel pre h0))
+             (ensures  fun h0 x h1 -> ens (sel pre h0) x (sel_f (post x) h1))
 
-inline_for_extraction
+inline_for_extraction noextract
 let repr_steel_subcomp
       (#a : Type) (#pre : pre_t) (#post : post_t a)
       (req_f : req_t pre) (ens_f : ens_t pre a post)
       (req_g : req_t pre) (ens_g : ens_t pre a post)
-      (pf_req : (sl0 : sl_t pre) ->
+      (pf_req : (sl0 : sl_f pre) ->
                 Lemma (requires req_g sl0) (ensures req_f sl0))
-      (pf_ens : (sl0 : sl_t pre) -> (x : a) -> (sl1 : sl_t (post x)) ->
+      (pf_ens : (sl0 : sl_f pre) -> (x : a) -> (sl1 : sl_f (post x)) ->
                 Lemma (requires req_f sl0 /\ req_g sl0 /\ ens_f sl0 x sl1) (ensures ens_g sl0 x sl1))
       (r : repr_steel_t a pre post req_f ens_f)
   : repr_steel_t a pre post req_g ens_g
@@ -380,7 +370,7 @@ let bind_req (#a : Type)
       (req_g : (x:a) -> req_t (itm x))
   : req_t pre
   = fun sl0 -> req_f sl0 /\
-      (forall (x : a) (sl1 : sl_t (itm x)) .
+      (forall (x : a) (sl1 : sl_f (itm x)) .
         ens_f sl0 x sl1 ==> req_g x sl1)
 
 /// Unlike the bind combiner of Steel, our ensures clause does not recall the pre-condition of [f] for
@@ -392,7 +382,7 @@ let bind_ens (#a : Type) (#b : Type)
       (ens_f : ens_t pre a itm) (ens_g : (x:a) -> ens_t (itm x) b post)
   : ens_t pre b post
   = fun sl0 y sl2 ->
-      (exists (x : a) (sl1 : sl_t (itm x)) .
+      (exists (x : a) (sl1 : sl_f (itm x)) .
         ens_f sl0 x sl1 /\
         ens_g x sl1 y sl2)
 
@@ -403,7 +393,7 @@ let bind_pure_req (#a : Type) (wp : pure_wp a)
       (#pre : pre_t)
       (req : a -> req_t pre)
   : req_t pre
-  = fun sl0 -> wp (fun x -> req x sl0) /\ True
+  = fun sl0 -> wp (fun x -> req x sl0)
 
 unfold
 let bind_pure_ens (#a : Type) (#b : Type)
@@ -468,7 +458,7 @@ let tree_of_steel (#a : Type) (#pre : pre_t) (#post : post_t a) (#req : req_t pr
   : prog_tree a
   = Tspec a pre post req ens
 
-inline_for_extraction
+inline_for_extraction noextract
 let repr_of_steel_steel
       (a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
       (pre' : pre_t) (post' : post_t a) (frame : vprop_list)
@@ -503,7 +493,7 @@ let repr_of_steel (#a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) 
   }
 
 
-inline_for_extraction
+inline_for_extraction noextract
 let return_steel
       (a : Type) (x : a) (sl_hint : post_t a)
       (pre : pre_t) (post : post_t a)
@@ -553,7 +543,7 @@ val intro_tree_ens_bind (#a #b : Type) (f : prog_tree a) (g : a -> prog_tree b)
           (ensures  tree_ens _ (TCbind #a #b #f #g pre itm post cf cg)
                              (vpl_sels_f pre sl0) y (vpl_sels_f (post y) sl2))
 
-inline_for_extraction
+inline_for_extraction noextract
 let bind_steel
       (a : Type) (b : Type) (f : prog_tree a) (g : (a -> prog_tree b))
       (pre : pre_t) (itm : post_t a) (post : post_t b)

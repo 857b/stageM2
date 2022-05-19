@@ -14,8 +14,8 @@ open Steel.Effect.Common
 type pre_t = Fl.ty_list
 type post_t (a : Type) = a -> Fl.ty_list
 
-type req_t (pre : pre_t) = Fl.flist pre -> prop
-type ens_t (pre : pre_t) (a : Type) (post : post_t a) = Fl.flist pre -> (x : a) -> Fl.flist (post x) -> prop
+type req_t (pre : pre_t) = Fl.flist pre -> Type0
+type ens_t (pre : pre_t) (a : Type) (post : post_t a) = Fl.flist pre -> (x : a) -> Fl.flist (post x) -> Type0
 
 let const_post (#a : Type) (ts : Fl.ty_list) : post_t a = fun _ -> ts
 let frame_post (#a : Type) (pt : post_t a) (fr : Fl.ty_list) : post_t a = fun (x : a) -> L.(pt x @ fr)
@@ -122,7 +122,7 @@ let rec tree_req (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree a 
              (fun sl0 -> tree_req f sl0 /\
                (forall (x : a) (sl1 : Fl.flist (itm x)) . tree_ens f sl0 x sl1 ==> tree_req (g x) sl1))
   | TbindP a _  _ _  wp _ g ->
-             (fun sl0 -> wp (fun (x : a) -> tree_req (g x) sl0) /\ True)
+             (fun sl0 -> wp (fun (x : a) -> tree_req (g x) sl0))
 
 and tree_ens (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree a pre post)
   : Tot (ens_t pre a post) (decreases t)
@@ -341,12 +341,12 @@ let rec shape_ST_of_M (#pre_n : nat) (#post_n : nat) (s : M.shape_tree pre_n pos
 
 val repr_ST_of_M_req (#a : Type) (t : M.prog_tree u#a a)
                      (#pre : M.pre_t) (#post : M.post_t a) (c : M.tree_cond t pre post)
-                     (sl0 : sl_t pre)
+                     (sl0 : sl_f pre)
   : Lemma (M.tree_req t c sl0 <==> tree_req (repr_ST_of_M t c) sl0)
 
 val repr_ST_of_M_ens (#a : Type) (t : M.prog_tree u#a a)
                      (#pre : M.pre_t) (#post : M.post_t a) (c : M.tree_cond t pre post)
-                     (sl0 : sl_t pre) (res : a) (sl1 : sl_t (post res))
+                     (sl0 : sl_f pre) (res : a) (sl1 : sl_f (post res))
   : Lemma (M.tree_ens t c sl0 res sl1 <==> tree_ens (repr_ST_of_M t c) sl0 res sl1)
 
 

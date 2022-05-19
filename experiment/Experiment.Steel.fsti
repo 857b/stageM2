@@ -24,7 +24,7 @@ let prog_M_to_Fun
       (#a : Type) (t : M.repr a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
-  : (sl0 : M.sl_t pre) ->
+  : (sl0 : M.sl_f pre) ->
     Fun.prog_tree #SF.sl_tys SF.({val_t = a; sel_t = ST.post_ST_of_M post})
   =
     let { pc_tree = t_M; pc_post_len = post_n; pc_shape = shp_M } = c in
@@ -35,7 +35,7 @@ let prog_M_to_Fun
     let shp_ST' = ST.flatten_shape shp_ST           in
     (**) ST.flatten_prog_shape t_ST shp_ST;
     let s_ST'   = ST.mk_prog_shape t_ST' shp_ST'    in
-    begin fun (sl0 : M.sl_t pre) ->
+    begin fun (sl0 : M.sl_f pre) ->
       let t_SF = SF.repr_SF_of_ST_rall t_ST' s_ST' sl0 in
       SF.repr_Fun_of_SF t_SF
     end
@@ -44,10 +44,10 @@ val prog_M_to_Fun_equiv
       (#a : Type) (t : M.repr a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
-      (sl0 : M.sl_t pre)
+      (sl0 : M.sl_f pre)
   : Lemma (M.tree_req t.repr_tree c.pc_tree sl0 <==> Fun.tree_req (prog_M_to_Fun t c sl0) /\
           (M.tree_req t.repr_tree c.pc_tree sl0 ==>
-          (forall (x : a) (sl1 : M.sl_t (post x)) .
+          (forall (x : a) (sl1 : M.sl_f (post x)) .
                (M.tree_ens t.repr_tree c.pc_tree sl0 x sl1 <==>
                 Fun.tree_ens (prog_M_to_Fun t c sl0) SF.({val_v = x; sel_v = sl1})))))
 
@@ -57,9 +57,9 @@ let prog_M_to_Fun_extract
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
       (req : M.req_t pre) (ens : M.ens_t pre a post)
-      (sub : (sl0 : M.sl_t pre) -> Lemma (requires req sl0)
+      (sub : (sl0 : M.sl_f pre) -> Lemma (requires req sl0)
                (ensures Fun.tree_req (prog_M_to_Fun t c sl0) /\
-                  (forall (x : a) (sl1 : M.sl_t (post x)) .
+                  (forall (x : a) (sl1 : M.sl_f (post x)) .
                     Fun.tree_ens (prog_M_to_Fun t c sl0) SF.({val_v = x; sel_v = sl1}) ==> ens sl0 x sl1)))
   : M.repr_steel_t a pre post req ens
   =
@@ -75,7 +75,7 @@ let prog_M_to_Fun_extract_wp
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
       (req : M.req_t pre) (ens : M.ens_t pre a post)
-      (wp : (sl0 : M.sl_t pre) -> Lemma
+      (wp : (sl0 : M.sl_f pre) -> Lemma
               (requires req sl0)
               (ensures Fun.tree_wp (prog_M_to_Fun t c sl0) (fun res -> ens sl0 res.val_v res.sel_v)))
   : M.repr_steel_t a pre post req ens
@@ -172,10 +172,12 @@ let __normal_Fun_spec : list norm_step = [
 ]
 
 let __normal_vprop_list : list norm_step = [
-  delta_only [`%M.vprop_of_list; `%M.rmem_sels'; `%Fl.flist_of_d; `%M.rmem_sl_list; `%M.vpl_sels;
-              `%Dl.index; `%L.length; `%L.index; `%Fl.flist];
+  delta_only [`%M.vprop_of_list; `%M.vprop_list_sels_t; `%M.sel_f'; `%M.sel';
+              `%Fl.flist_of_g; `%Fl.dlist_of_f_g; `%Fl.flist_of_d;
+              `%Dl.index; `%Dl.initi_g;
+              `%L.length; `%L.index; `%L.map; `%L.hd; `%L.tl; `%L.tail];
   delta_attr [`%SE.__reduce__];
-  iota; zeta;
+  iota; zeta; primops
 ]
 
 
@@ -191,10 +193,8 @@ val call_repr_steel
       (#req : M.req_t pre) (#ens  : M.ens_t pre a post)
       (r : M.repr_steel_t a pre post req ens)
   : SE.Steel a (M.vprop_of_list' pre) (fun x -> M.vprop_of_list' (post x))
-      (requires fun h0      -> req (norm_vpl (M.rmem_sels' pre h0)))
-      (ensures  fun h0 x h1 -> ens (norm_vpl (M.rmem_sels' pre h0))
-                                x
-                                (norm_vpl (M.rmem_sels' (post x) h1)))
+      (requires fun h0      -> norm_vpl (req (M.sel_f' pre h0)))
+      (ensures  fun h0 x h1 -> norm_vpl (ens (M.sel_f' pre h0) x (M.sel_f' (post x) h1)))
 
 
 (***** Extracting a [M.repr_steel_t] from a [M.repr] *)
@@ -213,7 +213,7 @@ let __solve_by_wp
       (#pre : M.pre_t) (#post : M.post_t a)
       (#req : M.req_t pre) (#ens : M.ens_t pre a post)
       (c : M.prog_cond t.repr_tree pre post)
-      (t_Fun : (sl0 : M.sl_t pre) ->
+      (t_Fun : (sl0 : M.sl_f pre) ->
                GTot (Fun.prog_tree #SF.sl_tys SF.({val_t = a; sel_t = ST.post_ST_of_M post})))
       (t_Fun_eq : squash (t_Fun == (fun sl0 -> prog_M_to_Fun t c sl0)))
       (wp : squash (Fl.forall_flist (M.vprop_list_sels_t pre) (fun sl0 ->

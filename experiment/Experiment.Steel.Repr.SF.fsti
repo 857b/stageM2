@@ -13,8 +13,8 @@ open Experiment.Steel.Repr.ST
 
 type post_t (a : Type) = a -> Fl.ty_list
 type post_v (#a : Type) (post : post_t a) (x : a) = Fl.flist (post x)
-type req_t = prop
-type ens_t (a : Type) (post : post_t a) = (x : a) -> post_v post x -> prop
+type req_t = Type0
+type ens_t (a : Type) (post : post_t a) = (x : a) -> post_v post x -> Type0
 
 noeq
 type prog_tree : (a : Type u#a) -> (post : post_t u#a u#b a) -> Type u#(1 + max a b) =
@@ -43,7 +43,7 @@ let rec tree_req (#a : Type) (#post : post_t a) (t : prog_tree a post)
              tree_req f /\
                (forall (x : a) (sl : post_v itm x) . tree_ens f x sl ==> tree_req (g x sl))
   | TbindP a _  _  wp _ g ->
-             wp (fun (x : a) -> tree_req (g x)) /\ True
+             wp (fun (x : a) -> tree_req (g x))
 
 and tree_ens (#a : Type) (#post : post_t a) (t : prog_tree a post)
   : Tot (ens_t a post) (decreases t)

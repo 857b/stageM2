@@ -441,7 +441,7 @@ let rec repr_SF_of_ST_req
       calc (<==>) {
         ST.tree_req (ST.TbindP a b pre post wp f g) sl0;
       <==> { _ by T.(apply_lemma (`U.iff_refl); trefl ()) }
-        wp (fun x -> ST.tree_req (g x) sl0) /\ True;
+        wp (fun x -> ST.tree_req (g x) sl0);
       <==> {}
         wp pt0;
       <==> { wp_morph_iff wp pt0 pt1 (fun x -> repr_SF_of_ST_req (g x) (s_g x) sl0) }
@@ -449,7 +449,7 @@ let rec repr_SF_of_ST_req
       <==> {}
         wp (fun x -> tree_req (repr_SF_of_ST (g x) (ST.mk_prog_shape (g x) shp_g) sl0) /\
                 (forall (y : b) (sl1' : post_v (post_SF_of_ST post #(L.length #Type pre) shp_g) y) .
-                tree_ens (repr_SF_of_ST (g x) (ST.mk_prog_shape (g x) shp_g) sl0) y sl1' ==> True)) /\ True;
+                tree_ens (repr_SF_of_ST (g x) (ST.mk_prog_shape (g x) shp_g) sl0) y sl1' ==> True));
       <==> { _ by T.(apply_lemma (`U.iff_refl); trefl ())}
         tree_req (repr_SF_of_ST (ST.TbindP a b pre post wp f g)
                                  (ST.mk_prog_shape _ (ST.SbindP _ _ shp_g)) sl0);
@@ -657,7 +657,7 @@ let rec repr_Fun_of_SF_req #val_t #sel_t (t : prog_tree val_t sel_t)
           calc (<==>) {
             tree_req (TbindP a b post wp f g);
           <==> {_ by T.(apply_lemma (`U.iff_refl); trefl ())}
-            wp (fun x -> tree_req (g x)) /\ True;
+            wp (fun x -> tree_req (g x));
           <==> {wp_morph_iff wp (fun x -> tree_req (g x)) (fun x -> Fun.tree_req (repr_Fun_of_SF (g x)))
                               (fun x -> repr_Fun_of_SF_req (g x))}
             wp (fun x -> Fun.tree_req (repr_Fun_of_SF (g x)));

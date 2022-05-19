@@ -72,7 +72,6 @@ let rec flist_of_d'_eq (#ts : Dl.ty_list) (l : Dl.dlist ts)
               flist_of_d'_eq xs;
               flist_extensionality (cons x0 (flist_of_d' xs)) (flist_of_d l) (fun i -> ())
 
-
 let dlist_of_f (#ts : ty_list) (f : flist ts) : Dl.dlist ts
   = Dl.initi_ty ts f
 
@@ -126,6 +125,62 @@ let splitAt_ty_of_f (ts0 ts1 : ty_list) (xs : flist L.(ts0@ts1))
   : Lemma (Dl.splitAt_ty ts0 ts1 (dlist_of_f xs)
             == (dlist_of_f (splitAt_ty ts0 ts1 xs)._1, dlist_of_f (splitAt_ty ts0 ts1 xs)._2))
   = splitAt_ty_of_d ts0 ts1 (dlist_of_f xs)
+
+
+(***** ghost *)
+
+type flist_g (ts : ty_list) : Type =
+  Fext.restricted_g_t (Fin.fin (L.length ts)) (L.index ts)
+
+unfold
+let mk_flist_g (ts : ty_list) (f : (i : Fin.fin (L.length ts)) -> GTot (L.index ts i))
+  : flist_g ts
+  = Fext.on_domain_g (Fin.fin (L.length ts)) f
+
+let flist_g_extensionality (#ts : ty_list) (xs ys : flist_g ts)
+          (pf : (i : Fin.fin (L.length ts)) -> squash (xs i == ys i))
+  : Lemma (ensures xs == ys)
+  =
+    FStar.Classical.forall_intro_squash_gtot pf;
+    Fext.extensionality_g (Fin.fin (L.length ts)) (L.index ts) xs ys
+
+
+let dlist_of_f_g (#ts : ty_list) (f : flist_g ts) : GTot (Dl.dlist ts)
+  = Dl.initi_ty_g ts f
+
+let flist_g_of_d (#ts : ty_list) (l : Ghost.erased (Dl.dlist ts)) : flist_g ts
+  = mk_flist_g ts (Dl.index l)
+
+let dfd_g_id (#ts : ty_list) (l : Dl.dlist ts)
+  : Lemma (dlist_of_f_g (flist_g_of_d l) == l)
+          [SMTPat (dlist_of_f_g (flist_g_of_d l))]
+  = Dl.dlist_extensionality (dlist_of_f_g (flist_g_of_d l)) l (fun i -> ())
+
+let fdf_g_id (#ts : ty_list) (f : flist_g ts)
+  : Lemma (flist_g_of_d (dlist_of_f_g f) == f)
+          [SMTPat (flist_g_of_d (dlist_of_f_g f))]
+  = flist_g_extensionality (flist_g_of_d (dlist_of_f_g f)) f (fun i -> ())
+
+
+let flist_to_g (#ts : ty_list) (f : Ghost.erased (flist ts))
+  : flist_g ts
+  = mk_flist_g ts (fun i -> Ghost.reveal f i)
+
+/// Since the domain [Fin.fin n] is finite, it is possible to obtain [GTot (Fin.fin n -> _)]
+/// from [Fin.fin n -> GTot _]
+let flist_of_g (#ts : ty_list) (f : flist_g ts)
+  : GTot (flist ts)
+  = flist_of_d (dlist_of_f_g f)
+
+let gfg_id (#ts : ty_list) (f : flist_g ts)
+  : Lemma (flist_to_g (flist_of_g f) == f)
+          [SMTPat (flist_to_g (flist_of_g f))]
+  = flist_g_extensionality (flist_to_g (flist_of_g f)) f (fun i -> ())
+
+let fgf_id (#ts : ty_list) (f : flist ts)
+  : Lemma (flist_of_g (flist_to_g f) == f)
+          [SMTPat (flist_of_g (flist_to_g f))]
+  = flist_extensionality (flist_of_g (flist_to_g f)) f (fun i -> ())
 
 
 (***** permutations *)

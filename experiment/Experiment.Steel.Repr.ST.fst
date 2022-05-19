@@ -55,7 +55,7 @@ let repr_ST_of_M__TCspec_ens
       #a #pre #post (req : M.req_t pre) (ens : M.ens_t pre a post)
       (pre' : M.pre_t) (post' : M.post_t a) (frame : vprop_list)
       (p0 : vequiv pre' L.(pre @ frame)) (p1 : (x : a) -> vequiv (post x @ frame) (post' x))
-      (sl0' : sl_t pre') (res : a) (sl1' : sl_t (post' res))
+      (sl0' : sl_f pre') (res : a) (sl1' : sl_f (post' res))
 
   : Lemma (
     (**) L.map_append Mkvprop'?.t pre frame;
@@ -97,7 +97,7 @@ let repr_ST_of_M__TCspec_ens
 #push-options "--z3rlimit 30 --ifuel 1"
 let rec repr_ST_of_M_req (#a : Type) (t : M.prog_tree a)
                          (#pre : M.pre_t) (#post : M.post_t a) (c : M.tree_cond t pre post)
-                         (sl0 : sl_t pre)
+                         (sl0 : sl_f pre)
   : Lemma (ensures M.tree_req t c sl0 <==> tree_req (repr_ST_of_M t c) sl0)
           (decreases t)
   = match c as c returns squash (M.tree_req t c sl0 <==> tree_req (repr_ST_of_M t c) sl0) with
@@ -141,7 +141,7 @@ let rec repr_ST_of_M_req (#a : Type) (t : M.prog_tree a)
                bind_req (M.tree_req f cf) (M.tree_ens f cf) (fun x -> M.tree_req (g x) (cg x)) sl0;
              <==> {
                repr_ST_of_M_req f cf sl0;
-               introduce forall (x : a) (sl1 : sl_t (itm x)) .
+               introduce forall (x : a) (sl1 : sl_f (itm x)) .
                  (M.tree_ens f cf sl0 x sl1 <==> tree_ens (repr_ST_of_M f cf) sl0 x sl1) /\
                  (M.tree_req (g x) (cg x) sl1 <==> tree_req (repr_ST_of_M (g x) (cg x)) sl1)
                with (repr_ST_of_M_ens f cf sl0 x sl1; repr_ST_of_M_req (g x) (cg x) sl1)
@@ -170,7 +170,7 @@ let rec repr_ST_of_M_req (#a : Type) (t : M.prog_tree a)
                  (M.tree_req (g x) (cg x) sl0 <==> tree_req (repr_ST_of_M (g x) (cg x)) sl0)
                with repr_ST_of_M_req (g x) (cg x) sl0
             }
-              wp (fun x -> tree_req (repr_ST_of_M (g x) (cg x)) sl0) /\ True;
+              wp (fun x -> tree_req (repr_ST_of_M (g x) (cg x)) sl0);
             <==> {_ by T.(apply_lemma (`U.iff_refl); trefl ())}
               tree_req (repr_ST_of_M _ (TCbindP #a #b #wp #x #g pre post cg)) sl0;
             <==> {U.f_equal tree_req (repr_ST_of_M _ (TCbindP #a #b #wp #x #g pre post cg)) (repr_ST_of_M _ c)}
@@ -179,7 +179,7 @@ let rec repr_ST_of_M_req (#a : Type) (t : M.prog_tree a)
 
 and repr_ST_of_M_ens (#a : Type) (t : M.prog_tree a)
                      (#pre : M.pre_t) (#post : M.post_t a) (c : M.tree_cond t pre post)
-                     (sl0 : sl_t pre) (res : a) (sl1 : sl_t (post res))
+                     (sl0 : sl_f pre) (res : a) (sl1 : sl_f (post res))
   : Lemma (ensures M.tree_ens t c sl0 res sl1 <==> tree_ens (repr_ST_of_M t c) sl0 res sl1)
           (decreases t)
   = match c as c returns squash (M.tree_ens t c sl0 res sl1 <==> tree_ens (repr_ST_of_M t c) sl0 res sl1) with
@@ -231,7 +231,7 @@ and repr_ST_of_M_ens (#a : Type) (t : M.prog_tree a)
              <==> {_ by T.(apply_lemma (`U.iff_refl); trefl ())}
                bind_ens (M.tree_ens f cf) (fun x -> M.tree_ens (g x) (cg x)) sl0 res sl1;
              <==> {
-               introduce forall (x : a) (sl1' : sl_t (itm x)) .
+               introduce forall (x : a) (sl1' : sl_f (itm x)) .
                  (M.tree_ens f cf sl0 x sl1' <==> tree_ens (repr_ST_of_M f cf) sl0 x sl1') /\
                  (M.tree_ens (g x) (cg x) sl1' res sl1 <==> tree_ens (repr_ST_of_M (g x) (cg x)) sl1' res sl1)
                with (repr_ST_of_M_ens f cf sl0 x sl1';

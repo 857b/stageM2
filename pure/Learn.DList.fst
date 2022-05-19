@@ -110,6 +110,27 @@ let initi_ty (t : ty_list) (f : (i:Fin.fin (L.length t)) -> Tot (L.index t i))
     initi 0 (L.length t) (L.index t) f
 
 
+let rec initi_g (lb ub : int)
+          (t : (i:int{lb <= i /\ i < ub}) -> Tot Type)
+          (f : (i:int{lb <= i /\ i < ub}) -> GTot (t i))
+  : GTot (dlist (Ll.initi lb ub t)) (decreases ub - lb)
+  = if lb < ub then DCons (t lb) (f lb) _ (initi_g (lb + 1) ub t f) else DNil
+
+let rec initi_g_at (lb ub : int)
+          (t : (i:int{lb <= i /\ i < ub}) -> Tot Type)
+          (f : (i:int{lb <= i /\ i < ub}) -> GTot (t i))
+          (i : Fin.fin (L.length (Ll.initi lb ub t)))
+  : Lemma (ensures index (initi_g lb ub t f) i == f (lb+i)) (decreases i)
+          [SMTPat (index (initi_g lb ub t f) i)]
+  = if i = 0 then () else initi_g_at (lb+1) ub t f (i-1)
+
+unfold
+let initi_ty_g (t : ty_list) (f : (i:Fin.fin (L.length t)) -> GTot (L.index t i))
+  : GTot (dlist t)
+  = Ll.list_extensionality t (Ll.initi 0 (L.length t) (L.index t)) (fun _ -> ());
+    initi_g 0 (L.length t) (L.index t) f
+
+
 (***** permutations *)
 
 let apply_perm_r (#n : nat) (p : Perm.perm_f n) (#ts : ty_list {L.length ts == n}) (xs : dlist ts)

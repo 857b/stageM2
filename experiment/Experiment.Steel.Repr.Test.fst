@@ -102,8 +102,8 @@ inline_for_extraction
 let steel_read #a (r : ref a) () :
   Steel a (M.vprop_of_list [vptr' r full_perm]) (fun _ -> M.vprop_of_list [vptr' r full_perm])
     (requires fun _ -> True)
-    (ensures fun h0 x h1 -> let sl0 = M.rmem_sels [vptr' r full_perm] h0 in
-                         let sl1 = M.rmem_sels [vptr' r full_perm] h1 in
+    (ensures fun h0 x h1 -> let sl0 = M.sel_f [vptr' r full_perm] h0 in
+                         let sl1 = M.sel_f [vptr' r full_perm] h1 in
                          sl1 0 == sl0 0 /\ x == sl0 0)
   =
     (**) change_equal_slprop (M.vprop_of_list [vptr' r full_perm]) (vptr r `star` emp);
@@ -119,7 +119,7 @@ let r_read #a (r : ref a) : M.repr a =
 inline_for_extraction
 let steel_write #a (r : ref a) (x : a) ()
   : Steel unit (M.vprop_of_list [vptr' r full_perm]) (fun _ -> M.vprop_of_list [vptr' r full_perm])
-               (requires fun _ -> True) (ensures fun h0 () h1 -> M.rmem_sels [vptr' r full_perm] h1 0 == x)
+               (requires fun _ -> True) (ensures fun h0 () h1 -> M.sel_f [vptr' r full_perm] h1 0 == x)
   =
     (**) change_equal_slprop (M.vprop_of_list [vptr' r full_perm]) (vptr r `star` emp);
     write r x;
@@ -394,12 +394,11 @@ let test3_mem (r0 r1 : ref U32.t) =
 // This generates 2 SMT queries:
 // - the WP
 // - one for the typing of the requires and ensures clauses
-// TODO: req/ens : Type0 instead of prop
 inline_for_extraction
 let test3_steel (r0 r1 : ref U32.t)
   : extract unit
       (test3_mem r0 r1) (fun _ -> test3_mem r0 r1)
-      (requires fun sl0 -> squash (U32.v (sl0 0) < 42))
+      (requires fun sl0 -> U32.v (sl0 0) < 42)
       (ensures fun sl0 () sl1 -> U32.v (sl1 1) == U32.v (sl0 0) + 1)
       (test3_M r0 r1)
   = _ by (solve_by_wp ())
@@ -411,6 +410,7 @@ let test3_steel (r0 r1 : ref U32.t)
 
 
 // The SMT query still contains some references to test3_mem, M.vprop_list_sels_t...
+// and an application of Dl.initi_g that is not reduced
 let test_3_steel_caller (r0 r1 : ref U32.t)
   : Steel U32.t (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
       (requires fun h0 -> sel r0 h0 == 5ul)
