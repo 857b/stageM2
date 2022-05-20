@@ -5,6 +5,7 @@ module U    = Learn.Util
 module L    = FStar.List.Pure
 module Ll   = Learn.List
 module Fin  = FStar.Fin
+module Opt  = Learn.Option
 module Perm = Learn.Permutation
 
 open FStar.Tactics
@@ -20,46 +21,66 @@ type cs_failure_goal_shape =
 
 noeq
 type cs_failure_enum =
-  | Fail_goal_shape : (expected : cs_failure_goal_shape) -> (goal : typ) -> cs_failure_enum
+  | Fail_goal_shape : (expected : cs_failure_goal_shape) -> cs_failure_enum
   | Fail_post_unification
   | Fail_cond_sol
+  | Fail_elem_index
   | Fail_shape_unification : nat -> nat -> cs_failure_enum
 
 noeq
+type cs_info =
+  | Info_goal : typ -> cs_info
+  | Info_original_exn : exn -> cs_info
+
+noeq
 type cs_failure_t = {
-  fail_enum    : cs_failure_enum;
-  original_exn : option exn
+  fail_enum : cs_failure_enum;
+  fail_info : list cs_info
 }
 
 exception CSFailure of cs_failure_t
 
+let cs_info_to_string (i : cs_info) : Tac string =
+  match i with
+  | Info_goal g -> "on goal: "^term_to_string g
+  | Info_original_exn exn ->
+      begin match exn with
+      | TacticFailure msg -> "original failure: "^msg
+      | exn -> "original exception: "^term_to_string (quote exn)
+      end
+
+let rec concat_sep (sep : string) (l : list string)
+  : Tot string (decreases l)
+  = match l with
+  | []  -> ""
+  | [x] -> x
+  | x :: y :: tl -> x^sep^concat_sep sep (y :: tl)
+
 let cs_failure_to_string (f : cs_failure_t) : Tac string =
   let enum = f.fail_enum in
   let msg = term_to_string (quote enum) in
-  match f.original_exn with
-  | None -> msg
-  | Some (TacticFailure o_msg) -> msg^"\noriginal failure: "^o_msg
-  | Some o_exn -> msg^"\noriginal exception: "^term_to_string (quote o_exn)
-
+  concat_sep "\n" (msg :: map cs_info_to_string f.fail_info)
 
 // The following utilities are hacked to raise a failure at the location where they are called
 // FIXME? raise a CSFailure exception with a meaningful location
 private unfold
 let cs_try (#a : Type) (f : unit -> Tac a)
-           (fail_f : (cs_failure_enum -> Tac string) ->
+           (fail_f : (cs_failure_enum -> list cs_info -> Tac string) ->
                      TacH a (requires fun _ -> True) (ensures fun _ r -> Tactics.Result.Failed? r))
   : Tac a
   = try f ()
-    with | e -> fail_f (fun ety -> let failure = {fail_enum = ety; original_exn = Some e} in
-                               cs_failure_to_string failure)
+    with | e -> fail_f (fun fail_enum infos ->
+                 let failure = {fail_enum; fail_info = L.append infos [Info_original_exn e]} in
+                 cs_failure_to_string failure)
 
 private unfold
 let cs_raise (#a : Type)
-             (fail_f : (cs_failure_enum -> Tac string) ->
+             (fail_f : (cs_failure_enum -> list cs_info -> Tac string) ->
                        TacH a (requires fun _ -> True) (ensures fun _ r -> Tactics.Result.Failed? r))
   : TacH a (requires fun _ -> True) (ensures fun _ r -> Tactics.Result.Failed? r)
-  = fail_f (fun ety -> let failure = {fail_enum = ety; original_exn = None} in
-                    cs_failure_to_string failure)
+  = fail_f (fun fail_enum fail_info -> let
+      failure = {fail_enum; fail_info} in
+      cs_failure_to_string failure)
 
 
 irreducible let __cond_solver__ : unit = ()
@@ -108,25 +129,59 @@ val truth_refl_list_length (#ps : list prop) (#bs : list bool) (rfl : truth_refl
   : Lemma (L.length ps = L.length bs)
 
 val truth_refl_list_index (#ps : list prop) (#bs : list bool) (rfl : truth_refl_list ps bs)
-                              (i : Fin.fin (L.length bs))
+                          (i : Fin.fin (L.length bs))
   : Lemma (requires L.index bs i) (ensures L.length ps = L.length bs /\ L.index ps i)
 
-(* FIXME? this generate an additional smt goal *)
-let mk_truth_refl_list_goal () : Tac (list bool) =
+let build_truth_refl_list () : Tac (list bool) =
   norm [iota; primops; simplify];
   repeatb (fun () ->
     try (apply (`ReflLNil); None)
     with | _ -> try (apply (`ReflLTrue); Some true)
     with | _ -> try (apply (`ReflLFalse); Some false)
-    with | _ -> cs_raise (fun f -> fail (f (Fail_goal_shape GShape_truth_refl_list (cur_goal ())))))
+    with | _ -> cs_raise (fun m -> fail (m (Fail_goal_shape GShape_truth_refl_list) [Info_goal (cur_goal ())])))
 
 let mk_truth_refl_list (ps : term) : Tac (list bool & term & binder) =
   let bs = fresh_uvar (Some (`(list bool))) in
-  let bd, res = build (`truth_refl_list (`#ps) (`#bs)) mk_truth_refl_list_goal
+  let bd, res = build (`truth_refl_list (`#ps) (`#bs)) build_truth_refl_list
   in res, bs, bd
 
 (*let _ = assert True by (let bs,_,_ = mk_truth_refl_list (`[(1 == 1);
   (1 == 2); (2 + 2 == 4)]) in fail (term_to_string (quote bs)))*)
+
+
+(*** Finding an element in a list *)
+
+let elem_index (#a : Type) (x : a) (l : list a) =
+  i : Fin.fin (L.length l) { L.index l i == x }
+
+[@@ __cond_solver__]
+let rec findi_true (l : list bool)
+  : option (i : Fin.fin (L.length l) {L.index l i})
+  = match l with
+  | [] -> None
+  | true :: _ -> Some 0
+  | false :: tl -> Opt.map (fun (i : Fin.fin (L.length tl) {L.index tl i}) ->
+                             1 + i <: (i : Fin.fin (L.length l) {L.index l i}))
+                         (findi_true tl)
+
+[@@ __tac_helper__]
+let __build_elem_index
+      #a (#x : a) (#l : list a) (#bs : list bool)
+      (rfl : truth_refl_list (L.map #a #prop (fun y -> (x == y)) l) bs)
+      #i (i_eq : squash (Some i == findi_true bs))
+  : elem_index x l
+  = (**) truth_refl_list_index rfl i;
+    i
+
+/// Solves a goal of the form [elem_index x l]
+let build_elem_index () : Tac unit =
+  let goal = cur_goal () in
+  apply (`__build_elem_index);
+  norm [delta_only [`%L.map]; iota; zeta];
+  let _ = build_truth_refl_list () in
+  norm [delta_only [`%findi_true; `%Opt.map];
+       iota; zeta; primops];
+  cs_try trefl (fun m -> fail (m Fail_elem_index [Info_goal goal]))
 
 
 (*** Building an injection *)
@@ -244,7 +299,7 @@ val ograph_of_equalities_index (#a : Type) (src trg : list a) (bs : list bool)
 
 
 [@@ __cond_solver__]
-let build_partial_injection (#a : Type) (src trg : list a) (bs : list bool)
+let __build_partial_injection (#a : Type) (src trg : list a) (bs : list bool)
       (rfl : truth_refl_list (list_of_equalities src trg) bs)
   : partial_injection src trg
   =
@@ -261,21 +316,21 @@ let normal_list_of_equalities : list norm_step = [
   iota; zeta]
 
 let normal_build_partial_injection : list norm_step = [
-  delta_only [`%build_partial_injection; `%ograph_of_equalities; `%list_to_matrix; `%L.splitAt;
+  delta_only [`%__build_partial_injection; `%ograph_of_equalities; `%list_to_matrix; `%L.splitAt;
               `%L.length; `%Ll.initi; `%len; `%Ll.set;
               `%build_injection; `%build_injection_iter; `%build_injection_find];
   iota; zeta; primops]
 
 /// solves a goal of the form [partial_injection src dst]
-let build_partial_injection_tac () : Tac unit =
-  apply (`build_partial_injection);
+let build_partial_injection () : Tac unit =
+  apply (`__build_partial_injection);
   norm normal_list_of_equalities;
-  let _ = mk_truth_refl_list_goal () in
+  let _ = build_truth_refl_list () in
   ()
 
 
 (*let test_inj : partial_injection ['a';'b';'c';'a';'b'] ['a';'c';'b';'d';'e';'a'] =
-  _ by (build_partial_injection_tac ())
+  _ by (build_partial_injection ())
 
 let _ = assert (U.print_util test_inj)
             by (norm [delta_only [`%test_inj]];
@@ -284,7 +339,7 @@ let _ = assert (U.print_util test_inj)
 
 (*let _ : partial_injection ['a';'b';'c';'a';'b'] ['a';'c';'b';'d';'e';'a'] =
   _ by (let goal = cur_goal () in
-        let inj, () = build_term goal build_partial_injection_tac in
+        let inj, () = build_term goal build_partial_injection in
         exact inj)*)
 
 
@@ -467,11 +522,11 @@ let build_cond_sol (all : bool) : Tac unit
   = try if all then apply (`CSeq) else apply (`CSnil)
     with | _ ->
       apply_raw (`CSinj);
-      build_partial_injection_tac ();
+      build_partial_injection ();
       norm normal_build_partial_injection;
       norm normal_ij_mask;
     try if all then apply (`CSeq) else apply (`CSnil)
-    with | _ -> cs_raise (fun f -> fail (f Fail_cond_sol))
+    with | _ -> cs_raise (fun m -> fail (m Fail_cond_sol []))
 
 
 let normal_cond_sol_to_equiv : list norm_step = [
@@ -718,7 +773,7 @@ let rec build_TCbind (post : bool) : Tac shape_tree_t
     let x = intro () in
     let (|pre_g, post_g, s_g|) = build_tree_cond post  in
 
-    if post_f <> pre_g then cs_raise (fun f -> fail (f (Fail_shape_unification post_f pre_g)));
+    if post_f <> pre_g then cs_raise (fun m -> fail (m (Fail_shape_unification post_f pre_g) []));
     (|pre_f, post_g, PSbind pre_f post_f post_g s_f s_g|)
 
 and build_TCbindP (post : bool) : Tac shape_tree_t
@@ -732,22 +787,23 @@ and build_tree_cond (post : bool) : Tac shape_tree_t
     let build_tac : bool -> Tac shape_tree_t =
       let goal = cur_goal () in
       let args = (collect_app goal)._2 in
+      let fail_shape () = cs_raise (fun m -> fail (m (Fail_goal_shape GShape_tree_cond) [Info_goal goal])) in
       if L.length args <> 4
-      then cs_raise (fun f -> fail (f (Fail_goal_shape GShape_tree_cond goal)))
+      then fail_shape ()
       else let hd = (collect_app (L.index args 1)._1)._1 in
       match inspect hd with
       | Tv_FVar fv ->
           // TODO? better solution to match
           let nd = inspect_fv fv in
-          if Nil? nd then cs_raise (fun f -> fail (f (Fail_goal_shape GShape_tree_cond goal)));
+          if Nil? nd then (let _ = fail_shape () in fail "unreachable");
           begin match L.last nd with
           | "Tspec"  -> build_TCspec
           | "Tret"   -> build_TCret 
           | "Tbind"  -> build_TCbind
           | "TbindP" -> build_TCbindP
-          | _ -> cs_raise (fun f -> fail (f (Fail_goal_shape GShape_tree_cond goal)))
+          | _ -> fail_shape ()
           end
-      | _ -> cs_raise (fun f -> fail (f (Fail_goal_shape GShape_tree_cond goal)))
+      | _ -> fail_shape ()
     in
     if post
     then build_tac true
@@ -767,7 +823,7 @@ and build_tree_cond (post : bool) : Tac shape_tree_t
       // [?post1] is now inferred as [post1] and we are presented with a goal [?post0 == post1].
       // We normalize [post1] and assign the result to [?post0].
       norm_cond_sol ();
-      cs_try trefl (fun f -> fail (f Fail_post_unification));
+      cs_try trefl (fun m -> fail (m Fail_post_unification []));
 
       shp
     end

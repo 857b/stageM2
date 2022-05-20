@@ -5,6 +5,7 @@ module L    = FStar.List.Pure
 module Dl   = Learn.DList
 module Fl   = Learn.FList
 module Ll   = Learn.List
+module SE   = Steel.Effect
 module Mem  = Steel.Memory
 module Perm = Learn.Permutation
 module FExt = FStar.FunctionalExtensionality
@@ -209,35 +210,6 @@ type post_t (a : Type) = a -> vprop_list
 type req_t (pre : pre_t) = sl_f pre -> Type0
 type ens_t (pre : pre_t) (a : Type) (post : post_t a) = sl_f pre -> (x : a) -> sl_f (post x) -> Type0
 
-type repr_steel_t (a : Type)
-       (pre : pre_t) (post : post_t a)
-       (req : req_t pre) (ens : ens_t pre a post) : Type
-  = unit -> Steel a
-             (vprop_of_list pre) (fun x -> vprop_of_list (post x))
-             (requires fun h0      -> req (sel pre h0))
-             (ensures  fun h0 x h1 -> ens (sel pre h0) x (sel_f (post x) h1))
-
-inline_for_extraction noextract
-let repr_steel_subcomp
-      (#a : Type) (#pre : pre_t) (#post : post_t a)
-      (req_f : req_t pre) (ens_f : ens_t pre a post)
-      (req_g : req_t pre) (ens_g : ens_t pre a post)
-      (pf_req : (sl0 : sl_f pre) ->
-                Lemma (requires req_g sl0) (ensures req_f sl0))
-      (pf_ens : (sl0 : sl_f pre) -> (x : a) -> (sl1 : sl_f (post x)) ->
-                Lemma (requires req_f sl0 /\ req_g sl0 /\ ens_f sl0 x sl1) (ensures ens_g sl0 x sl1))
-      (r : repr_steel_t a pre post req_f ens_f)
-  : repr_steel_t a pre post req_g ens_g
-  = 
-    (fun () ->
-      (**) let sl0 : Ghost.erased (t_of (vprop_of_list pre)) = gget (vprop_of_list pre) in
-      (**) pf_req (vpl_sels_f pre sl0);
-      let x = r () in
-      (**) let sl1 : Ghost.erased (t_of (vprop_of_list (post x))) = gget (vprop_of_list (post x)) in
-      (**) pf_ens (vpl_sels_f pre sl0) x (vpl_sels_f (post x) sl1);
-      Steel.Effect.Atomic.return x)
-
-
 noeq
 type prog_tree : (a : Type u#a) -> Type u#(max (a+1) 2) =
   | Tspec  : (a : Type u#a) -> (pre : pre_t) -> (post : post_t a) ->
@@ -441,6 +413,38 @@ and tree_ens (#a : Type u#a) (t : prog_tree a)
 
 
 (*** "Monad" *)
+
+type unit_steel (a : Type) (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t pre) (ens : SE.ens_t pre a post)
+  = unit -> Steel a pre post req ens
+
+type repr_steel_t (a : Type)
+       (pre : pre_t) (post : post_t a)
+       (req : req_t pre) (ens : ens_t pre a post) : Type
+  = unit_steel a
+      (vprop_of_list pre) (fun x -> vprop_of_list (post x))
+      (requires fun h0      -> req (sel pre h0))
+      (ensures  fun h0 x h1 -> ens (sel pre h0) x (sel_f (post x) h1))
+
+inline_for_extraction noextract
+let repr_steel_subcomp
+      (#a : Type) (#pre : pre_t) (#post : post_t a)
+      (req_f : req_t pre) (ens_f : ens_t pre a post)
+      (req_g : req_t pre) (ens_g : ens_t pre a post)
+      (pf_req : (sl0 : sl_f pre) ->
+                Lemma (requires req_g sl0) (ensures req_f sl0))
+      (pf_ens : (sl0 : sl_f pre) -> (x : a) -> (sl1 : sl_f (post x)) ->
+                Lemma (requires req_f sl0 /\ req_g sl0 /\ ens_f sl0 x sl1) (ensures ens_g sl0 x sl1))
+      (r : repr_steel_t a pre post req_f ens_f)
+  : repr_steel_t a pre post req_g ens_g
+  = 
+    (fun () ->
+      (**) let sl0 : Ghost.erased (t_of (vprop_of_list pre)) = gget (vprop_of_list pre) in
+      (**) pf_req (vpl_sels_f pre sl0);
+      let x = r () in
+      (**) let sl1 : Ghost.erased (t_of (vprop_of_list (post x))) = gget (vprop_of_list (post x)) in
+      (**) pf_ens (vpl_sels_f pre sl0) x (vpl_sels_f (post x) sl1);
+      Steel.Effect.Atomic.return x)
+
 
 /// We define a "monad" (which does not satisfy the monad laws) on a [repr] type which contains a representation
 /// of the program as a tree and a corresponding steel function.

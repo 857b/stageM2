@@ -182,6 +182,9 @@ let fgf_id (#ts : ty_list) (f : flist ts)
           [SMTPat (flist_of_g (flist_to_g f))]
   = flist_extensionality (flist_of_g (flist_to_g f)) f (fun i -> ())
 
+let flist_of_g_id (#ts : ty_list) (f : flist_g ts) (i : Fin.fin (L.length ts))
+  : Lemma (flist_of_g f i == f i)
+  = ()
 
 (***** permutations *)
 

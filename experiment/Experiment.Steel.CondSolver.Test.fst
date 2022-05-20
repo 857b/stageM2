@@ -15,6 +15,17 @@ open Steel.Reference
 open Experiment.Steel.CondSolver
 
 
+let _ : elem_index #int 4 [1;3;4;2;7]
+  = _ by (build_elem_index ())
+
+[@@ expect_failure [228]]
+let _ : elem_index #int 5 [1;3;4;2;7]
+  = _ by (build_elem_index ())
+
+[@@ expect_failure [228]]
+let _ : elem_index #int 4 L.(0 :: ([1;3] @ [4;2;7]))
+  = _ by (build_elem_index ())
+
 unfold
 let specT (a : Type) (pre : M.pre_t) (post : M.post_t a) : M.prog_tree a
   = M.Tspec a pre post (fun _ -> True) (fun _ _ _ -> True)

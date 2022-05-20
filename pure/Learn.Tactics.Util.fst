@@ -89,3 +89,7 @@ let extract_nat_tac () : Tac nat
   = let n = extract_int_tac () in
     if n < 0 then fail ("extracted int "^string_of_int n^" < 0");
     n
+
+/// If `--lax` is set, this tactics discharges the current goal. Otherwise it call [f].
+let lax_guard (f : unit -> Tac unit) : Tac unit
+  = if lax_on () then (apply (`false_elim); smt ()) else f ()

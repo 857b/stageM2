@@ -63,9 +63,6 @@ let prog_M_to_Fun_equiv
 
 (***** Calling a [M.repr_steel_t] from a Steel program *)
 
-type unit_steel (a : Type) (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t pre) (ens : SE.ens_t pre a post)
-  = unit -> SE.Steel a pre post req ens
-
 inline_for_extraction
 let steel_subcomp_eq
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a)
@@ -73,11 +70,11 @@ let steel_subcomp_eq
       (req_g : SE.req_t pre) (ens_g : SE.ens_t pre a post)
       (pf_req : unit -> squash (req_f == req_g))
       (pf_ens : unit -> squash (ens_f == ens_g))
-      (f : unit_steel a pre post req_f ens_f)
-  : unit_steel a pre post req_g ens_g
+      (f : M.unit_steel a pre post req_f ens_f)
+  : M.unit_steel a pre post req_g ens_g
   = pf_req ();
     pf_ens ();
-    U.cast #(unit_steel a pre post req_f ens_f) (unit_steel a pre post req_g ens_g) f
+    U.cast #(M.unit_steel a pre post req_f ens_f) (M.unit_steel a pre post req_g ens_g) f
 
 
 inline_for_extraction
@@ -86,7 +83,7 @@ let __call_repr_steel_0
       (#pre : M.pre_t)     (#post : M.post_t a)
       (#req : M.req_t pre) (#ens  : M.ens_t pre a post)
       (r : M.repr_steel_t a pre post req ens)
-  : unit_steel a (M.vprop_of_list pre) (fun x -> M.vprop_of_list (post x))
+  : M.unit_steel a (M.vprop_of_list pre) (fun x -> M.vprop_of_list (post x))
       (requires fun h0      -> req (norm_vpl (M.sel_f' pre h0)))
       (ensures  fun h0 x h1 -> ens (norm_vpl (M.sel_f' pre h0)) x (norm_vpl (M.sel_f' (post x) h1)))
   = steel_subcomp_eq
@@ -107,7 +104,7 @@ let __call_repr_steel_1
       (#pre : M.pre_t)     (#post : M.post_t a)
       (#req : M.req_t pre) (#ens  : M.ens_t pre a post)
       (r : M.repr_steel_t a pre post req ens)
-  : unit_steel a (M.vprop_of_list' pre) (fun x -> M.vprop_of_list' (post x))
+  : M.unit_steel a (M.vprop_of_list' pre) (fun x -> M.vprop_of_list' (post x))
       (requires fun h0      -> req (norm_vpl (M.sel_f' pre h0)))
       (ensures  fun h0 x h1 -> ens (norm_vpl (M.sel_f' pre h0)) x (norm_vpl (M.sel_f' (post x) h1)))
   = __call_repr_steel_0 r
@@ -116,3 +113,47 @@ let __call_repr_steel_1
 // Assertion failure CheckNoUvars if calling __call_repr_steel_0
 inline_for_extraction
 let call_repr_steel #a #pre #post #req #ens r = __call_repr_steel_1 r ()
+
+
+(***** Extracting a [M.unit_steel] from a [M.repr] *)
+
+inline_for_extraction
+let steel_of_repr
+      (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
+      (tr : to_repr_t a pre post req ens)
+      (f : M.repr_steel_t a tr.r_pre tr.r_post tr.r_req tr.r_ens)
+  : M.unit_steel a pre (fun x -> post x) (fun h0 -> req h0) (fun h0 x h1 -> ens h0 x h1)
+  = U.cast_by _ f (_ by (
+       l_to_r [(`(`@tr).r_pre_eq); (`(`@tr).r_post_eq);
+               (`(`@tr).r_req_eq); (`(`@tr).r_ens_eq)];
+       norm [delta_only [`%M.repr_steel_t; `%M.unit_steel; `%U.cast]];
+       trefl ()))
+
+#push-options "--fuel 1"
+let __build_to_repr_t_lem
+      (p : SE.vprop) (r_p : M.vprop_list {p == M.vprop_of_list r_p}) (h : SE.rmem p)
+      (v : SE.vprop{SE.can_be_split p v}) (_ : squash (SE.VUnit? v))
+      (i : CSl.elem_index (SE.VUnit?._0 v) r_p)
+      (i' : int) (_ : squash (i' == i))
+  : squash (h v ==
+        M.sel r_p (U.f_equal SE.rmem p (M.vprop_of_list r_p);
+                   U.cast (SE.rmem (M.vprop_of_list r_p)) h) i)
+  =
+    U.f_equal SE.rmem p (M.vprop_of_list r_p);
+    let h_r = U.cast (SE.rmem (M.vprop_of_list r_p)) h in
+    M.vprop_of_list_can_be_split r_p i;
+    calc (==) {
+      M.sel r_p h_r i;
+    == { M.sel_eq' }
+      M.sel_f' r_p h_r i;
+    == { }
+      h_r (SE.VUnit (L.index r_p i));
+    == { }
+      h v;
+    }
+#pop-options
+
+#push-options "--ifuel 2"
+let __begin_tacs = ()
+#pop-options
+let __end_tacs = ()

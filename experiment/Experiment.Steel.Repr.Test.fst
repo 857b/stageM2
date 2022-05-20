@@ -409,12 +409,34 @@ let test3_steel (r0 r1 : ref U32.t)
           fail "print")*)
 
 
+
 // The SMT query still contains some references to test3_mem, M.vprop_list_sels_t...
 // and an application of Dl.initi_g that is not reduced
-let test_3_steel_caller (r0 r1 : ref U32.t)
+#push-options "--ifuel 0"
+let test3_steel_caller (r0 r1 : ref U32.t)
   : Steel U32.t (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
       (requires fun h0 -> sel r0 h0 == 5ul)
       (ensures fun h0 x h1 -> x == 6ul)
   =
     call_repr_steel (test3_steel r0 r1);
+    read r1
+#pop-options
+
+// This only generates 1 SMT query: the WP
+inline_for_extraction
+let test3_steel' (r0 r1 : ref U32.t)
+  : M.unit_steel unit
+      (M.vprop_of_list' (test3_mem r0 r1)) (fun _ -> M.vprop_of_list' (test3_mem r0 r1))
+      (requires fun h0 -> U32.v (sel r0 h0) < 42)
+      (ensures fun h0 () h1 -> U32.v (sel r1 h1) == U32.v (sel r0 h0) + 1)
+  = to_steel (test3_M r0 r1)
+      (test3_mem r0 r1) (fun _ -> test3_mem r0 r1)
+      (_ by (build_to_steel ()))
+
+let test3_steel'_caller (r0 r1 : ref U32.t)
+  : Steel U32.t (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
+      (requires fun h0 -> sel r0 h0 == 5ul)
+      (ensures fun h0 x h1 -> x == 6ul)
+  =
+    test3_steel' r0 r1 ();
     read r1
