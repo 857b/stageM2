@@ -19,7 +19,23 @@ open Steel.Effect.Atomic
 
 irreducible let __repr_M__ : unit = ()
 
-(***** [vprop_list] *)
+
+(*** Steel *)
+
+type unit_steel (a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
+  = unit -> Steel a pre post req ens
+
+(* This does not seems provable from the interface of Steel.Effect
+   Maybe from subcomp, if one could resolve the framing_implicit ourselves instead of relying on the tactic.
+// Warning : this can drop some slprops
+val change_can_be_split_slprop
+      (#opened : Mem.inames)
+      (p q : vprop) (_ : squash(can_be_split p q))
+  : SteelGhost unit opened p (fun () -> q) (fun _ -> True) (fun h0 () h1 -> h1 q == h0 q)
+*)
+
+
+(*** [vprop_list] *)
 
 type vprop_list = list vprop'
 
@@ -413,9 +429,6 @@ and tree_ens (#a : Type u#a) (t : prog_tree a)
 
 
 (*** "Monad" *)
-
-type unit_steel (a : Type) (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t pre) (ens : SE.ens_t pre a post)
-  = unit -> Steel a pre post req ens
 
 type repr_steel_t (a : Type)
        (pre : pre_t) (post : post_t a)

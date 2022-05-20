@@ -429,9 +429,7 @@ let test3_steel' (r0 r1 : ref U32.t)
       (M.vprop_of_list' (test3_mem r0 r1)) (fun _ -> M.vprop_of_list' (test3_mem r0 r1))
       (requires fun h0 -> U32.v (sel r0 h0) < 42)
       (ensures fun h0 () h1 -> U32.v (sel r1 h1) == U32.v (sel r0 h0) + 1)
-  = to_steel (test3_M r0 r1)
-      (test3_mem r0 r1) (fun _ -> test3_mem r0 r1)
-      (_ by (build_to_steel ()))
+  = to_steel (test3_M r0 r1) (_ by (build_to_steel ()))
 
 let test3_steel'_caller (r0 r1 : ref U32.t)
   : Steel U32.t (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
@@ -440,3 +438,14 @@ let test3_steel'_caller (r0 r1 : ref U32.t)
   =
     test3_steel' r0 r1 ();
     read r1
+
+
+////////// test4 //////////
+
+let test4 (#a : Type) (r : ref a)
+  : M.unit_steel (ref a)
+      (M.vprop_of_list' [vptr' r full_perm])
+      (fun r' -> M.vprop_of_list' [vptr' r' full_perm])
+      (requires fun h0 -> True)
+      (ensures  fun h0 r' h1 -> sel r' h1 == sel r h0)
+  = to_steel M.(return r) (_ by (build_to_steel ()))

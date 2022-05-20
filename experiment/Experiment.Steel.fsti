@@ -332,24 +332,10 @@ noeq inline_for_extraction
 type __to_steel_goal
       (a : Type) (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t pre) (ens : SE.ens_t pre a post)
       (t : M.repr a)
-      (r_pre : M.pre_t) (r_post : M.post_t a)
   = {
-    extract_r_pre  : extract_term r_pre;
-    extract_r_post : extract_term r_post;
     goal_tr : to_repr_t a pre post req ens;
     goal_f  : extract a goal_tr.r_pre goal_tr.r_post goal_tr.r_req goal_tr.r_ens t
-  }
-
-[@@ __tac_helper__]
-inline_for_extraction
-let to_steel
-      (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
-      (t : M.repr a)
-      (r_pre : M.pre_t) (r_post : M.post_t a) // TODO: generate them
-      (g : __to_steel_goal a pre post req ens t r_pre r_post)
-  : M.unit_steel a pre (fun x -> post x) (fun h0 -> req h0) (fun h0 x h1 -> ens h0 x h1)
-  = steel_of_repr g.goal_tr g.goal_f
-      
+  }      
 
 val __build_to_repr_t_lem
       (p : SE.vprop) (r_p : M.vprop_list {p == M.vprop_of_list r_p}) (h : SE.rmem p)
@@ -416,7 +402,7 @@ let filter_rmem_apply (#p : SE.vprop) (h : SE.rmem p) (v : SE.vprop{SE.can_be_sp
   = ()
 
 /// Given a term [squash (lhs == rhs)], this tactics returns [Some (h, v)] if [lhs] is [h v]
-/// UNUSED: using v generate an SMT goal [SE.can_be_split]
+/// UNUSED: using v generates an SMT goal [SE.can_be_split]
 let match_rmem_apply (t : term) : Tac (option (term & term))
   = match inspect t with
     | Tv_App _squash (eq, Q_Explicit) ->
@@ -429,27 +415,23 @@ let match_rmem_apply (t : term) : Tac (option (term & term))
       | _ -> None)
     | _ -> fail "unexpected shape0"
 
-/// Solves a goal [__to_steel_goal]
-// FIXME: this tactic get stuck if this file is lax-checked
-let build_to_steel () : Tac unit
+/// Solves a goal [to_repr_t a pre post req ens]
+/// TODO: it currently only works if [pre] and [post] are of the form [M.vprop_of_list _]
+///       (under an abstraction for post)
+let build_to_repr_t () : Tac unit
   =
-    // This tactics fails if called in lax mode (leaves unification variables)
-    // the [lax_guard] does not solves the issue
-    lax_guard begin fun () ->
-    let t = timer_start "specs     " in
-    apply_raw (`Mk__to_steel_goal);
-    let r_pre  = extract_term_tac (fun x -> x) in
-    let r_post = extract_term_tac (fun x -> x) in
-    let u_r_req = fresh_uvar None in
-    let u_r_ens = fresh_uvar None in
+    let u_r_pre  = fresh_uvar None in
+    let u_r_post = fresh_uvar None in
+    let u_r_req  = fresh_uvar None in
+    let u_r_ens  = fresh_uvar None in
     apply_raw (`__build_to_repr_t);
 
     (* [r_pre] *)
-    exact r_pre;
+    exact u_r_pre;
     trefl ();
 
     (* [r_post] *)
-    exact r_post;
+    exact u_r_post;
     let _ = intro () in trefl ();
 
     // apply the rewriting hypothesis [eq_lem] to solve a goal [squash (h v == sl ?i)]
@@ -495,13 +477,33 @@ let build_to_steel () : Tac unit
       | Inr () -> apply_rew eq1
       | Inl _  -> trefl ()
     end;
-    trefl ();
+    trefl ()
 
+/// Solves a goal [__to_steel_goal]
+// FIXME: this tactic get stuck if this file is lax-checked
+let build_to_steel () : Tac unit
+  =
+    // This tactics fails if called in lax mode (leaves unification variables)
+    // the [lax_guard] does not solves the issue
+    lax_guard begin fun () ->
+    let t = timer_start "specs     " in
+    apply_raw (`Mk__to_steel_goal);
+    build_to_repr_t ();
     timer_stop t;
 
     // [extract]
     norm [delta_attr [`%__tac_helper__]; iota];
     solve_by_wp ()
     end
+
+
+[@@ __tac_helper__]
+inline_for_extraction
+let to_steel
+      (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
+      (t : M.repr a)
+      (g : __to_steel_goal a pre post req ens t)
+  : M.unit_steel a pre (fun x -> post x) (fun h0 -> req h0) (fun h0 x h1 -> ens h0 x h1)
+  = steel_of_repr g.goal_tr g.goal_f
 
 (**) val __end_tacs : unit
