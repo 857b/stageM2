@@ -180,9 +180,7 @@ let __normal_vprop_list : list norm_step = [
   iota; zeta; primops
 ]
 
-/// Steps for normalizing [M.flatten_vprop v]. The whole structure of [v : SE.vprop] must be known. In particular,
-/// the leaves must be [SE.VUnit v'] for some [v' : SE.vprop'] and not abstract vprop.
-/// Hence it fails with [SE.emp] (TODO).
+/// Steps for normalizing [M.flatten_vprop v].
 let __normal_flatten_vprop : list norm_step = [
   delta_only [`%M.flatten_vprop; `%M.flatten_vprop_aux];
   delta_attr [`%SE.__reduce__];
@@ -349,8 +347,13 @@ val __build_to_repr_t_lem
 [@@ __tac_helper__]
 let __build_to_repr_t
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
-      (r_pre  : M.pre_t)    (pre_eq  : squash (r_pre == M.flatten_vprop pre))
-      (r_post : M.post_t a) (post_eq : (x : a) -> squash (r_post x == M.flatten_vprop (post x)))
+
+      (e_pre  : M.vprop_with_emp pre) (r_pre  : M.pre_t)
+      (pre_eq  : squash (r_pre == M.flatten_vprop e_pre))
+
+      (e_post : (x : a) -> M.vprop_with_emp (post x)) (r_post : M.post_t a)
+      (post_eq : (x : a) -> squash (r_post x == M.flatten_vprop (e_post x)))
+
       (#r_req  : M.req_t r_pre)
       (r_req_eq  : (h0 : SE.rmem pre) -> (sl0 : M.sl_f r_pre) ->
                    (sl0_eq : ((v : SE.vprop{SE.can_be_split pre v}) -> squash (SE.VUnit? v) ->
@@ -359,6 +362,7 @@ let __build_to_repr_t
                              (i' : int) -> (_ : squash (i' == i)) ->
                              squash (h0 v == sl0 i'))) ->
                     r_req sl0 == req h0)
+
       (#r_ens  : M.ens_t r_pre a r_post)
       (r_ens_eq  : (h0 : SE.rmem pre) -> (sl0 : M.sl_f r_pre) ->
                    (x : a) ->
@@ -372,15 +376,16 @@ let __build_to_repr_t
                              (i' : int) -> (_ : squash (i' == i)) ->
                              squash (h1 v == sl1 i'))) ->
                    r_ens sl0 x sl1 == ens h0 x h1)
+
   : to_repr_t a pre post req ens
   = 
     let r_pre_eq () : Lemma (pre `SE.equiv` M.vprop_of_list r_pre)
       = pre_eq;
-        M.vprop_equiv_flat pre;
+        M.vprop_equiv_flat pre e_pre;
         SE.equiv_sym (M.vprop_of_list r_pre) pre                in
     let r_post_eq (x : a) : Lemma (post x `SE.equiv` M.vprop_of_list (r_post x))
       = post_eq x;
-        M.vprop_equiv_flat (post x);
+        M.vprop_equiv_flat (post x) (e_post x);
         SE.equiv_sym (M.vprop_of_list (r_post x)) (post x)
     in
     {
@@ -404,7 +409,7 @@ let __build_to_repr_t
                             (__build_to_repr_t_lem (post x) (r_post x) h1))
   }
 
-(**) val __begin_tacs : unit
+(**) private val __begin_tacs : unit
 
 let filter_rmem_apply (#p : SE.vprop) (h : SE.rmem p) (v : SE.vprop{SE.can_be_split p v})
   #sl (_ : squash (h v == sl))
@@ -435,15 +440,18 @@ let build_to_repr_t () : Tac unit
     apply_raw (`__build_to_repr_t);
 
     (* [r_pre] *)
+    CSl.build_vprop_with_emp ();
     exact u_r_pre;
     norm __normal_flatten_vprop;
     trefl ();
 
     (* [r_post] *)
+    let _ = intro () in
+      CSl.build_vprop_with_emp ();
     exact u_r_post;
     let _ = intro () in
-    norm __normal_flatten_vprop;
-    trefl ();
+      norm __normal_flatten_vprop;
+      trefl ();
 
     // apply the rewriting hypothesis [eq_lem] to solve a goal [squash (h v == sl ?i)]
     let apply_rew eq_lem =
@@ -462,16 +470,16 @@ let build_to_repr_t () : Tac unit
     (* [r_req] *)
     exact u_r_req;
     let h0 = intro () in let sl0 = intro () in let eq0 = intro () in
-    // This normalisation has to be done after introducing [eq0], otherwise its application fails,
-    // seemingly because of the normalisation of [t_of].
-    norm __normal_Steel_logical_spec;
-    pointwise begin fun () ->
-      match catch (fun () -> apply_raw (`filter_rmem_apply (`#h0))) with
-      | Inr () -> // For some reason, this can only be applied on the goal produced by [filter_rmem_apply]
-                 apply_rew eq0
-      | Inl _  -> trefl ()
-    end;
-    trefl ();
+      // This normalisation has to be done after introducing [eq0], otherwise its application fails,
+      // seemingly because of the normalisation of [t_of].
+      norm __normal_Steel_logical_spec;
+      pointwise begin fun () ->
+        match catch (fun () -> apply_raw (`filter_rmem_apply (`#h0))) with
+        | Inr () -> // For some reason, this can only be applied on the goal produced by [filter_rmem_apply]
+                   apply_rew eq0
+        | Inl _  -> trefl ()
+      end;
+      trefl ();
 
     (* [r_ens] *)
     exact u_r_ens;
@@ -479,16 +487,16 @@ let build_to_repr_t () : Tac unit
     let x   = intro () in
     let h1  = intro () in let sl1 = intro () in
     let eq0 = intro () in let eq1 = intro () in
-    norm __normal_Steel_logical_spec;
-    pointwise begin fun () ->
-      match catch (fun () -> apply_raw (`filter_rmem_apply (`#h0))) with
-      | Inr () -> apply_rew eq0
-      | Inl _ ->
-      match catch (fun () -> apply_raw (`filter_rmem_apply (`#h1))) with
-      | Inr () -> apply_rew eq1
-      | Inl _  -> trefl ()
-    end;
-    trefl ()
+      norm __normal_Steel_logical_spec;
+      pointwise begin fun () ->
+        match catch (fun () -> apply_raw (`filter_rmem_apply (`#h0))) with
+        | Inr () -> apply_rew eq0
+        | Inl _ ->
+        match catch (fun () -> apply_raw (`filter_rmem_apply (`#h1))) with
+        | Inr () -> apply_rew eq1
+        | Inl _  -> trefl ()
+      end;
+      trefl ()
 
 
 /// Similarly to [extract], [t] is only mentioned so that it can be retrieved by the tactic
@@ -536,4 +544,4 @@ let to_steel
   : M.unit_steel a pre post req ens
   = g
 
-(**) val __end_tacs : unit
+(**) private val __end_tacs : unit

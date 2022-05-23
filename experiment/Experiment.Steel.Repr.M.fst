@@ -55,30 +55,6 @@ let rec vprop_of_list_can_be_split (vs : vprop_list) (i : nat {i < L.length vs})
       can_be_split_trans (VUnit v `star` vprop_of_list vs) (vprop_of_list vs) (VUnit (L.index vs (i-1)))
     end
 
-let rec flatten_vprop_aux_eq (vp : vprop) (acc : vprop_list)
-  : Lemma (ensures flatten_vprop_aux vp acc == L.(flatten_vprop vp @ acc)) (decreases vp)
-  = match vp with
-  | VUnit _ -> ()
-  | VStar vp0 vp1 ->
-          calc (==) {
-            flatten_vprop_aux (VStar vp0 vp1) acc;
-          == {}
-            flatten_vprop_aux vp0 (flatten_vprop_aux vp1 acc);
-          == {flatten_vprop_aux_eq vp0 (flatten_vprop_aux vp1 acc);
-              flatten_vprop_aux_eq vp1 acc}
-            L.(flatten_vprop vp0 @ (flatten_vprop vp1 @ acc));
-          == {L.append_assoc (flatten_vprop vp0) (flatten_vprop vp1) acc}
-            L.((flatten_vprop vp0 @ (flatten_vprop vp1 @ [])) @ acc);
-          == {flatten_vprop_aux_eq vp1 [];
-              flatten_vprop_aux_eq vp0 (flatten_vprop_aux vp1 [])}
-            L.(flatten_vprop_aux (VStar vp0 vp1) [] @ acc);
-          }
-
-let flatten_vprop_VStar (vp0 vp1 : vprop)
-  =
-    flatten_vprop_aux_eq vp0 (flatten_vprop_aux vp1 []);
-    flatten_vprop_aux_eq vp1 []
-
 let rec vprop_of_list_append (vs0 vs1 : vprop_list)
   : Lemma (ensures equiv (vprop_of_list L.(vs0@vs1)) (vprop_of_list vs0 `star` vprop_of_list vs1))
           (decreases vs0)
@@ -103,19 +79,46 @@ let rec vprop_of_list_append (vs0 vs1 : vprop_list)
              assert_norm (vprop_of_list (v :: vs) `star` vprop_of_list vs1
                       == (v0 `star` vl0) `star` vl1)
 
-let rec vprop_equiv_flat (vp : vprop)
-  : Lemma (ensures equiv (vprop_of_list (flatten_vprop vp)) vp) (decreases vp)
-  = match vp with
-  | VUnit v     -> assert (equiv (VUnit v `star` emp) (VUnit v))
+let rec flatten_vprop_aux_eq #vp ve acc
+  : Lemma (ensures flatten_vprop_aux ve acc == L.(flatten_vprop ve @ acc)) (decreases ve)
+  = match ve with
+  | VeEmp    -> ()
+  | VeUnit _ -> ()
+  | VeStar ve0 ve1 ->
+          calc (==) {
+            flatten_vprop_aux (VeStar ve0 ve1) acc;
+          == {}
+            flatten_vprop_aux ve0 (flatten_vprop_aux ve1 acc);
+          == {flatten_vprop_aux_eq ve0 (flatten_vprop_aux ve1 acc);
+              flatten_vprop_aux_eq ve1 acc}
+            L.(flatten_vprop ve0 @ (flatten_vprop ve1 @ acc));
+          == {L.append_assoc (flatten_vprop ve0) (flatten_vprop ve1) acc}
+            L.((flatten_vprop ve0 @ (flatten_vprop ve1 @ [])) @ acc);
+          == {flatten_vprop_aux_eq ve1 [];
+              flatten_vprop_aux_eq ve0 (flatten_vprop_aux ve1 [])}
+            L.(flatten_vprop_aux (VeStar ve0 ve1) [] @ acc);
+          }
+
+let flatten_vprop_VStar #vp0 ve0 #vp1 ve1
+  =
+    flatten_vprop_aux_eq ve0 (flatten_vprop_aux ve1 []);
+    flatten_vprop_aux_eq ve1 []
+
+let rec vprop_equiv_flat vp ve
+  : Lemma (ensures equiv (vprop_of_list (flatten_vprop ve)) vp) (decreases ve)
+  = match ve with
+  | VeEmp       -> equiv_refl emp
+  | VeUnit v    -> assert (equiv (VUnit v `star` emp) (VUnit v))
                       by (init_resolve_tac ())
-  | VStar v0 v1 -> flatten_vprop_VStar v0 v1;
-                  vprop_of_list_append (flatten_vprop v0) (flatten_vprop v1);
-                  vprop_equiv_flat v0;
-                  vprop_equiv_flat v1;
-                  star_congruence (vprop_of_list (flatten_vprop v0)) (vprop_of_list (flatten_vprop v1)) v0 v1;
-                  equiv_trans (vprop_of_list L.(flatten_vprop v0 @ flatten_vprop v1))
-                              (vprop_of_list (flatten_vprop v0) `star` vprop_of_list (flatten_vprop v1))
-                              (v0 `star` v1)
+  | VeStar #vp0 ve0 #vp1 ve1 ->
+           flatten_vprop_VStar ve0 ve1;
+           vprop_of_list_append (flatten_vprop ve0) (flatten_vprop ve1);
+           vprop_equiv_flat vp0 ve0;
+           vprop_equiv_flat vp1 ve1;
+           star_congruence (vprop_of_list (flatten_vprop ve0)) (vprop_of_list (flatten_vprop ve1)) vp0 vp1;
+           equiv_trans (vprop_of_list L.(flatten_vprop ve0 @ flatten_vprop ve1))
+                       (vprop_of_list (flatten_vprop ve0) `star` vprop_of_list (flatten_vprop ve1))
+                       (vp0 `star` vp1)
 
 
 let sel'_sub (#p : vprop) (vs : vprop_list)

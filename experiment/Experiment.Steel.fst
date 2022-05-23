@@ -148,7 +148,7 @@ let __build_to_repr_t_lem
     }
 #pop-options
 
-#push-options "--ifuel 2"
-let __begin_tacs = ()
-#pop-options
-let __end_tacs = ()
+(**) #push-options "--ifuel 2"
+(**) private let __begin_tacs = ()
+(**) #pop-options
+(**) private let __end_tacs = ()

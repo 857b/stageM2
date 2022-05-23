@@ -77,24 +77,34 @@ let vprop_of_list = vprop_of_list'
 val vprop_of_list_can_be_split (vs : vprop_list) (i : nat {i < L.length vs})
   : Lemma (can_be_split (vprop_of_list vs) (VUnit (L.index vs i)))
 
-let rec flatten_vprop_aux (vp : vprop) (acc : vprop_list) : GTot vprop_list =
-  match vp with
-  | VUnit vp' -> vp' :: acc
-  | VStar vp0 vp1 -> flatten_vprop_aux vp0 (flatten_vprop_aux vp1 acc)
-
-let flatten_vprop (vp : vprop) : GTot vprop_list = flatten_vprop_aux vp []
-
-val flatten_vprop_aux_eq (vp : vprop) (acc : vprop_list)
-  : Lemma (flatten_vprop_aux vp acc == L.(flatten_vprop vp @ acc))
-
-val flatten_vprop_VStar (vp0 vp1 : vprop)
-  : Lemma (flatten_vprop (VStar vp0 vp1) == L.(flatten_vprop vp0 @ flatten_vprop vp1))
-
 val vprop_of_list_append (vs0 vs1 : vprop_list)
   : Lemma (equiv (vprop_of_list L.(vs0@vs1)) (vprop_of_list vs0 `star` vprop_of_list vs1))
 
-val vprop_equiv_flat (vp : vprop)
-  : Lemma (equiv (vprop_of_list (flatten_vprop vp)) vp)
+
+noeq
+type vprop_with_emp : vprop -> Type =
+  | VeEmp  : vprop_with_emp emp
+  | VeUnit : (v : vprop') -> vprop_with_emp (VUnit v)
+  | VeStar : (#vl : vprop) -> (vel : vprop_with_emp vl) ->
+             (#vr : vprop) -> (ver : vprop_with_emp vr) ->
+             vprop_with_emp (VStar vl vr)
+             
+let rec flatten_vprop_aux (#vp : vprop) (ve : vprop_with_emp vp) (acc : vprop_list) : GTot vprop_list =
+  match ve with
+  | VeEmp -> acc
+  | VeUnit vp' -> vp' :: acc
+  | VeStar vp0 vp1 -> flatten_vprop_aux vp0 (flatten_vprop_aux vp1 acc)
+
+let flatten_vprop (#vp : vprop) (ve : vprop_with_emp vp) : GTot vprop_list = flatten_vprop_aux ve []
+
+val flatten_vprop_aux_eq (#vp : vprop) (ve : vprop_with_emp vp) (acc : vprop_list)
+  : Lemma (flatten_vprop_aux ve acc == L.(flatten_vprop ve @ acc))
+
+val flatten_vprop_VStar (#vp0 : vprop) (ve0 : vprop_with_emp vp0) (#vp1 : vprop) (ve1 : vprop_with_emp vp1)
+  : Lemma (flatten_vprop (VeStar ve0 ve1) == L.(flatten_vprop ve0 @ flatten_vprop ve1))
+
+val vprop_equiv_flat (vp : vprop) (ve : vprop_with_emp vp)
+  : Lemma (equiv (vprop_of_list (flatten_vprop ve)) vp)
 
 
 (* ALT? dependent arrrow Fin.fin n -> _ *)

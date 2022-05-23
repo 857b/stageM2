@@ -451,9 +451,20 @@ let test4 (#a : Type) (r : ref a)
 
 ////////// test emp //////////
 
-[@@expect_failure [228]]
-let test_emp
+let test_emp_0
   : M.unit_steel unit
       emp (fun () -> emp)
+      (fun _ -> True) (fun _ _ _ -> True)
+  = to_steel M.(return ()) (_ by (build_to_steel ()))
+
+let test_emp_1 (#a : Type) (r : ref a)
+  : M.unit_steel unit
+      (emp `star` vptr r) (fun () -> vptr r)
+      (fun _ -> True) (fun _ _ _ -> True)
+  = to_steel M.(return ()) (_ by (build_to_steel ()))
+
+let test_emp_2 (#a : Type) (r : ref a)
+  : M.unit_steel unit
+      (vptr r) (fun () -> emp `star` vptr r)
       (fun _ -> True) (fun _ _ _ -> True)
   = to_steel M.(return ()) (_ by (build_to_steel ()))

@@ -21,6 +21,10 @@ let rec truth_refl_list_index (#ps : list prop) (#bs : list bool) (rfl : truth_r
   | ReflLTrue    rfl -> if i > 0 then truth_refl_list_index rfl (i - 1)
   | ReflLFalse _ rfl -> truth_refl_list_index rfl (i - 1)
 
+(**) #push-options "--ifuel 2"
+(**) private let __begin_opt_0 = ()
+(**) #pop-options
+(**) private let __end_opt_0 = ()
 
 (***** [build_injection] *)
 

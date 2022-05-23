@@ -17,6 +17,7 @@ open FStar.Mul
 
 type cs_failure_goal_shape =
   | GShape_truth_refl_list
+  | GShape_vprop
   | GShape_tree_cond
 
 noeq
@@ -147,6 +148,25 @@ let mk_truth_refl_list (ps : term) : Tac (list bool & term & binder) =
 
 (*let _ = assert True by (let bs,_,_ = mk_truth_refl_list (`[(1 == 1);
   (1 == 2); (2 + 2 == 4)]) in fail (term_to_string (quote bs)))*)
+
+
+(*** Building a [M.vprop_with_emp] *)
+
+#push-options "--ifuel 2"
+(**) private val __begin_opt_0 : unit
+
+/// Solves a goal [vprop_with_emp vp]
+let rec build_vprop_with_emp () : Tac unit =
+  try apply (`M.VeUnit) with | _ -> 
+  match catch (fun () -> apply (`M.VeStar)) with
+  | Inr () -> build_vprop_with_emp (); (* left  *)
+             build_vprop_with_emp ()  (* right *)
+  | Inl _ ->
+  try apply (`M.VeEmp ) with | _ ->
+    cs_raise (fun m -> fail (m (Fail_goal_shape GShape_vprop) [Info_goal (cur_goal ())]))
+
+#pop-options
+(**) private val __end_opt_0 : unit
 
 
 (*** Finding an element in a list *)
