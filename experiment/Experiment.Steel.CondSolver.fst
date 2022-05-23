@@ -26,6 +26,37 @@ let rec truth_refl_list_index (#ps : list prop) (#bs : list bool) (rfl : truth_r
 (**) #pop-options
 (**) private let __end_opt_0 = ()
 
+
+(***** [build_to_repr_t] *)
+
+let __build_to_repr_t_lem
+      (p : SE.vprop) (r_p : M.vprop_list {p `SE.equiv` M.vprop_of_list r_p}) (h : SE.rmem p)
+      (v : SE.vprop{SE.can_be_split p v}) (_ : squash (SE.VUnit? v))
+      (i : elem_index (SE.VUnit?._0 v) r_p)
+      (i' : int) (_ : squash (i' == i))
+  : squash (h v ==
+        M.sel r_p (SE.equiv_can_be_split p (M.vprop_of_list r_p);
+                   SE.focus_rmem h (M.vprop_of_list r_p)) i)
+  =
+    SE.equiv_can_be_split p (M.vprop_of_list r_p);
+    let h_r = SE.focus_rmem h (M.vprop_of_list r_p) in
+    M.vprop_of_list_can_be_split r_p i;
+    calc (==) {
+      M.sel r_p h_r i;
+    == { M.sel_eq' }
+      M.sel_f' r_p h_r i;
+    == { }
+      h_r (SE.VUnit (L.index r_p i));
+    == { }
+      h v;
+    }
+
+(**) #push-options "--ifuel 2"
+(**) private let __begin_opt_1 = ()
+(**) #pop-options
+(**) private let __end_opt_1 = ()
+
+
 (***** [build_injection] *)
 
 let rec build_injection_find_spec (#trg_n : nat) (g mask : vec trg_n bool) (i : nat)

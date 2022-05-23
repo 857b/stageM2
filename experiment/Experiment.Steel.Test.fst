@@ -115,7 +115,7 @@ let steel_read #a (r : ref a) () :
 [@@ __test__; __steel_reduce__]
 inline_for_extraction
 let r_read #a (r : ref a) : M.repr a =
-  M.repr_of_steel (read_pre r) (read_post r) (read_req r) (read_ens r) (steel_read r)
+  M.repr_of_steel_r (read_pre r) (read_post r) (read_req r) (read_ens r) (steel_read r)
 
 inline_for_extraction
 let steel_write #a (r : ref a) (x : a) ()
@@ -129,9 +129,9 @@ let steel_write #a (r : ref a) (x : a) ()
 [@@ __test__; __steel_reduce__]
 inline_for_extraction
 let r_write #a (r : ref a) (x : a) : M.repr unit =
-  M.repr_of_steel [vptr' r full_perm] (fun _ -> [vptr' r full_perm])
-                  (fun sl0 -> True) (fun sl0 () sl1 -> sl1 0 == x)
-                  (steel_write r x)
+  M.repr_of_steel_r [vptr' r full_perm] (fun _ -> [vptr' r full_perm])
+                    (fun sl0 -> True) (fun sl0 () sl1 -> sl1 0 == x)
+                    (steel_write r x)
 
 [@@ __test__; __steel_reduce__]
 let test0_M (r : ref nat) : M.repr nat = M.(
@@ -141,6 +141,7 @@ let test0_M (r : ref nat) : M.repr nat = M.(
 let normal_vp : list norm_step = [
     delta_only [`%L.map; `%L.append; `%L.op_At];
     delta_qualifier ["unfold"];
+    delta_attr [`%__tac_helper__];
     iota; zeta_full
   ]
 
@@ -157,10 +158,14 @@ let test0_cond (r : ref nat) (v : vprop')
   = _ by T.(
     norm __normal_M;
     apply (`M.TCbind);
-     (apply (`(M.TCspec [vptr' (`@r) full_perm; (`@v)] (fun _ -> [vptr' (`@r) full_perm; (`@v)]) [(`@v)]));
-       (norm normal_vp; exact (`test0_equiv (`@r) (`@v)));
-       (let x = intro () in
-        norm normal_vp; (* FIXME: @ is not unfolded *)
+     (let u_p0 = fresh_uvar None in
+      let u_p1 = fresh_uvar None in
+      exact (`(M.TCspec (M.Mktree_cond_Spec
+          [vptr' (`@r) full_perm; (`@v)] (fun _ -> [vptr' (`@r) full_perm; (`@v)]) [(`@v)] (`#u_p0) (`#u_p1))));
+       (unshelve u_p0; norm normal_vp; exact (`test0_equiv (`@r) (`@v)));
+       (unshelve u_p1;
+        let x = intro () in
+        norm normal_vp;
         exact (`test0_equiv (`@r) (`@v))));
      (let x = intro () in
       apply (`M.TCret);
@@ -423,14 +428,26 @@ let test3_steel_caller (r0 r1 : ref U32.t)
     read r1
 #pop-options
 
+unfold
+let call (#b : Type)
+      (#a : b -> Type) (#pre : b -> pre_t) (#post : (x : b) -> post_t (a x))
+      (#req : (x : b) -> req_t (pre x)) (#ens : (x : b) -> ens_t (pre x) (a x) (post x))
+      ($f : (x : b) -> Steel (a x) (pre x) (post x) (req x) (ens x)) (x : b)
+  : M.repr (a x)
+  = M.repr_of_steel (pre x) (post x) (req x) (ens x) (fun () -> f x)
+
 // This only generates 1 SMT query: the WP
+// TODO: the use of call make ST -> SF longer
 inline_for_extraction
 let test3_steel' (r0 r1 : ref U32.t)
   : M.unit_steel unit
       (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
       (requires fun h0 -> U32.v (sel r0 h0) < 42)
       (ensures fun h0 () h1 -> U32.v (sel r1 h1) == U32.v (sel r0 h0) + 1)
-  = to_steel (test3_M r0 r1) (_ by (build_to_steel ()))
+  = to_steel M.(
+      x <-- call  read r0;
+      call (write r1) U32.(x +%^ 1ul)
+    ) (_ by (build_to_steel ()))
 
 let test3_steel'_caller (r0 r1 : ref U32.t)
   : Steel U32.t (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)

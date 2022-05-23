@@ -8,6 +8,46 @@ module L = FStar.List.Pure
 
 (*** Steel *)
 
+let intro_subcomp_no_frame_pre
+      (#a:Type)
+      (#pre_f:pre_t) (#post_f:post_t a) (req_f:req_t pre_f) (ens_f:ens_t pre_f a post_f)
+      (#pre_g:pre_t) (#post_g:post_t a) (req_g:req_t pre_g) (ens_g:ens_t pre_g a post_g)
+      (eq_pre  : squash (equiv pre_g pre_f))
+      (eq_post : (x : a) -> squash (equiv (post_g x) (post_f x)))
+      (s_pre :  (h0 : rmem pre_g) -> Lemma
+         (requires can_be_split pre_g pre_f /\
+                   req_g h0)
+         (ensures  req_f (focus_rmem h0 pre_f)))
+      (s_post : (h0 : rmem pre_g) -> (x : a) -> (h1 : rmem (post_g x)) -> Lemma
+         (requires can_be_split pre_g pre_f /\ can_be_split (post_g x) (post_f x) /\
+                   req_g h0 /\ req_f (focus_rmem h0 pre_f) /\
+                   ens_f (focus_rmem h0 pre_f) x (focus_rmem h1 (post_f x)))
+         (ensures  ens_g h0 x h1))
+  : squash (subcomp_no_frame_pre req_f ens_f req_g ens_g eq_pre eq_post)
+  = _ by T.(
+    set_guard_policy Force;
+    norm [delta_only [`%subcomp_no_frame_pre]];
+    let h0   = forall_intro () in
+    let rq_g = implies_intro () in
+    split ();
+    
+    apply_lemma (``@s_pre); split ();
+      apply_lemma (`equiv_can_be_split); exact (``@eq_pre);
+      hyp rq_g;
+
+    let x    = forall_intro ()  in
+    let h1   = forall_intro ()  in
+    let en_f = implies_intro () in
+    apply_lemma (``@s_post); explode ();
+      apply_lemma (`equiv_can_be_split); exact (``@eq_pre);
+      apply_lemma (`equiv_can_be_split); apply (``@eq_post);
+      hyp rq_g;
+      apply_lemma (``@s_pre); split ();
+        apply_lemma (`equiv_can_be_split); exact (``@eq_pre);
+        hyp rq_g;
+      hyp en_f
+  )
+
 inline_for_extraction noextract
 let unit_steel_subcomp_no_frame
       (#a : Type)
@@ -330,6 +370,65 @@ let steel_change_vequiv (#vs0 #vs1 : vprop_list) (#opened:Mem.inames) (f : vequi
     let sl0 = gget (vprop_of_list vs0) in
     Fl.apply_perm_r_of_d f (vpl_sels vs0 sl0);
     steel_change_vequiv_aux (L.length vs0) vs0 vs1 (Perm.perm_f_to_swap f) ()
+
+
+(*** [repr_steel_t] *)
+
+inline_for_extraction noextract
+let steel_of_repr
+      (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
+      (tr : to_repr_t a pre post req ens)
+      (f : repr_steel_t a tr.r_pre tr.r_post tr.r_req tr.r_ens)
+  : unit_steel a pre post req ens
+  =
+    tr.r_pre_eq ();
+    equiv_can_be_split pre (vprop_of_list tr.r_pre);
+    introduce forall (x : a) . can_be_split (post x) (vprop_of_list (tr.r_post x))
+      with (tr.r_post_eq x;
+            equiv_can_be_split (post x) (vprop_of_list (tr.r_post x)));
+    FStar.Classical.forall_intro tr.r_req_eq;
+    FStar.Classical.forall_intro_3 tr.r_ens_eq;
+    unit_steel_subcomp_no_frame
+      _ _ req ens
+      (tr.r_pre_eq ()) (fun x -> tr.r_post_eq x)
+      ()
+      f
+
+// I was expecting this to be needed for repr_steel_of_steel, but the proof succeeds without it
+let focus_rmem_trans (p q r : vprop) (h : rmem p)
+  : Lemma (requires can_be_split p q /\ can_be_split q r)
+          (ensures  can_be_split p r /\ focus_rmem (focus_rmem h q) r == focus_rmem h r)
+  = can_be_split_trans p q r;
+    introduce forall (r0 : vprop {can_be_split r r0}) .
+        (focus_rmem (focus_rmem h q) r) r0 == (focus_rmem h r) r0
+      with _ by T.(trefl ());
+    FExt.extensionality_g _ _ (focus_rmem (focus_rmem h q) r) (focus_rmem h r)
+
+inline_for_extraction noextract
+let repr_steel_of_steel
+      (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
+      (tr : to_repr_t a pre post req ens)
+      ($f  : unit_steel a pre post req ens)
+  : repr_steel_t a tr.r_pre tr.r_post tr.r_req tr.r_ens
+  =
+    tr.r_pre_eq ();
+    equiv_can_be_split pre (vprop_of_list tr.r_pre);
+    introduce forall (x : a) . can_be_split (post x) (vprop_of_list (tr.r_post x))
+      with (tr.r_post_eq x;
+            equiv_can_be_split (post x) (vprop_of_list (tr.r_post x)));
+    FStar.Classical.forall_intro tr.r_req_eq;
+    FStar.Classical.forall_intro_3 tr.r_ens_eq;
+    let pre_eq_rev : squash (vprop_of_list tr.r_pre `equiv` pre) =
+      tr.r_pre_eq (); equiv_sym pre (vprop_of_list tr.r_pre)    in
+    let post_eq_rev (x : a) : squash (vprop_of_list (tr.r_post x) `equiv` post x) =
+      tr.r_post_eq x; equiv_sym (post x) (vprop_of_list (tr.r_post x))           in
+    unit_steel_subcomp_no_frame
+      req ens _ _
+      pre_eq_rev post_eq_rev
+      (intro_subcomp_no_frame_pre _ _ _ _ _ _
+        (fun h0 -> tr.r_req_eq (focus_rmem h0 pre))
+        (fun h0 x h1 -> tr.r_ens_eq (focus_rmem h0 pre) x (focus_rmem h1 (post x))))
+      f
 
 
 (***** Monad combiners *)  
