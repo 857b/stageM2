@@ -10,11 +10,12 @@ module Dl   = Learn.DList
 module Fl   = Learn.FList
 module Perm = Learn.Permutation
 
-module M    = Experiment.Steel.Repr.M
-module ST   = Experiment.Steel.Repr.ST
-module SF   = Experiment.Steel.Repr.SF
-module Fun  = Experiment.Repr.Fun
-module CSl  = Experiment.Steel.CondSolver
+module M     = Experiment.Steel.Repr.M
+module ST    = Experiment.Steel.Repr.ST
+module SF    = Experiment.Steel.Repr.SF
+module Fun   = Experiment.Repr.Fun
+module CSl   = Experiment.Steel.CondSolver
+module ST2SF = Experiment.Steel.Repr.ST_to_SF.Spec
 
 open FStar.Tactics
 open Learn.Tactics.Util
@@ -36,7 +37,7 @@ let prog_M_to_Fun
     (**) ST.flatten_prog_shape t_ST shp_ST;
     let s_ST'   = ST.mk_prog_shape t_ST' shp_ST'    in
     begin fun (sl0 : M.sl_f pre) ->
-      let t_SF = SF.repr_SF_of_ST_rall t_ST' s_ST' sl0 in
+      let t_SF = ST2SF.repr_SF_of_ST_rall t_ST' s_ST' sl0 in
       SF.repr_Fun_of_SF t_SF
     end
 
@@ -110,13 +111,14 @@ let __normal_ST : list norm_step = [
 ]
 
 let __normal_SF : list norm_step = [
-  delta_only [`%SF.repr_SF_of_ST_rall; `%SF.repr_SF_of_ST; `%SF.shape_SF_of_ST; `%SF.shape_SF_of_ST_rall;
-              `%SF.post_SF_of_ST; `%SF.postl_SF_of_ST; `%SF.post_bij;
+  delta_only [`%ST2SF.repr_SF_of_ST_rall; `%ST2SF.repr_SF_of_ST; `%ST2SF.shape_SF_of_ST;
+              `%ST2SF.shape_SF_of_ST_rall;
+              `%ST2SF.post_SF_of_ST; `%ST2SF.postl_SF_of_ST; `%ST2SF.post_bij;
               `%ST.Mkprog_shape?.post_len; `%ST.Mkprog_shape?.shp;
-              `%SF.Mkpost_bij_t'?.len_SF; `%SF.Mkpost_bij_t'?.idx_SF; `%SF.Mkpost_bij_t'?.idx_ST;
+              `%ST2SF.Mkpost_bij_t'?.len_SF; `%ST2SF.Mkpost_bij_t'?.idx_SF; `%ST2SF.Mkpost_bij_t'?.idx_ST;
               `%Ll.initi; `%L.index; `%L.hd; `%L.tl; `%L.tail; `%L.length;
-              `%SF.sel_ST_of_SF; `%SF.sell_ST_of_SF; `%SF.post_src_of_shape;
-              `%SF.post_src_f_of_shape; `%SF.sel_SF_of_ST; `%SF.sell_SF_of_ST;
+              `%ST2SF.sel_ST_of_SF; `%ST2SF.sell_ST_of_SF; `%ST2SF.post_src_of_shape;
+              `%ST2SF.post_src_f_of_shape; `%ST2SF.sel_SF_of_ST; `%ST2SF.sell_SF_of_ST;
               `%Fl.splitAt_ty; `%Fl.head; `%Fl.tail;
               `%Fl.dlist_of_f; `%Dl.initi; `%Fl.cons; `%Fl.nil;
               `%Mktuple2?._1;`%Mktuple2?._2;

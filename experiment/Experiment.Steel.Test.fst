@@ -1,4 +1,4 @@
-module Experiment.Steel.Repr.Test
+module Experiment.Steel.Test
 
 module U    = Learn.Util
 module T    = FStar.Tactics
@@ -9,11 +9,12 @@ module Fl   = Learn.FList
 module U32  = FStar.UInt32
 module Perm = Learn.Permutation
 
-module M    = Experiment.Steel.Repr.M
-module ST   = Experiment.Steel.Repr.ST
-module SF   = Experiment.Steel.Repr.SF
-module Fun  = Experiment.Repr.Fun
-module CSl  = Experiment.Steel.CondSolver
+module M     = Experiment.Steel.Repr.M
+module ST    = Experiment.Steel.Repr.ST
+module SF    = Experiment.Steel.Repr.SF
+module Fun   = Experiment.Repr.Fun
+module CSl   = Experiment.Steel.CondSolver
+module ST2SF = Experiment.Steel.Repr.ST_to_SF.Spec
 
 open Steel.Effect
 open Steel.Effect.Atomic
@@ -207,7 +208,7 @@ let test0_shape_ST (r : ref nat) (v : vprop') : ST.prog_shape (test0_ST r v)
 
 [@@ __test__]
 let test0_SF (r : ref nat) (v : vprop') (x_ini : nat) (v_ini : v.t) : SF.prog_tree _ _ =
-  SF.repr_SF_of_ST (test0_ST r v) (test0_shape_ST r v) Fl.(cons x_ini (cons v_ini nil))
+  ST2SF.repr_SF_of_ST (test0_ST r v) (test0_shape_ST r v) Fl.(cons x_ini (cons v_ini nil))
 
 (*let _ = fun r (p : Steel.Memory.slprop) x_ini ->
     assert (U.print_util (test0_SF r (to_vprop' p) x_ini ()))
@@ -219,8 +220,8 @@ let test0_SF (r : ref nat) (v : vprop') (x_ini : nat) (v_ini : v.t) : SF.prog_tr
 [@@ __test__]
 let test0_shape_SF (r : ref nat) (v : vprop') (x_ini : nat) (v_ini : v.t) : SF.prog_shape (test0_SF r v x_ini v_ini)
   =
-    (**) SF.repr_SF_of_ST_shape (test0_ST r v) (test0_shape_ST r v) Fl.(cons x_ini (cons v_ini nil));
-    SF.mk_prog_shape (test0_SF r v x_ini v_ini) (SF.shape_SF_of_ST (test0_shape_ST r v).shp)
+    (**) ST2SF.repr_SF_of_ST_shape (test0_ST r v) (test0_shape_ST r v) Fl.(cons x_ini (cons v_ini nil));
+    SF.mk_prog_shape (test0_SF r v x_ini v_ini) (ST2SF.shape_SF_of_ST (test0_shape_ST r v).shp)
 
 (*let _ = fun r v x_ini v_ini ->
   assert (U.print_util (test0_shape_SF r v x_ini v_ini))
@@ -317,7 +318,7 @@ let test1_shape_ST : ST.prog_shape test1_ST =
 
 [@@ __test__]
 let test1_SF (b_ini : bool) (x_ini : int) : SF.prog_tree _ _ =
-  SF.repr_SF_of_ST test1_ST test1_shape_ST Fl.(cons b_ini (cons x_ini nil))
+  ST2SF.repr_SF_of_ST test1_ST test1_shape_ST Fl.(cons b_ini (cons x_ini nil))
 
 (*let _ = fun b_ini x_ini ->
   assert (U.print_util (test1_SF b_ini x_ini))

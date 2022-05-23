@@ -1,8 +1,8 @@
-module Experiment.Steel.Repr.Test.Extract
+module Experiment.Steel.Test.Extract
 
 module M    = Experiment.Steel.Repr.M
 module U32  = FStar.UInt32
-module Test = Experiment.Steel.Repr.Test
+module Test = Experiment.Steel.Test
 
 open Steel.Effect
 open Steel.Reference
