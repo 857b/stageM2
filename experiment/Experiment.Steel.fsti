@@ -180,6 +180,16 @@ let __normal_vprop_list : list norm_step = [
   iota; zeta; primops
 ]
 
+/// Steps for normalizing [M.flatten_vprop v]. The whole structure of [v : SE.vprop] must be known. In particular,
+/// the leaves must be [SE.VUnit v'] for some [v' : SE.vprop'] and not abstract vprop.
+/// Hence it fails with [SE.emp] (TODO).
+let __normal_flatten_vprop : list norm_step = [
+  delta_only [`%M.flatten_vprop; `%M.flatten_vprop_aux];
+  delta_attr [`%SE.__reduce__];
+  delta_qualifier ["unfold"];
+  iota; zeta; primops
+]
+
 /// Steps for the normalisation of Steel's requires and ensures clauses.
 /// We need [__steel_reduce__] in order to unfold the selector functions
 /// (for instance [Steel.Reference.sel])
@@ -301,23 +311,23 @@ type to_repr_t (a : Type) (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t 
   r_post : M.post_t a;
   r_req  : M.req_t r_pre;
   r_ens  : M.ens_t r_pre a r_post;
-  r_pre_eq  : unit -> Lemma (pre == M.vprop_of_list r_pre);
-  r_post_eq : (x : a) -> Lemma (post x == M.vprop_of_list (r_post x));
+  r_pre_eq  : unit -> Lemma (pre `SE.equiv` M.vprop_of_list r_pre);
+  r_post_eq : (x : a) -> Lemma (post x `SE.equiv` M.vprop_of_list (r_post x));
   r_req_eq  : (h0 : SE.rmem pre) -> Lemma (req h0 ==
                   r_req (M.sel r_pre (
-                           r_pre_eq ();
-                           U.f_equal SE.rmem pre (M.vprop_of_list r_pre);
-                           U.cast (SE.rmem (M.vprop_of_list r_pre)) h0)));
+                          r_pre_eq ();
+                          SE.equiv_can_be_split pre (M.vprop_of_list r_pre);
+                          SE.focus_rmem h0 (M.vprop_of_list r_pre))));
   r_ens_eq  : (h0 : SE.rmem pre) -> (x : a) -> (h1 : SE.rmem (post x)) -> Lemma (ens h0 x h1 ==
                   r_ens (M.sel r_pre (
-                           r_pre_eq ();
-                           U.f_equal SE.rmem pre (M.vprop_of_list r_pre);
-                           U.cast (SE.rmem (M.vprop_of_list r_pre)) h0))
+                          r_pre_eq ();
+                          SE.equiv_can_be_split pre (M.vprop_of_list r_pre);
+                          SE.focus_rmem h0 (M.vprop_of_list r_pre)))
                         x
                         (M.sel (r_post x) (
-                           r_post_eq x;
-                           U.f_equal SE.rmem (post x) (M.vprop_of_list (r_post x));
-                           U.cast (SE.rmem (M.vprop_of_list (r_post x))) h1)))
+                          r_post_eq x;
+                          SE.equiv_can_be_split (post x) (M.vprop_of_list (r_post x));
+                          SE.focus_rmem h1 (M.vprop_of_list (r_post x)))))
 }
 
 inline_for_extraction
@@ -325,33 +335,22 @@ val steel_of_repr
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
       (tr : to_repr_t a pre post req ens)
       (f : M.repr_steel_t a tr.r_pre tr.r_post tr.r_req tr.r_ens)
-  : M.unit_steel a pre (fun x -> post x) (fun h0 -> req h0) (fun h0 x h1 -> ens h0 x h1)
-
-[@@ __tac_helper__]
-noeq inline_for_extraction
-type __to_steel_goal
-      (a : Type) (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t pre) (ens : SE.ens_t pre a post)
-      (t : M.repr a)
-  = {
-    goal_tr : to_repr_t a pre post req ens;
-    goal_f  : extract a goal_tr.r_pre goal_tr.r_post goal_tr.r_req goal_tr.r_ens t
-  }      
+  : M.unit_steel a pre post req ens
 
 val __build_to_repr_t_lem
-      (p : SE.vprop) (r_p : M.vprop_list {p == M.vprop_of_list r_p}) (h : SE.rmem p)
+      (p : SE.vprop) (r_p : M.vprop_list {p `SE.equiv` M.vprop_of_list r_p}) (h : SE.rmem p)
       (v : SE.vprop{SE.can_be_split p v}) (_ : squash (SE.VUnit? v))
       (i : CSl.elem_index (SE.VUnit?._0 v) r_p)
       (i' : int) (_ : squash (i' == i))
   : squash (h v ==
-        M.sel r_p (U.f_equal SE.rmem p (M.vprop_of_list r_p);
-                   U.cast (SE.rmem (M.vprop_of_list r_p)) h) i)
-                   
-(* TODO: flatten_vprop *)
+        M.sel r_p (SE.equiv_can_be_split p (M.vprop_of_list r_p);
+                   SE.focus_rmem h (M.vprop_of_list r_p)) i)
+
 [@@ __tac_helper__]
 let __build_to_repr_t
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
-      (r_pre  : M.pre_t)    (r_pre_eq  : squash (pre == M.vprop_of_list r_pre))
-      (r_post : M.post_t a) (r_post_eq : (x : a) -> squash (post x == M.vprop_of_list (r_post x)))
+      (r_pre  : M.pre_t)    (pre_eq  : squash (r_pre == M.flatten_vprop pre))
+      (r_post : M.post_t a) (post_eq : (x : a) -> squash (r_post x == M.flatten_vprop (post x)))
       (#r_req  : M.req_t r_pre)
       (r_req_eq  : (h0 : SE.rmem pre) -> (sl0 : M.sl_f r_pre) ->
                    (sl0_eq : ((v : SE.vprop{SE.can_be_split pre v}) -> squash (SE.VUnit? v) ->
@@ -374,21 +373,32 @@ let __build_to_repr_t
                              squash (h1 v == sl1 i'))) ->
                    r_ens sl0 x sl1 == ens h0 x h1)
   : to_repr_t a pre post req ens
-  = {
+  = 
+    let r_pre_eq () : Lemma (pre `SE.equiv` M.vprop_of_list r_pre)
+      = pre_eq;
+        M.vprop_equiv_flat pre;
+        SE.equiv_sym (M.vprop_of_list r_pre) pre                in
+    let r_post_eq (x : a) : Lemma (post x `SE.equiv` M.vprop_of_list (r_post x))
+      = post_eq x;
+        M.vprop_equiv_flat (post x);
+        SE.equiv_sym (M.vprop_of_list (r_post x)) (post x)
+    in
+    {
     r_pre; r_post; r_req; r_ens;
-    r_pre_eq  = (fun () -> r_pre_eq);
-    r_post_eq = (fun x  -> r_post_eq x);
+    r_pre_eq; r_post_eq;
     r_req_eq  = (fun (h0 : SE.rmem pre) ->
-                   U.f_equal SE.rmem pre (M.vprop_of_list r_pre);
-                   let h0_r = U.cast (SE.rmem (M.vprop_of_list r_pre)) h0 in
+                   r_pre_eq ();
+                   SE.equiv_can_be_split pre (M.vprop_of_list r_pre);
+                   let h0_r = SE.focus_rmem h0 (M.vprop_of_list r_pre) in
                    r_req_eq h0 (M.sel r_pre h0_r)
                             (__build_to_repr_t_lem pre r_pre h0));
     r_ens_eq  = (fun (h0 : SE.rmem pre) (x : a) (h1 : SE.rmem (post x)) ->
-                   U.f_equal SE.rmem pre (M.vprop_of_list r_pre);
-                   let h0_r = U.cast (SE.rmem (M.vprop_of_list r_pre)) h0 in
+                   r_pre_eq ();
+                   SE.equiv_can_be_split pre (M.vprop_of_list r_pre);
+                   let h0_r = SE.focus_rmem h0 (M.vprop_of_list r_pre) in
                    r_post_eq x;
-                   U.f_equal SE.rmem (post x) (M.vprop_of_list (r_post x));
-                   let h1_r = U.cast (SE.rmem (M.vprop_of_list (r_post x))) h1 in
+                   SE.equiv_can_be_split (post x) (M.vprop_of_list (r_post x));
+                   let h1_r = SE.focus_rmem h1 (M.vprop_of_list (r_post x)) in
                    r_ens_eq h0 (M.sel r_pre h0_r) x h1 (M.sel (r_post x) h1_r)
                             (__build_to_repr_t_lem pre r_pre h0)
                             (__build_to_repr_t_lem (post x) (r_post x) h1))
@@ -402,7 +412,7 @@ let filter_rmem_apply (#p : SE.vprop) (h : SE.rmem p) (v : SE.vprop{SE.can_be_sp
   = ()
 
 /// Given a term [squash (lhs == rhs)], this tactics returns [Some (h, v)] if [lhs] is [h v]
-/// UNUSED: using v generates an SMT goal [SE.can_be_split]
+/// UNUSED: using v generates a SMT goal [SE.can_be_split]
 let match_rmem_apply (t : term) : Tac (option (term & term))
   = match inspect t with
     | Tv_App _squash (eq, Q_Explicit) ->
@@ -416,8 +426,6 @@ let match_rmem_apply (t : term) : Tac (option (term & term))
     | _ -> fail "unexpected shape0"
 
 /// Solves a goal [to_repr_t a pre post req ens]
-/// TODO: it currently only works if [pre] and [post] are of the form [M.vprop_of_list _]
-///       (under an abstraction for post)
 let build_to_repr_t () : Tac unit
   =
     let u_r_pre  = fresh_uvar None in
@@ -428,11 +436,14 @@ let build_to_repr_t () : Tac unit
 
     (* [r_pre] *)
     exact u_r_pre;
+    norm __normal_flatten_vprop;
     trefl ();
 
     (* [r_post] *)
     exact u_r_post;
-    let _ = intro () in trefl ();
+    let _ = intro () in
+    norm __normal_flatten_vprop;
+    trefl ();
 
     // apply the rewriting hypothesis [eq_lem] to solve a goal [squash (h v == sl ?i)]
     let apply_rew eq_lem =
@@ -479,22 +490,41 @@ let build_to_repr_t () : Tac unit
     end;
     trefl ()
 
+
+/// Similarly to [extract], [t] is only mentioned so that it can be retrieved by the tactic
+type __to_steel_goal
+      (a : Type) (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t pre) (ens : SE.ens_t pre a post)
+      (t : M.repr a)
+  = M.unit_steel a pre post req ens
+
+[@@ __tac_helper__]
+inline_for_extraction
+let __build_to_steel
+      (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
+      (#t : M.repr a)
+      (goal_tr : to_repr_t a pre post req ens)
+      (goal_f  : extract a goal_tr.r_pre goal_tr.r_post goal_tr.r_req goal_tr.r_ens t)
+  : __to_steel_goal a pre post req ens t
+  = steel_of_repr goal_tr goal_f
+
 /// Solves a goal [__to_steel_goal]
 // FIXME: this tactic get stuck if this file is lax-checked
 let build_to_steel () : Tac unit
   =
-    // This tactics fails if called in lax mode (leaves unification variables)
-    // the [lax_guard] does not solves the issue
-    lax_guard begin fun () ->
+    // This tactics fails if called in lax mode.
+    // It appears that at this point the goal contains unification variables in lax-mode:
+    //   __to_steel_goal unit ?pre ?post ?req ?ens t
+    // whereas the specifications are concrete terms (inferred from the top-level annotation) in normal-mode.
+    // If we try to solve the goal with [lax_guard], Steel then fails to solve some [equiv] with the
+    // [__lax_made] introduced for the specifications.
     let t = timer_start "specs     " in
-    apply_raw (`Mk__to_steel_goal);
+    apply_raw (`__build_to_steel);
     build_to_repr_t ();
     timer_stop t;
 
     // [extract]
     norm [delta_attr [`%__tac_helper__]; iota];
     solve_by_wp ()
-    end
 
 
 [@@ __tac_helper__]
@@ -503,7 +533,7 @@ let to_steel
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
       (t : M.repr a)
       (g : __to_steel_goal a pre post req ens t)
-  : M.unit_steel a pre (fun x -> post x) (fun h0 -> req h0) (fun h0 x h1 -> ens h0 x h1)
-  = steel_of_repr g.goal_tr g.goal_f
+  : M.unit_steel a pre post req ens
+  = g
 
 (**) val __end_tacs : unit

@@ -2,7 +2,7 @@ module Experiment.Steel
 
 module SF = Experiment.Steel.Repr.SF
 
-#set-options "--ifuel 0"
+#set-options "--ide_id_info_off --ifuel 0"
 
 let prog_M_to_Fun_equiv
       (#a : Type) (t : M.repr a)
@@ -99,20 +99,7 @@ let __call_repr_steel_0
       r
 
 inline_for_extraction
-let __call_repr_steel_1
-      (#a : Type)
-      (#pre : M.pre_t)     (#post : M.post_t a)
-      (#req : M.req_t pre) (#ens  : M.ens_t pre a post)
-      (r : M.repr_steel_t a pre post req ens)
-  : M.unit_steel a (M.vprop_of_list' pre) (fun x -> M.vprop_of_list' (post x))
-      (requires fun h0      -> req (norm_vpl (M.sel_f' pre h0)))
-      (ensures  fun h0 x h1 -> ens (norm_vpl (M.sel_f' pre h0)) x (norm_vpl (M.sel_f' (post x) h1)))
-  = __call_repr_steel_0 r
-
-
-// Assertion failure CheckNoUvars if calling __call_repr_steel_0
-inline_for_extraction
-let call_repr_steel #a #pre #post #req #ens r = __call_repr_steel_1 r ()
+let call_repr_steel #a #pre #post #req #ens r = __call_repr_steel_0 r ()
 
 
 (***** Extracting a [M.unit_steel] from a [M.repr] *)
@@ -122,25 +109,33 @@ let steel_of_repr
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
       (tr : to_repr_t a pre post req ens)
       (f : M.repr_steel_t a tr.r_pre tr.r_post tr.r_req tr.r_ens)
-  : M.unit_steel a pre (fun x -> post x) (fun h0 -> req h0) (fun h0 x h1 -> ens h0 x h1)
-  = U.cast_by _ f (_ by (
-       l_to_r [(`(`@tr).r_pre_eq); (`(`@tr).r_post_eq);
-               (`(`@tr).r_req_eq); (`(`@tr).r_ens_eq)];
-       norm [delta_only [`%M.repr_steel_t; `%M.unit_steel; `%U.cast]];
-       trefl ()))
+  : M.unit_steel a pre post req ens
+  =
+    tr.r_pre_eq ();
+    SE.equiv_can_be_split pre (M.vprop_of_list tr.r_pre);
+    introduce forall (x : a) . SE.can_be_split (post x) (M.vprop_of_list (tr.r_post x))
+      with (tr.r_post_eq x;
+            SE.equiv_can_be_split (post x) (M.vprop_of_list (tr.r_post x)));
+    FStar.Classical.forall_intro tr.r_req_eq;
+    FStar.Classical.forall_intro_3 tr.r_ens_eq;
+    M.unit_steel_subcomp_no_frame
+      _ _ req ens
+      (tr.r_pre_eq ()) (fun x -> tr.r_post_eq x)
+      ()
+      f
 
 #push-options "--fuel 1"
 let __build_to_repr_t_lem
-      (p : SE.vprop) (r_p : M.vprop_list {p == M.vprop_of_list r_p}) (h : SE.rmem p)
+      (p : SE.vprop) (r_p : M.vprop_list {p `SE.equiv` M.vprop_of_list r_p}) (h : SE.rmem p)
       (v : SE.vprop{SE.can_be_split p v}) (_ : squash (SE.VUnit? v))
       (i : CSl.elem_index (SE.VUnit?._0 v) r_p)
       (i' : int) (_ : squash (i' == i))
   : squash (h v ==
-        M.sel r_p (U.f_equal SE.rmem p (M.vprop_of_list r_p);
-                   U.cast (SE.rmem (M.vprop_of_list r_p)) h) i)
+        M.sel r_p (SE.equiv_can_be_split p (M.vprop_of_list r_p);
+                   SE.focus_rmem h (M.vprop_of_list r_p)) i)
   =
-    U.f_equal SE.rmem p (M.vprop_of_list r_p);
-    let h_r = U.cast (SE.rmem (M.vprop_of_list r_p)) h in
+    SE.equiv_can_be_split p (M.vprop_of_list r_p);
+    let h_r = SE.focus_rmem h (M.vprop_of_list r_p) in
     M.vprop_of_list_can_be_split r_p i;
     calc (==) {
       M.sel r_p h_r i;

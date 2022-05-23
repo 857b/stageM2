@@ -426,7 +426,7 @@ let test3_steel_caller (r0 r1 : ref U32.t)
 inline_for_extraction
 let test3_steel' (r0 r1 : ref U32.t)
   : M.unit_steel unit
-      (M.vprop_of_list' (test3_mem r0 r1)) (fun _ -> M.vprop_of_list' (test3_mem r0 r1))
+      (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
       (requires fun h0 -> U32.v (sel r0 h0) < 42)
       (ensures fun h0 () h1 -> U32.v (sel r1 h1) == U32.v (sel r0 h0) + 1)
   = to_steel (test3_M r0 r1) (_ by (build_to_steel ()))
@@ -444,8 +444,16 @@ let test3_steel'_caller (r0 r1 : ref U32.t)
 
 let test4 (#a : Type) (r : ref a)
   : M.unit_steel (ref a)
-      (M.vprop_of_list' [vptr' r full_perm])
-      (fun r' -> M.vprop_of_list' [vptr' r' full_perm])
+      (vptr r) (fun r' -> vptr r')
       (requires fun h0 -> True)
       (ensures  fun h0 r' h1 -> sel r' h1 == sel r h0)
   = to_steel M.(return r) (_ by (build_to_steel ()))
+
+////////// test emp //////////
+
+[@@expect_failure [228]]
+let test_emp
+  : M.unit_steel unit
+      emp (fun () -> emp)
+      (fun _ -> True) (fun _ _ _ -> True)
+  = to_steel M.(return ()) (_ by (build_to_steel ()))

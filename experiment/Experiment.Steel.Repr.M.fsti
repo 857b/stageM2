@@ -22,17 +22,44 @@ irreducible let __repr_M__ : unit = ()
 
 (*** Steel *)
 
-type unit_steel (a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
-  = unit -> Steel a pre post req ens
+unfold
+let unit_steel = Experiment.Steel.SteelHack.unit_steel
 
 (* This does not seems provable from the interface of Steel.Effect
-   Maybe from subcomp, if one could resolve the framing_implicit ourselves instead of relying on the tactic.
 // Warning : this can drop some slprops
 val change_can_be_split_slprop
       (#opened : Mem.inames)
       (p q : vprop) (_ : squash(can_be_split p q))
   : SteelGhost unit opened p (fun () -> q) (fun _ -> True) (fun h0 () h1 -> h1 q == h0 q)
 *)
+
+let subcomp_no_frame_pre
+      (#a:Type)
+      (#pre_f:pre_t) (#post_f:post_t a) (req_f:req_t pre_f) (ens_f:ens_t pre_f a post_f)
+      (#pre_g:pre_t) (#post_g:post_t a) (req_g:req_t pre_g) (ens_g:ens_t pre_g a post_g)
+      (eq_pre  : squash (equiv pre_g pre_f))
+      (eq_post : (x : a) -> squash (equiv (post_g x) (post_f x)))
+  : prop
+  =
+    forall (h0 : rmem pre_g) . (
+     (**) equiv_can_be_split pre_g pre_f; (
+     req_g h0 ==>
+      (req_f (focus_rmem h0 pre_f) /\
+      (forall (x : a) (h1 : rmem (post_g x)) . (
+        (**) eq_post x; equiv_can_be_split (post_g x) (post_f x); (
+        ens_f (focus_rmem h0 pre_f) x (focus_rmem h1 (post_f x)) ==>
+        ens_g h0 x h1))))))
+
+inline_for_extraction noextract
+val unit_steel_subcomp_no_frame
+      (#a : Type)
+      (#pre_f:pre_t) (#post_f:post_t a) (req_f:req_t pre_f) (ens_f:ens_t pre_f a post_f)
+      (#pre_g:pre_t) (#post_g:post_t a) (req_g:req_t pre_g) (ens_g:ens_t pre_g a post_g)
+      (eq_pre  : squash (equiv pre_g pre_f))
+      (eq_post : (x : a) -> squash (equiv (post_g x) (post_f x)))
+      (sb_pre : squash (subcomp_no_frame_pre req_f ens_f req_g ens_g eq_pre eq_post))
+      (f : unit_steel a pre_f post_f req_f ens_f)
+  : unit_steel a pre_g post_g req_g ens_g
 
 
 (*** [vprop_list] *)

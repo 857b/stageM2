@@ -6,7 +6,43 @@ module L = FStar.List.Pure
 
 #set-options "--ide_id_info_off"
 
-(***** [vprop_list] *)
+(*** Steel *)
+
+inline_for_extraction noextract
+let unit_steel_subcomp_no_frame
+      (#a : Type)
+      (#pre_f:pre_t) (#post_f:post_t a) (req_f:req_t pre_f) (ens_f:ens_t pre_f a post_f)
+      (#pre_g:pre_t) (#post_g:post_t a) (req_g:req_t pre_g) (ens_g:ens_t pre_g a post_g)
+      (eq_pre  : squash (equiv pre_g pre_f))
+      (eq_post : (x : a) -> squash (equiv (post_g x) (post_f x)))
+      (sb_pre : squash (subcomp_no_frame_pre req_f ens_f req_g ens_g eq_pre eq_post))
+      (f : unit_steel a pre_f post_f req_f ens_f)
+  : unit_steel a pre_g post_g req_g ens_g
+  =
+    U.assert_by (can_be_split pre_g (pre_f `star` emp)) (fun () ->
+      equiv_can_be_split pre_g pre_f;
+      assert (can_be_split pre_f (pre_f `star` emp) /\ True)
+        by (T.squash_intro (); selector_tactic ());
+      can_be_split_trans pre_g pre_f (pre_f `star` emp));
+    U.assert_by (equiv_forall post_g (fun x -> post_f x `star` emp)) (fun () ->
+      introduce forall (x : a) . post_g x `equiv` (post_f x `star` emp)
+      with (
+        eq_post x;
+        assert (post_f x `equiv` (post_f x `star` emp))
+          by (init_resolve_tac ());
+        equiv_trans (post_g x) (post_f x) (post_f x `star` emp)
+      );
+      equiv_forall_elim post_g (fun x -> post_f x `star` emp));
+    Experiment.Steel.SteelHack.intro_subcomp_pre' req_f ens_f req_g ens_g #emp #True () ()
+      (fun h0 -> ()) (fun h0 -> ()) (fun h0 x h1 -> ());
+    Experiment.Steel.SteelHack.steel_subcomp a
+      pre_f post_f req_f ens_f
+      pre_g post_g req_g ens_g
+      emp True () () ()
+      f
+
+
+(*** [vprop_list] *)
 
 let rec vprop_of_list_can_be_split (vs : vprop_list) (i : nat {i < L.length vs})
   : Lemma (ensures can_be_split (vprop_of_list vs) (VUnit (L.index vs i))) (decreases vs)

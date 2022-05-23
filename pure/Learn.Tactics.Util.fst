@@ -90,6 +90,42 @@ let extract_nat_tac () : Tac nat
     if n < 0 then fail ("extracted int "^string_of_int n^" < 0");
     n
 
-/// If `--lax` is set, this tactics discharges the current goal. Otherwise it call [f].
+
+// TODO ? bv, binder, comp, attrs, match
+let rec uvars_of_aux (t : term) (acc : list term) : Tac (list term) =
+  match inspect t with
+  | Tv_Var _ | Tv_BVar _ | Tv_FVar _ -> acc
+  | Tv_App hd (arg, _) -> uvars_of_aux hd (uvars_of_aux arg acc)
+  | Tv_Abs (bv:binder) body -> uvars_of_aux body acc
+  | Tv_Arrow (bv:binder) (c:comp) -> acc
+  | Tv_Type  _ -> acc
+  | Tv_Refine (bv:bv) ref -> uvars_of_aux ref acc
+  | Tv_Const  _ -> acc
+  | Tv_Uvar _ _ -> t :: acc
+  | Tv_Let  _ (attrs : list term) (bv:bv) def body -> uvars_of_aux def (uvars_of_aux body acc)
+  | Tv_Match  scrutinee (ret:option match_returns_ascription) (brs:list branch) -> acc
+  | Tv_AscribedT e t (tac:option term) _ -> uvars_of_aux e (uvars_of_aux t acc)
+  | Tv_AscribedC e (c:comp) (tac:option term) _ -> uvars_of_aux e acc
+  | Tv_Unknown -> acc
+
+let uvars_of (t : term) : Tac (list term) = uvars_of_aux t []
+
+/// The [int] argument tries to avoid inserting obvious inconsistency in the context by making each [__lax_made]
+/// unique.
+irreducible
+let __lax_made (#a : Type) (_ : int) (f : unit -> squash False) : a
+  = f ()
+
+/// If `--lax` is set, this tactics discharges the current goal.
+/// Otherwise it call [f].
 let lax_guard (f : unit -> Tac unit) : Tac unit
-  = if lax_on () then (apply (`false_elim); smt ()) else f ()
+  = if lax_on () then begin
+       let mk_lax () =
+         let i = fresh () in
+         apply (`(__lax_made (`#(quote i))));
+         let _ = intro () in smt ()
+       in
+       //let uvs = uvars_of (cur_goal ()) in
+       mk_lax ()
+       //iter (fun uv -> try unshelve uv; mk_lax () with | _ -> ()) uvs
+    end else f ()
