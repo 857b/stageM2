@@ -9,6 +9,7 @@ module Fl   = Learn.FList
 module U32  = FStar.UInt32
 module Perm = Learn.Permutation
 
+module F     = Experiment.Steel.Notations
 module M     = Experiment.Steel.Repr.M
 module ST    = Experiment.Steel.Repr.ST
 module SF    = Experiment.Steel.Repr.SF
@@ -97,7 +98,7 @@ let read_req  #a (r : ref a) : M.req_t (read_pre r)
 unfold
 let read_ens  #a (r : ref a) : M.ens_t (read_pre r) a (read_post r)
   = fun sl0 x sl1 ->
-    sl1 0 == sl0 0 /\ x == sl0 0
+    sl0 0 == sl1 0 /\ x == sl1 0
 
 inline_for_extraction
 let steel_read #a (r : ref a) () :
@@ -105,7 +106,7 @@ let steel_read #a (r : ref a) () :
     (requires fun _ -> True)
     (ensures fun h0 x h1 -> let sl0 = M.sel_f [vptr' r full_perm] h0 in
                          let sl1 = M.sel_f [vptr' r full_perm] h1 in
-                         sl1 0 == sl0 0 /\ x == sl0 0)
+                         sl0 0 == sl1 0 /\ x == sl1 0)
   =
     (**) change_equal_slprop (M.vprop_of_list [vptr' r full_perm]) (vptr r `star` emp);
     let x = read r in
@@ -120,7 +121,7 @@ let r_read #a (r : ref a) : M.repr a =
 inline_for_extraction
 let steel_write #a (r : ref a) (x : a) ()
   : Steel unit (M.vprop_of_list [vptr' r full_perm]) (fun _ -> M.vprop_of_list [vptr' r full_perm])
-               (requires fun _ -> True) (ensures fun h0 () h1 -> M.sel_f [vptr' r full_perm] h1 0 == x)
+               (requires fun _ -> True) (ensures fun h0 () h1 -> x == M.sel_f [vptr' r full_perm] h1 0)
   =
     (**) change_equal_slprop (M.vprop_of_list [vptr' r full_perm]) (vptr r `star` emp);
     write r x;
@@ -130,7 +131,7 @@ let steel_write #a (r : ref a) (x : a) ()
 inline_for_extraction
 let r_write #a (r : ref a) (x : a) : M.repr unit =
   M.repr_of_steel_r [vptr' r full_perm] (fun _ -> [vptr' r full_perm])
-                    (fun sl0 -> True) (fun sl0 () sl1 -> sl1 0 == x)
+                    (fun sl0 -> True) (fun sl0 () sl1 -> x == sl1 0)
                     (steel_write r x)
 
 [@@ __test__; __steel_reduce__]
@@ -407,7 +408,7 @@ let test3_steel (r0 r1 : ref U32.t)
       (requires fun sl0 -> U32.v (sl0 0) < 42)
       (ensures fun sl0 () sl1 -> U32.v (sl1 1) == U32.v (sl0 0) + 1)
       (test3_M r0 r1)
-  = _ by (solve_by_wp ())
+  = _ by (solve_by_wp F.(make_flags_record [Timer]))
 
 (*let _ = fun r0 r1 ->
   assert (U.print_util (test3_steel r0 r1))
@@ -428,26 +429,28 @@ let test3_steel_caller (r0 r1 : ref U32.t)
     read r1
 #pop-options
 
-unfold
-let call (#b : Type)
-      (#a : b -> Type) (#pre : b -> pre_t) (#post : (x : b) -> post_t (a x))
-      (#req : (x : b) -> req_t (pre x)) (#ens : (x : b) -> ens_t (pre x) (a x) (post x))
-      ($f : (x : b) -> Steel (a x) (pre x) (post x) (req x) (ens x)) (x : b)
-  : M.repr (a x)
-  = M.repr_of_steel (pre x) (post x) (req x) (ens x) (fun () -> f x)
-
 // This only generates 1 SMT query: the WP
-// TODO: the use of call make ST -> SF longer
+// FIXME: the use of call make ST -> SF and SF -> Fun longer
+//        even if the dump at stage ST are (nearly) identical
 inline_for_extraction
 let test3_steel' (r0 r1 : ref U32.t)
-  : M.unit_steel unit
+  : F.steel unit
       (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
       (requires fun h0 -> U32.v (sel r0 h0) < 42)
       (ensures fun h0 () h1 -> U32.v (sel r1 h1) == U32.v (sel r0 h0) + 1)
-  = to_steel M.(
-      x <-- call  read r0;
+  = F.(to_steel (
+      x <-- call read r0;
       call (write r1) U32.(x +%^ 1ul)
-    ) (_ by (build_to_steel ()))
+    ) (_ by (mk_steel [Timer(*; Dump Stage_ST*)])))
+
+inline_for_extraction
+let test3_steel'' (r0 r1 : ref U32.t)
+  : F.steel unit
+      (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
+      (requires fun h0 -> U32.v (sel r0 h0) < 42)
+      (ensures fun h0 () h1 -> U32.v (sel r1 h1) == U32.v (sel r0 h0) + 1)
+  = F.(to_steel (test3_M r0 r1) (_ by (mk_steel [Timer(*; Dump Stage_ST*)])))
+
 
 let test3_steel'_caller (r0 r1 : ref U32.t)
   : Steel U32.t (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
@@ -461,28 +464,71 @@ let test3_steel'_caller (r0 r1 : ref U32.t)
 ////////// test4 //////////
 
 let test4 (#a : Type) (r : ref a)
-  : M.unit_steel (ref a)
+  : F.steel (ref a)
       (vptr r) (fun r' -> vptr r')
       (requires fun h0 -> True)
       (ensures  fun h0 r' h1 -> sel r' h1 == sel r h0)
-  = to_steel M.(return r) (_ by (build_to_steel ()))
+  = F.(to_steel (return r) (_ by (mk_steel [])))
 
 ////////// test emp //////////
 
 let test_emp_0
-  : M.unit_steel unit
+  : F.steel unit
       emp (fun () -> emp)
       (fun _ -> True) (fun _ _ _ -> True)
-  = to_steel M.(return ()) (_ by (build_to_steel ()))
+  = F.(to_steel (return ()) (_ by (mk_steel [])))
 
 let test_emp_1 (#a : Type) (r : ref a)
-  : M.unit_steel unit
+  : F.steel unit
       (emp `star` vptr r) (fun () -> vptr r)
       (fun _ -> True) (fun _ _ _ -> True)
-  = to_steel M.(return ()) (_ by (build_to_steel ()))
+  = F.(to_steel (return ()) (_ by (mk_steel [])))
 
 let test_emp_2 (#a : Type) (r : ref a)
-  : M.unit_steel unit
+  : F.steel unit
       (vptr r) (fun () -> emp `star` vptr r)
       (fun _ -> True) (fun _ _ _ -> True)
-  = to_steel M.(return ()) (_ by (build_to_steel ()))
+  = F.(to_steel (return ()) (_ by (mk_steel [])))
+
+////////// test frame_equalities //////////
+
+/// The frame equalities are reduced to equalities on the selectors of the vprop'.
+/// This relies on the simplification [focus_rmem h q r == h r].
+/// However, [Tactics.Effect.rewrite_with_tactic frame_vc_norm] remains in the WP.
+
+let test_frame_equalities_0 (#a : Type) (r0 : ref a)
+  : F.steel unit (vptr r0) (fun () -> vptr r0)
+      (requires fun _ -> True) (ensures fun h0 () h1 -> frame_equalities (vptr r0) h0 h1)
+  = F.(to_steel (return ()) (_ by (mk_steel [Dump Stage_WP])))
+
+let test_frame_equalities_1 (#a : Type) (r0 r1 r2 : ref a)
+  : F.steel unit (vptr r0 `star` vptr r1 `star` vptr r2) (fun () -> vptr r0 `star` vptr r1 `star` vptr r2)
+      (requires fun _ -> True) (ensures fun h0 () h1 -> frame_equalities (vptr r0 `star` vptr r1 `star` vptr r2) h0 h1)
+  = F.(to_steel (return ()) (_ by (mk_steel [Dump Stage_WP])))
+
+let test_steel_with_frame_equality (#a : Type) (r0 r1 : ref a)
+  : Steel unit (vptr r0 `star` vptr r1) (fun () -> vptr r0 `star` vptr r1)
+      (requires fun _ -> True) (ensures fun h0 () h1 -> frame_equalities (vptr r0 `star` vptr r1) h0 h1)
+  = Steel.Effect.Atomic.return ()
+
+let test_frame_equalities_2 (#a : Type) (r0 r1 : ref a)
+  : F.steel unit (vptr r0 `star` vptr r1) (fun () -> vptr r0 `star` vptr r1)
+      (requires fun h0 -> sel r0 h0 == sel r1 h0) (ensures fun h0 () h1 -> sel r0 h1 == sel r1 h1)
+  = F.(to_steel (call (test_steel_with_frame_equality r0) r1) (_ by (mk_steel [Dump Stage_WP])))
+
+////////// test failures //////////
+
+[@@ expect_failure [228]]
+let test_fail_spec (v : vprop)
+  : F.steel unit v (fun () -> v) (fun _ -> True) (fun _ _ _ -> True)
+  = F.(to_steel (return ()) (_ by (mk_steel [])))
+
+[@@ expect_failure [228]]
+let test_fail_slcond_0 (#a : Type) (r : ref a)
+  : F.steel a emp (fun () -> emp) (fun _ -> True) (fun _ _ _ -> True)
+  = F.(to_steel (call read r) (_ by (mk_steel [])))
+
+[@@ expect_failure [228]]
+let test_fail_slcond_1 (#a : Type) (r : ref a)
+  : F.steel a (vptr r) (fun () -> emp) (fun _ -> True) (fun _ _ _ -> True)
+  = F.(to_steel (call read r) (_ by (mk_steel [])))

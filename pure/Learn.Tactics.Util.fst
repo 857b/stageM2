@@ -9,15 +9,17 @@ irreducible let __tac_helper__ : unit = ()
 
 
 type timer = {
-  start_ms : int;
-  timer_name : string;
+  start_ms    : int;
+  timer_name  : string;
+  timer_print : bool;
 }
 
-let timer_start (name : string) : Tac timer =
-  { start_ms = curms (); timer_name = name }
+let timer_start (name : string) (timer_print) : Tac timer =
+  { start_ms = curms (); timer_name = name; timer_print }
 
 let timer_stop_msg (t : timer) (end_ms : int) : Tac unit =
-  print ("time "^t.timer_name^": "^string_of_int (end_ms - t.start_ms)^"ms")
+  if t.timer_print then
+    print ("time "^t.timer_name^": "^string_of_int (end_ms - t.start_ms)^"ms")
 
 let timer_stop (t : timer) : Tac unit =
   timer_stop_msg t (curms ())
@@ -25,7 +27,7 @@ let timer_stop (t : timer) : Tac unit =
 let timer_enter (t : timer) (name : string) : Tac timer =
   let cms = curms () in
   timer_stop_msg t cms;
-  { start_ms = cms; timer_name = name }
+  { t with start_ms = cms; timer_name = name }
 
 
 [@@ __tac_helper__]

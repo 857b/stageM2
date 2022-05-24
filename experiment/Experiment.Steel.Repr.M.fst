@@ -8,6 +8,21 @@ module L = FStar.List.Pure
 
 (*** Steel *)
 
+let focus_rmem_feq (p q r : vprop) (h : rmem p)
+  : Lemma (requires can_be_split p q /\ can_be_split q r)
+          (ensures  can_be_split p r /\ focus_rmem h q r == h r)
+  = can_be_split_trans p q r
+
+let focus_rmem_trans (p q r : vprop) (h : rmem p)
+  : Lemma (requires can_be_split p q /\ can_be_split q r)
+          (ensures  can_be_split p r /\ focus_rmem (focus_rmem h q) r == focus_rmem h r)
+  = can_be_split_trans p q r;
+    introduce forall (r0 : vprop {can_be_split r r0}) .
+        (focus_rmem (focus_rmem h q) r) r0 == (focus_rmem h r) r0
+      with _ by T.(trefl ());
+    FExt.extensionality_g _ _ (focus_rmem (focus_rmem h q) r) (focus_rmem h r)
+
+
 let intro_subcomp_no_frame_pre
       (#a:Type)
       (#pre_f:pre_t) (#post_f:post_t a) (req_f:req_t pre_f) (ens_f:ens_t pre_f a post_f)
@@ -178,11 +193,6 @@ let rmem_star_eq (#p : vprop) (v0 v1 : vprop)
     // TODO: this is implied by [valid_rmem] but not exposed by the interface of [Steel.Effect.Common]
     //       maybe we can do the proofs in SteelGhost
     admit ()
-
-let focus_rmem_feq (p q r : vprop) (h : rmem p)
-  : Lemma (requires can_be_split p q /\ can_be_split q r)
-          (ensures  can_be_split p r /\ focus_rmem h q r == h r)
-  = can_be_split_trans p q r
 
 #push-options "--ifuel 1 --fuel 1"
 let rec sel_list_eq'_sub (#p : vprop) (vs : vprop_list)
@@ -393,16 +403,6 @@ let steel_of_repr
       (tr.r_pre_eq ()) (fun x -> tr.r_post_eq x)
       ()
       f
-
-// I was expecting this to be needed for repr_steel_of_steel, but the proof succeeds without it
-let focus_rmem_trans (p q r : vprop) (h : rmem p)
-  : Lemma (requires can_be_split p q /\ can_be_split q r)
-          (ensures  can_be_split p r /\ focus_rmem (focus_rmem h q) r == focus_rmem h r)
-  = can_be_split_trans p q r;
-    introduce forall (r0 : vprop {can_be_split r r0}) .
-        (focus_rmem (focus_rmem h q) r) r0 == (focus_rmem h r) r0
-      with _ by T.(trefl ());
-    FExt.extensionality_g _ _ (focus_rmem (focus_rmem h q) r) (focus_rmem h r)
 
 inline_for_extraction noextract
 let repr_steel_of_steel

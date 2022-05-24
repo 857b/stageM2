@@ -22,6 +22,16 @@ irreducible let __repr_M__ : unit = ()
 unfold
 let unit_steel = Experiment.Steel.SteelHack.unit_steel
 
+
+val focus_rmem_feq (p q r : vprop) (h : rmem p)
+  : Lemma (requires can_be_split p q /\ can_be_split q r)
+          (ensures  can_be_split p r /\ focus_rmem h q r == h r)
+
+val focus_rmem_trans (p q r : vprop) (h : rmem p)
+  : Lemma (requires can_be_split p q /\ can_be_split q r)
+          (ensures  can_be_split p r /\ focus_rmem (focus_rmem h q) r == focus_rmem h r)
+
+
 (* This does not seems provable from the interface of Steel.Effect
 // Warning : this can drop some slprops
 val change_can_be_split_slprop
@@ -752,8 +762,7 @@ let bind_steel
 
 [@@ __repr_M__]
 inline_for_extraction
-let bind (#a #b : Type)
-      (f : repr a) (g : a -> repr b)
+let bind (#a #b : Type) (f : repr a) (g : a -> repr b)
   : repr b
   = {
     repr_tree  = Tbind a b f.repr_tree (fun x -> (g x).repr_tree);

@@ -1,6 +1,6 @@
 module Experiment.Steel
 
-/// Interface for the functionalisation of Steel programs
+/// Entry point for the functionalisation of Steel programs
 
 module U    = Learn.Util
 module L    = FStar.List.Pure
@@ -19,6 +19,7 @@ module ST2SF = Experiment.Steel.Repr.ST_to_SF.Spec
 
 open FStar.Tactics
 open Learn.Tactics.Util
+open Experiment.Steel.Interface
 
 
 let prog_M_to_Fun
@@ -229,7 +230,7 @@ let __solve_by_wp
     ext
 
 /// Solves a goal of the form [extract a pre post req ens t]
-let solve_by_wp () : Tac unit
+let solve_by_wp (fr : flags_record) : Tac unit
   =
     let u_c        = fresh_uvar None in
     let u_t_Fun    = fresh_uvar None in
@@ -239,7 +240,7 @@ let solve_by_wp () : Tac unit
     let u_ext_eq   = fresh_uvar None in
     apply_raw (`(__solve_by_wp (`#u_c) (`#u_t_Fun) (`#u_t_Fun_eq) (`#u_wp) (`#u_ext) (`#u_ext_eq)));
 
-    let t = timer_start   "prog_cond " in
+    let t = timer_start   "prog_cond " fr.f_timer in
     (* c *)
     unshelve u_c;
     norm __normal_M;
@@ -250,12 +251,16 @@ let solve_by_wp () : Tac unit
     (* TODO? stage prog_M_to_Fun to avoid duplication *)
     let t = timer_enter t "normal_M  " in
     norm __normal_M;
+    if fr.f_dump Stage_M then dump "at stage M";
     let t = timer_enter t "normal_ST " in
     norm __normal_ST;
+    if fr.f_dump Stage_ST then dump "at stage ST";
     let t = timer_enter t "normal_SF " in
     norm __normal_SF;
+    if fr.f_dump Stage_SF then dump "at stage SF";
     let t = timer_enter t "normal_Fun" in
     norm __normal_Fun;
+    if fr.f_dump Stage_Fun then dump "at stage Fun";
     let t = timer_enter t "misc      " in
     trefl ();
 
@@ -264,6 +269,7 @@ let solve_by_wp () : Tac unit
     unshelve u_wp;
     norm __normal_M;
     norm __normal_Fun_spec;
+    if fr.f_dump Stage_WP then dump "at stage WP";
     smt ();
 
     (* ext *)
@@ -296,7 +302,7 @@ let __build_to_steel
 
 /// Solves a goal [__to_steel_goal]
 // FIXME: this tactic get stuck if this file is lax-checked
-let build_to_steel () : Tac unit
+let build_to_steel (fr : flags_record) : Tac unit
   =
     // This tactics fails if called in lax mode.
     // It appears that at this point the goal contains unification variables in lax-mode:
@@ -304,14 +310,15 @@ let build_to_steel () : Tac unit
     // whereas the specifications are concrete terms (inferred from the top-level annotation) in normal-mode.
     // If we try to solve the goal with [lax_guard], Steel then fails to solve some [equiv] with the
     // [__lax_made] introduced for the specifications.
-    let t = timer_start "specs     " in
+    
+    let t = timer_start "specs     " fr.f_timer in
     apply_raw (`__build_to_steel);
-    CSl.build_to_repr_t ();
+    CSl.build_to_repr_t (fun () -> [Info_location "in the specification"]);
     timer_stop t;
 
     // [extract]
     norm [delta_attr [`%__tac_helper__]; iota];
-    solve_by_wp ()
+    solve_by_wp fr
 
 
 [@@ __tac_helper__]
