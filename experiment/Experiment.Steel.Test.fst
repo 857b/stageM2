@@ -430,7 +430,7 @@ let test3_steel_caller (r0 r1 : ref U32.t)
 #pop-options
 
 // This only generates 1 SMT query: the WP
-// FIXME: the use of call make ST -> SF and SF -> Fun longer
+// FIXME: the use of call make ST -> SF and SF -> Fun longer when using O_ST2SF
 //        even if the dump at stage ST are (nearly) identical
 inline_for_extraction
 let test3_steel' (r0 r1 : ref U32.t)
@@ -441,7 +441,7 @@ let test3_steel' (r0 r1 : ref U32.t)
   = F.(to_steel (
       x <-- call read r0;
       call (write r1) U32.(x +%^ 1ul)
-    ) (_ by (mk_steel [Timer(*; Dump Stage_ST*)])))
+    ) (_ by (mk_steel [Timer(*; O_ST2SF; Dump Stage_ST*)])))
 
 inline_for_extraction
 let test3_steel'' (r0 r1 : ref U32.t)
@@ -449,7 +449,7 @@ let test3_steel'' (r0 r1 : ref U32.t)
       (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
       (requires fun h0 -> U32.v (sel r0 h0) < 42)
       (ensures fun h0 () h1 -> U32.v (sel r1 h1) == U32.v (sel r0 h0) + 1)
-  = F.(to_steel (test3_M r0 r1) (_ by (mk_steel [Timer(*; Dump Stage_ST*)])))
+  = F.(to_steel (test3_M r0 r1) (_ by (mk_steel [Timer(*; O_ST2SF; Dump Stage_ST*)])))
 
 
 let test3_steel'_caller (r0 r1 : ref U32.t)

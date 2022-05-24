@@ -5,25 +5,25 @@ module SF = Experiment.Steel.Repr.SF
 #set-options "--ide_id_info_off --ifuel 0"
 
 let prog_M_to_Fun_equiv
+      opti_ST2SF
       (#a : Type) (t : M.repr a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
       (sl0 : M.sl_f pre)
-  : Lemma (M.tree_req t.repr_tree c.pc_tree sl0 <==> Fun.tree_req (prog_M_to_Fun t c sl0) /\
-          (M.tree_req t.repr_tree c.pc_tree sl0 ==>
-          (forall (x : a) (sl1 : M.sl_f (post x)) .
-               (M.tree_ens t.repr_tree c.pc_tree sl0 x sl1 <==>
-                Fun.tree_ens (prog_M_to_Fun t c sl0) SF.({val_v = x; sel_v = sl1})))))
   =
     let { pc_tree = t_M; pc_post_len = post_n; pc_shape = shp_M } = c in
     let t_ST    = ST.repr_ST_of_M t.repr_tree t_M          in
     let shp_ST  = ST.shape_ST_of_M shp_M                   in
     (**) ST.repr_ST_of_M_shape t.repr_tree t_M shp_M;
-    let t_ST'   = ST.flatten_prog t_ST                     in
+    let t_ST'   = if opti_ST2SF
+                  then ST.flatten_prog t_ST
+                  else t_ST                                in
     let shp_ST' = ST.flatten_shape shp_ST                  in
     (**) ST.flatten_prog_shape t_ST shp_ST;
-    let s_ST'   = ST.mk_prog_shape t_ST' shp_ST'           in
-    let t_SF    = ST2SF.repr_SF_of_ST_rall t_ST' s_ST' sl0 in
+    let t_SF    = if opti_ST2SF then
+                    let s_ST' = ST.mk_prog_shape t_ST' shp_ST' in
+                    ST2SF_Spec.repr_SF_of_ST_rall t_ST' s_ST' sl0
+                  else ST2SF_Base.repr_SF_of_ST t_ST' sl0  in
     let t_Fun   = SF.repr_Fun_of_SF t_SF                   in
 
     calc (<==>) {
@@ -35,7 +35,10 @@ let prog_M_to_Fun_equiv
       ST.tree_req t_ST sl0;
     <==> { ST.flatten_equiv t_ST }
       ST.tree_req t_ST' sl0;
-    <==> { ST2SF.repr_SF_of_ST_rall_equiv t_ST' s_ST' sl0 }
+    <==> { if opti_ST2SF then
+           let s_ST' = ST.mk_prog_shape t_ST' shp_ST' in
+           ST2SF_Spec.repr_SF_of_ST_rall_equiv t_ST' s_ST' sl0
+         else ST2SF_Base.repr_SF_of_ST_req t_ST' sl0 }
       SF.tree_req t_SF;
     <==> { SF.repr_Fun_of_SF_req t_SF }
       Fun.tree_req t_Fun;
@@ -44,7 +47,7 @@ let prog_M_to_Fun_equiv
     introduce M.tree_req t.repr_tree c.pc_tree sl0 ==>
               (forall (x : a) (sl1 : M.sl_f (post x)) .
                 (M.tree_ens t.repr_tree t_M sl0 x sl1 <==>
-                 Fun.tree_ens (prog_M_to_Fun t c sl0) SF.({val_v = x; sel_v = sl1})))
+                 Fun.tree_ens (prog_M_to_Fun opti_ST2SF t c sl0) SF.({val_v = x; sel_v = sl1})))
     with _ . introduce forall (x : a) (sl1 : M.sl_f (post x)) . _ with
     begin
       calc (<==>) {
@@ -53,7 +56,10 @@ let prog_M_to_Fun_equiv
         ST.tree_ens t_ST sl0 x sl1;
       <==> { ST.flatten_equiv t_ST }
         ST.tree_ens t_ST' sl0 x sl1;
-      <==> { ST2SF.repr_SF_of_ST_rall_equiv t_ST' s_ST' sl0 }
+      <==> { if opti_ST2SF then
+             let s_ST' = ST.mk_prog_shape t_ST' shp_ST' in
+             ST2SF_Spec.repr_SF_of_ST_rall_equiv t_ST' s_ST' sl0
+           else ST2SF_Base.repr_SF_of_ST_ens t_ST' sl0 x sl1 }
         SF.tree_ens t_SF x sl1;
       <==> { SF.repr_Fun_of_SF_ens t_SF x sl1 }
         Fun.tree_ens t_Fun SF.({val_v = x; sel_v = sl1});

@@ -126,6 +126,17 @@ let splitAt_ty_of_f (ts0 ts1 : ty_list) (xs : flist L.(ts0@ts1))
             == (dlist_of_f (splitAt_ty ts0 ts1 xs)._1, dlist_of_f (splitAt_ty ts0 ts1 xs)._2))
   = splitAt_ty_of_d ts0 ts1 (dlist_of_f xs)
 
+let splitAt_ty_append (ts0 ts1 : ty_list) (xs : flist L.(ts0@ts1))
+  : Lemma (let (xs0, xs1) = splitAt_ty ts0 ts1 xs in xs == append xs0 xs1)
+  = let (xs0, xs1) = splitAt_ty ts0 ts1 xs in
+    flist_extensionality xs (append xs0 xs1) (fun i -> ())
+
+let append_splitAt_ty (ts0 ts1 : ty_list) (xs0 : flist ts0) (xs1 : flist ts1)
+  : Lemma (splitAt_ty ts0 ts1 (append xs0 xs1) == (xs0, xs1))
+  =
+    let (xs0', xs1') = splitAt_ty ts0 ts1 (append xs0 xs1) in
+    flist_extensionality xs0' xs0 (fun i -> ());
+    flist_extensionality xs1' xs1 (fun i -> ())
 
 (***** ghost *)
 

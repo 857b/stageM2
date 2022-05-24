@@ -10,12 +10,13 @@ module Dl   = Learn.DList
 module Fl   = Learn.FList
 module Perm = Learn.Permutation
 
-module M     = Experiment.Steel.Repr.M
-module ST    = Experiment.Steel.Repr.ST
-module SF    = Experiment.Steel.Repr.SF
-module Fun   = Experiment.Repr.Fun
-module CSl   = Experiment.Steel.CondSolver
-module ST2SF = Experiment.Steel.Repr.ST_to_SF.Spec
+module M   = Experiment.Steel.Repr.M
+module ST  = Experiment.Steel.Repr.ST
+module SF  = Experiment.Steel.Repr.SF
+module Fun = Experiment.Repr.Fun
+module CSl = Experiment.Steel.CondSolver
+module ST2SF_Spec = Experiment.Steel.Repr.ST_to_SF.Spec
+module ST2SF_Base = Experiment.Steel.Repr.ST_to_SF.Base
 
 open FStar.Tactics
 open Learn.Tactics.Util
@@ -23,6 +24,7 @@ open Experiment.Steel.Interface
 
 
 let prog_M_to_Fun
+      (opti_ST2SF : bool)
       (#a : Type) (t : M.repr a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
@@ -33,56 +35,66 @@ let prog_M_to_Fun
     let t_ST    = ST.repr_ST_of_M t.repr_tree t_M   in
     let shp_ST  = ST.shape_ST_of_M shp_M            in
     (**) ST.repr_ST_of_M_shape t.repr_tree t_M shp_M;
-    let t_ST'   = ST.flatten_prog t_ST              in
+    let t_ST'   = if opti_ST2SF
+                  then ST.flatten_prog t_ST
+                  else t_ST                         in
     let shp_ST' = ST.flatten_shape shp_ST           in
     (**) ST.flatten_prog_shape t_ST shp_ST;
-    let s_ST'   = ST.mk_prog_shape t_ST' shp_ST'    in
     begin fun (sl0 : M.sl_f pre) ->
-      let t_SF = ST2SF.repr_SF_of_ST_rall t_ST' s_ST' sl0 in
+      let t_SF = if opti_ST2SF then
+                   let s_ST' = ST.mk_prog_shape t_ST' shp_ST' in
+                   ST2SF_Spec.repr_SF_of_ST_rall t_ST' s_ST' sl0
+                 else ST2SF_Base.repr_SF_of_ST t_ST' sl0
+      in
       SF.repr_Fun_of_SF t_SF
     end
 
 val prog_M_to_Fun_equiv
+      (opti_ST2SF : bool)
       (#a : Type) (t : M.repr a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
       (sl0 : M.sl_f pre)
-  : Lemma (M.tree_req t.repr_tree c.pc_tree sl0 <==> Fun.tree_req (prog_M_to_Fun t c sl0) /\
+  : Lemma (M.tree_req t.repr_tree c.pc_tree sl0 <==> Fun.tree_req (prog_M_to_Fun opti_ST2SF t c sl0) /\
           (M.tree_req t.repr_tree c.pc_tree sl0 ==>
           (forall (x : a) (sl1 : M.sl_f (post x)) .
                (M.tree_ens t.repr_tree c.pc_tree sl0 x sl1 <==>
-                Fun.tree_ens (prog_M_to_Fun t c sl0) SF.({val_v = x; sel_v = sl1})))))
+                Fun.tree_ens (prog_M_to_Fun opti_ST2SF t c sl0) SF.({val_v = x; sel_v = sl1})))))
 
 inline_for_extraction
 let prog_M_to_Fun_extract
+      (opti_ST2SF : bool)
       (#a : Type) (t : M.repr a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
       (req : M.req_t pre) (ens : M.ens_t pre a post)
       (sub : (sl0 : M.sl_f pre) -> Lemma (requires req sl0)
-               (ensures Fun.tree_req (prog_M_to_Fun t c sl0) /\
+               (ensures Fun.tree_req (prog_M_to_Fun opti_ST2SF t c sl0) /\
                   (forall (x : a) (sl1 : M.sl_f (post x)) .
-                    Fun.tree_ens (prog_M_to_Fun t c sl0) SF.({val_v = x; sel_v = sl1}) ==> ens sl0 x sl1)))
+                    Fun.tree_ens (prog_M_to_Fun opti_ST2SF t c sl0) SF.({val_v = x; sel_v = sl1}) ==>
+                    ens sl0 x sl1)))
   : M.repr_steel_t a pre post req ens
   =
     M.repr_steel_subcomp _ _ _ _
-      (fun sl0       -> let _ = sub sl0; prog_M_to_Fun_equiv t c sl0 in ())
-      (fun sl0 x sl1 -> let _ = prog_M_to_Fun_equiv t c sl0; sub sl0 in ())
+      (fun sl0       -> let _ = sub sl0; prog_M_to_Fun_equiv opti_ST2SF t c sl0 in ())
+      (fun sl0 x sl1 -> let _ = prog_M_to_Fun_equiv opti_ST2SF t c sl0; sub sl0 in ())
       (t.repr_steel pre post c.pc_tree)
 
 
 inline_for_extraction
 let prog_M_to_Fun_extract_wp
+      (opti_ST2SF : bool)
       (#a : Type) (t : M.repr a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
       (req : M.req_t pre) (ens : M.ens_t pre a post)
       (wp : (sl0 : M.sl_f pre) -> Lemma
               (requires req sl0)
-              (ensures Fun.tree_wp (prog_M_to_Fun t c sl0) (fun res -> ens sl0 res.val_v res.sel_v)))
+              (ensures Fun.tree_wp (prog_M_to_Fun opti_ST2SF t c sl0) (fun res -> ens sl0 res.val_v res.sel_v)))
   : M.repr_steel_t a pre post req ens
-  = prog_M_to_Fun_extract t c req ens
-      (fun sl0 -> wp sl0; Fun.tree_wp_sound (prog_M_to_Fun t c sl0) (fun res -> ens sl0 res.val_v res.sel_v))
+  = prog_M_to_Fun_extract opti_ST2SF t c req ens
+      (fun sl0 -> wp sl0;
+               Fun.tree_wp_sound (prog_M_to_Fun opti_ST2SF t c sl0) (fun res -> ens sl0 res.val_v res.sel_v))
 
 
 (**** normalisation steps *)
@@ -112,21 +124,32 @@ let __normal_ST : list norm_step = [
   iota; zeta; primops
 ]
 
+let __delta_ST2SF_Spec : list string = ST2SF_Spec.([
+  `%repr_SF_of_ST_rall; `%repr_SF_of_ST; `%shape_SF_of_ST;
+  `%shape_SF_of_ST_rall;
+  `%post_SF_of_ST; `%postl_SF_of_ST; `%post_bij;
+  `%Mkpost_bij_t'?.len_SF; `%Mkpost_bij_t'?.idx_SF; `%Mkpost_bij_t'?.idx_ST;
+  `%sel_ST_of_SF; `%sell_ST_of_SF; `%post_src_of_shape;
+  `%post_src_f_of_shape; `%sel_SF_of_ST; `%sell_SF_of_ST
+])
+
+let __delta_ST2SF_Base : list string = ST2SF_Base.([
+  `%repr_SF_of_ST; `%shape_SF_of_ST;
+  `%L.op_At; `%L.append;
+  `%Fl.apply_perm_r; `%Fl.append;
+  `%ST.const_post; `%ST.frame_post
+])
+
 let __normal_SF : list norm_step = [
-  delta_only [`%ST2SF.repr_SF_of_ST_rall; `%ST2SF.repr_SF_of_ST; `%ST2SF.shape_SF_of_ST;
-              `%ST2SF.shape_SF_of_ST_rall;
-              `%ST2SF.post_SF_of_ST; `%ST2SF.postl_SF_of_ST; `%ST2SF.post_bij;
+  delta_only (L.append __delta_ST2SF_Spec (L.append __delta_ST2SF_Base [
               `%ST.Mkprog_shape?.post_len; `%ST.Mkprog_shape?.shp;
-              `%ST2SF.Mkpost_bij_t'?.len_SF; `%ST2SF.Mkpost_bij_t'?.idx_SF; `%ST2SF.Mkpost_bij_t'?.idx_ST;
               `%Ll.initi; `%L.index; `%L.hd; `%L.tl; `%L.tail; `%L.length;
-              `%ST2SF.sel_ST_of_SF; `%ST2SF.sell_ST_of_SF; `%ST2SF.post_src_of_shape;
-              `%ST2SF.post_src_f_of_shape; `%ST2SF.sel_SF_of_ST; `%ST2SF.sell_SF_of_ST;
               `%Fl.splitAt_ty; `%Fl.head; `%Fl.tail;
               `%Fl.dlist_of_f; `%Dl.initi; `%Fl.cons; `%Fl.nil;
               `%Mktuple2?._1;`%Mktuple2?._2;
               `%Learn.Option.map;
               `%Perm.perm_f_swap; `%Perm.perm_f_transpose; `%Perm.perm_f_of_pair;
-              `%Perm.mk_perm_f; `%Perm.id_n; `%Perm.perm_f_of_list];
+              `%Perm.mk_perm_f; `%Perm.id_n; `%Perm.perm_f_of_list]));
   delta_qualifier ["unfold"];
   delta_attr [`%U.__util_func__];
   iota; zeta; primops
@@ -213,18 +236,19 @@ let extract (a : Type) (pre : M.pre_t) (post : M.post_t a) (req : M.req_t pre) (
 [@@ __tac_helper__]
 inline_for_extraction
 let __solve_by_wp
+      (opti_ST2SF : bool)
       (#a : Type) (#t : M.repr a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (#req : M.req_t pre) (#ens : M.ens_t pre a post)
       (c : M.prog_cond t.repr_tree pre post)
       (t_Fun : (sl0 : M.sl_f pre) ->
                GTot (Fun.prog_tree #SF.sl_tys SF.({val_t = a; sel_t = ST.post_ST_of_M post})))
-      (t_Fun_eq : squash (t_Fun == (fun sl0 -> prog_M_to_Fun t c sl0)))
+      (t_Fun_eq : squash (t_Fun == (fun sl0 -> prog_M_to_Fun opti_ST2SF t c sl0)))
       (wp : squash (Fl.forall_flist (M.vprop_list_sels_t pre) (fun sl0 ->
                req sl0 ==>
                Fun.tree_wp (t_Fun sl0) (fun res -> ens sl0 res.val_v res.sel_v))))
       (ext : M.repr_steel_t a pre post req ens)
-      (ext_eq : ext == prog_M_to_Fun_extract_wp t c req ens (fun sl0 -> ()))
+      (ext_eq : ext == prog_M_to_Fun_extract_wp opti_ST2SF t c req ens (fun sl0 -> ()))
   : extract a pre post req ens t
   =
     ext
@@ -232,13 +256,15 @@ let __solve_by_wp
 /// Solves a goal of the form [extract a pre post req ens t]
 let solve_by_wp (fr : flags_record) : Tac unit
   =
+    let opti_ST2SF = fr.o_ST2SF      in
     let u_c        = fresh_uvar None in
     let u_t_Fun    = fresh_uvar None in
     let u_t_Fun_eq = fresh_uvar None in
     let u_wp       = fresh_uvar None in
     let u_ext      = fresh_uvar None in
     let u_ext_eq   = fresh_uvar None in
-    apply_raw (`(__solve_by_wp (`#u_c) (`#u_t_Fun) (`#u_t_Fun_eq) (`#u_wp) (`#u_ext) (`#u_ext_eq)));
+    apply_raw (`(__solve_by_wp (`#(quote opti_ST2SF)) (`#u_c) (`#u_t_Fun)
+                               (`#u_t_Fun_eq) (`#u_wp) (`#u_ext) (`#u_ext_eq)));
 
     let t = timer_start   "prog_cond " fr.f_timer in
     (* c *)

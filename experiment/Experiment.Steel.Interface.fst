@@ -15,22 +15,26 @@ type stage =
 type flag =
   | Timer
   | Dump of stage
+  | O_ST2SF
 
 noeq
 type flags_record = {
   f_timer : bool;
   f_dump  : stage -> bool;
+  o_ST2SF : bool;
 }
 
 let default_flags : flags_record = {
   f_timer = false;
   f_dump  = (fun _ -> false);
+  o_ST2SF = false;
 }
 
 let record_flag (r : flags_record) (f : flag) : flags_record =
   match f with
-  | Timer  -> {r with f_timer = true}
-  | Dump s -> {r with f_dump  = (fun s' -> s' = s || r.f_dump s')}
+  | Timer   -> {r with f_timer = true}
+  | Dump s  -> {r with f_dump  = (fun s' -> s' = s || r.f_dump s')}
+  | O_ST2SF -> {r with o_ST2SF = true}
 
 let make_flags_record : list flag -> flags_record =
   L.fold_left record_flag default_flags
