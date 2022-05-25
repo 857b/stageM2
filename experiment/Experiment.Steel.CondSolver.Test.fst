@@ -218,7 +218,7 @@ let test_build_tree_cond__not_found (v0 : vprop')
   = _ by (norm_test (); let _ = build_tree_cond true in ())
 
 /// This example fails because we obtain [fun _ -> [v0]] as post which is not unifiable with the expected post
-/// [fun _ -> []]
+/// [fun _ -> []].
 [@@expect_failure [228]]
 let test_build_tree_cond__post (v0 : vprop')
   : M.tree_cond
@@ -227,7 +227,58 @@ let test_build_tree_cond__post (v0 : vprop')
   = _ by (norm_test (); let _ = build_tree_cond true in ())
 
 
-[@@expect_failure]
+let test_build_tree_cond__if_0 (v0 v1 v2 : vprop')
+  : M.tree_cond
+        (M.Tif _ true (specT int [v0] (fun _ -> [v1])) (specT int [v0] (fun _ -> [v1])))
+        [v0; v2] (fun _ -> [v1; v2])
+  = _ by (norm_test (); let _ = build_tree_cond true in ())
+
+let test_build_tree_cond__if_1 (v0 v1 v2 : vprop')
+  : M.tree_cond
+        (M.Tbind int int
+           (M.Tif _ true (specT int [v0] (fun _ -> [v1])) (specT int [v0] (fun _ -> [v1])))
+           (fun _ -> M.Tret int 42 (fun _ -> [])))
+        [v0; v2] (fun _ -> [v1; v2])
+  = _ by (norm_test (); let _ = build_tree_cond true in ())
+
+/// This example fails because the inference of the post-condition of the `if` statement uses the inference of
+/// the first branch, hence chooses [fun _ -> vx 0].
+[@@expect_failure [228]]
+let test_build_tree_cond__if_2 (vx : int -> vprop')
+  : M.tree_cond
+        (M.Tbind int int
+          (M.Tif _ true (M.Tret int 0 (fun _ -> [])) (specT int [vx 0] (fun x -> [vx x])) )
+          (fun x -> M.Tret int x (fun _ -> [])))
+        [vx 0] (fun x -> [vx x])
+  = _ by (norm_test (); let _ = build_tree_cond true in ())
+
+/// The solution is to add a [sl_hint] to the return of the first branch.
+let test_build_tree_cond__if_3 (vx : int -> vprop')
+  : M.tree_cond
+        (M.Tbind int int
+          (M.Tif _ true (M.Tret int 0 (fun x -> [vx x])) (specT int [vx 0] (fun x -> [vx x])) )
+          (fun x -> M.Tret int x (fun _ -> [])))
+        [vx 0] (fun x -> [vx x])
+  = _ by (norm_test (); let _ = build_tree_cond true in ())
+
+/// Here the post-condition is known from the specification.
+let test_build_tree_cond__if_4 (vx : int -> vprop')
+  : M.tree_cond
+        (M.Tif _ true (M.Tret int 0 (fun x -> [])) (specT int [vx 0] (fun x -> [vx x])))
+        [vx 0] (fun x -> [vx x])
+  = _ by (norm_test (); let _ = build_tree_cond true in ())
+
+/// Note that there is an asymmetry between the two branches in the inference.
+let test_build_tree_cond__if_5 (vx : int -> vprop')
+  : M.tree_cond
+        (M.Tbind int int
+          (M.Tif _ true (specT int [vx 0] (fun x -> [vx x])) (M.Tret int 0 (fun _ -> [])))
+          (fun x -> M.Tret int x (fun _ -> [])))
+        [vx 0] (fun x -> [vx x])
+  = _ by (norm_test (); let _ = build_tree_cond true in ())
+
+
+[@@expect_failure [228]]
 let test_steel__ret_ghost_0 (r : ref int)
   : SteelT (Ghost.erased (ref int)) (vptr r) (fun r' -> vptr (Ghost.reveal r'))
   = Steel.Effect.Atomic.return (Ghost.hide r)
@@ -237,7 +288,7 @@ let test_steel__ret_ghost_1 (r : ref int)
   = let r' = Ghost.hide r in
     Steel.Effect.Atomic.return r'
 
-[@@expect_failure]
+[@@expect_failure [228]]
 let test_steel__ret_f (v : int -> vprop) (x : int) (f : int -> int)
   : SteelT int (v (f x)) (fun y -> v y)
   = Steel.Effect.Atomic.return (f x)

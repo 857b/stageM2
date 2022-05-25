@@ -30,6 +30,11 @@ let equiv_TbindP #a #b #pre #post wp f g g' eq_g
             norm [iota];
             smt ())
 
+let equiv_Tif #a guard #pre #post thn thn' els els' eq_thn eq_els
+  = _ by T.(norm [delta_only [`%equiv; `%tree_req; `%tree_ens]; zeta];
+            norm [iota];
+            smt ())
+
 let equiv_Tbind_assoc_Tbind #a #b #c #pre #itm0 #itm1 #post f g h
   : squash (equiv (bind (bind f g) h) (bind f (fun x -> bind (g x) h)))
   = _ by T.(norm [delta_only [`%equiv; `%tree_req; `%tree_ens; `%bind]; zeta];
@@ -223,6 +228,11 @@ let rec repr_ST_of_M_req (#a : Type) (t : M.prog_tree a)
             <==> {U.f_equal tree_req (repr_ST_of_M _ (TCbindP #a #b #wp #x #g pre post cg)) (repr_ST_of_M _ c)}
               tree_req (repr_ST_of_M _ c) sl0;
             }
+  | TCif #a #guard #thn #els  pre post  cthn cels ->
+            if guard
+            then repr_ST_of_M_req thn cthn sl0
+            else repr_ST_of_M_req els cels sl0
+  
 
 and repr_ST_of_M_ens (#a : Type) (t : M.prog_tree a)
                      (#pre : M.pre_t) (#post : M.post_t a) (c : M.tree_cond t pre post)
@@ -295,6 +305,11 @@ and repr_ST_of_M_ens (#a : Type) (t : M.prog_tree a)
                                    (repr_ST_of_M _ c)}
               tree_ens (repr_ST_of_M _ c) sl0 res sl1;
             }
+
+  | TCif #a #guard #thn #els  pre post  cthn cels ->
+            if guard
+            then repr_ST_of_M_ens thn cthn sl0 res sl1
+            else repr_ST_of_M_ens els cels sl0 res sl1
 #pop-options
 
 
@@ -337,6 +352,10 @@ let rec repr_ST_of_M_shape
             let M.SbindP _ _ s_g = s in
             introduce forall (x : a) . prog_has_shape (repr_ST_of_M (g x) (cg x)) (shape_ST_of_M s_g)
               with repr_ST_of_M_shape (g x) (cg x) s_g
+  | TCif #a #guard #thn #els  pre post  cthn cels ->
+            let M.Sif _ _ s_thn s_els = s in
+            repr_ST_of_M_shape thn cthn s_thn;
+            repr_ST_of_M_shape els cels s_els
 #pop-options
 
 
@@ -388,6 +407,10 @@ and flatten_equiv_aux
              equiv_TbindP wp f g1 g
                (fun x -> flatten_equiv (g x));
              k_equiv _ (TbindP _ _ _ _ wp f g1) t
+  | Tif a guard pre post thn els ->
+             equiv_Tif guard (flatten_prog thn) thn (flatten_prog els) els
+                       (flatten_equiv thn) (flatten_equiv els);
+             k_equiv _ (Tif a guard pre post (flatten_prog thn) (flatten_prog els)) t
 
 let rec flatten_prog_shape
       #a #pre #post (t : prog_tree u#a u#b a pre post)
@@ -415,7 +438,7 @@ and flatten_prog_shape_aux
            let Sframe _ _ frame_n s_f = s in
            flatten_prog_shape f s_f;
            k_hyp _ (Tframe _ _ _ frame (flatten_prog f))
-                       (Sframe _ _ frame_n (flatten_shape s_f))
+                   (Sframe _ _ frame_n (flatten_shape s_f))
   | Tbind  a b pre itm post f g ->
            let t = Tbind a b pre itm post f g in
            let Sbind pre_n itm_n post_n s_f s_g = s in
@@ -443,5 +466,11 @@ and flatten_prog_shape_aux
            introduce forall (x : a) . prog_has_shape (g1 x) (flatten_shape s_g)
              with flatten_prog_shape (g x) s_g;
            k_hyp _ (TbindP _ _ _ _ wp f g1) (SbindP _ _ (flatten_shape s_g))
+  | Tif a guard pre post thn els ->
+           let Sif _ _ s_thn s_els = s in
+           flatten_prog_shape thn s_thn;
+           flatten_prog_shape els s_els;
+           k_hyp _ (Tif a guard pre post (flatten_prog thn) (flatten_prog els))
+                   (Sif _ _ (flatten_shape s_thn) (flatten_shape s_els))
 
 #pop-options

@@ -390,6 +390,10 @@ type prog_tree : (a : Type u#a) -> Type u#(max (a+1) 2) =
   | TbindP : (a : Type u#a) -> (b : Type u#a) ->
              (wp : pure_wp a) -> (x : unit -> PURE a wp) -> (g : a -> prog_tree b) ->
              prog_tree b
+  // if-then-else
+  | Tif    : (a : Type u#a) -> (guard : bool) ->
+             (thn : prog_tree a) -> (els : prog_tree a) ->
+             prog_tree a
 
 
 (*** slprop unification conditions *)
@@ -434,6 +438,10 @@ type tree_cond : (#a : Type u#a) -> (t : prog_tree a) -> (pre : pre_t) -> (post 
               (pre : pre_t) -> (post : post_t b) ->
               (cg : ((x : a) -> tree_cond (g x) pre post)) ->
               tree_cond (TbindP a b wp x g) pre post
+  | TCif    : (#a : Type u#a) -> (#guard : bool) -> (#thn : prog_tree a) -> (#els : prog_tree a) ->
+              (pre : pre_t) -> (post : post_t a) ->
+              (cthn : tree_cond thn pre post) -> (cels : tree_cond els pre post) ->
+              tree_cond (Tif a guard thn els) pre post
 
 (**** Shape *)
 
@@ -449,6 +457,9 @@ type shape_tree : (pre_n : nat) -> (post_n : nat) -> Type =
              shape_tree pre_n post_n
   | SbindP : (pre_n : nat) -> (post_n : nat) ->
              (g : shape_tree pre_n post_n) ->
+             shape_tree pre_n post_n
+  | Sif    : (pre_n : nat) -> (post_n : nat) ->
+             (thn : shape_tree pre_n post_n) -> (els : shape_tree pre_n post_n) ->
              shape_tree pre_n post_n
 
 unfold
@@ -502,6 +513,12 @@ let rec tree_cond_has_shape
       | SbindP _ post_n s_g ->
         (forall (x : a) . tree_cond_has_shape (g x) s_g) /\
         (forall (y : b) . L.length (post y) = post_n)
+      | _ -> False)
+  | TCif #a pre post thn els ->
+      (match s with
+      | Sif _ _ s_thn s_els ->
+        tree_cond_has_shape thn s_thn /\
+        tree_cond_has_shape els s_els
       | _ -> False)
 
 noeq inline_for_extraction
@@ -578,6 +595,18 @@ let bind_pure_ens (#a : Type) (#b : Type)
   : ens_t pre b post
   = fun sl0 y sl1 -> (exists (x:a) . as_ensures wp x /\ ens x sl0 y sl1)
 
+(** if-then-else *)
+
+let ite_req (#a : Type) (guard : bool) (#pre : pre_t)
+      (req_thn : req_t pre) (req_els : req_t pre)
+  : req_t pre
+  = fun sl0 -> if guard then req_thn sl0 else req_els sl0
+
+let ite_ens (#a : Type) (guard : bool) (#pre : pre_t) (#post : post_t a)
+      (ens_thn : ens_t pre a post) (ens_els : ens_t pre a post)
+  : ens_t pre a post
+  = fun sl0 x sl1 -> if guard then ens_thn sl0 x sl1 else ens_els sl0 x sl1
+
 
 (** prog_tree *)
 
@@ -595,6 +624,8 @@ let rec tree_req (#a : Type u#a) (t : prog_tree a)
              bind_req (tree_req f cf) (tree_ens f cf) (fun x -> tree_req (g x) (cg x))
   | TCbindP #_ #_ #wp #_ #g  pre _  cg ->
              bind_pure_req wp (fun x -> tree_req (g x) (cg x))
+  | TCif #a #guard  pre _ thn els ->
+             ite_req #a guard (tree_req _ thn) (tree_req _ els)
 
 and tree_ens (#a : Type u#a) (t : prog_tree a)
              (#pre : pre_t) (#post : post_t a) (c : tree_cond t pre post)
@@ -613,6 +644,9 @@ and tree_ens (#a : Type u#a) (t : prog_tree a)
              bind_ens (tree_ens f cf) (fun x -> tree_ens (g x) (cg x))
   | TCbindP #_ #_ #wp #_ #g  pre post  cg ->
              bind_pure_ens wp (fun x -> tree_ens (g x) (cg x))
+  | TCif #a #guard  pre post thn els ->
+             ite_ens #a guard (tree_ens _ thn) (tree_ens _ els)
+
 
 
 (*** "Monad" *)
@@ -772,4 +806,59 @@ let bind (#a #b : Type) (f : repr a) (g : a -> repr b)
                                    = (g x).repr_steel _ _ (cg x) in
                     U.cast (repr_steel_t b pre0 post0 (tree_req _ c) (tree_ens _ c))
                            (bind_steel a b tf tg pre itm post cf cg (f.repr_steel _ _ cf) rg))
+  }
+
+
+inline_for_extraction noextract
+let bindP_steel
+      (a : Type) (b : Type) (wp : pure_wp a) (f : unit -> PURE a wp) (g : (a -> prog_tree b))
+      (pre : pre_t) (post : post_t b)
+      (cg : ((x : a) -> tree_cond (g x) pre post))
+      ($rg : (x : a) -> repr_steel_t b pre post (tree_req (g x) (cg x)) (tree_ens (g x) (cg x)))
+  : (let c = TCbindP #a #b #wp #f #g pre post cg in
+     repr_steel_t b pre post (tree_req _ c) (tree_ens _ c))
+  = 
+    FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp;
+    fun () ->
+    let x = f () in
+    rg x ()
+
+[@@ __repr_M__]
+inline_for_extraction
+let bindP (#a #b : Type) (wp : pure_wp a) (f : unit -> PURE a wp) (g : a -> repr b)
+  : repr b
+  = {
+    repr_tree  = TbindP a b wp f (fun x -> (g x).repr_tree);
+    repr_steel = (fun pre0 post0 c ->
+                    let (TCbindP #a' #b' #wp #tf #tg pre post cg) = c in
+                    let rg (x : a) : repr_steel_t b pre post _ _
+                                   = (g x).repr_steel _ _ (cg x) in
+                    U.cast (repr_steel_t b pre0 post0 (tree_req _ c) (tree_ens _ c))
+                           (bindP_steel a b wp f tg pre post cg rg))
+  }
+
+
+inline_for_extraction noextract
+let ite_steel
+      (a : Type) (guard : bool) (thn : prog_tree a) (els : prog_tree a)
+      (pre : pre_t) (post : post_t a)
+      (cthn : tree_cond thn pre post) (cels : tree_cond els pre post)
+      ($rthn : repr_steel_t a pre post (tree_req thn cthn) (tree_ens thn cthn))
+      ($rels : repr_steel_t a pre post (tree_req els cels) (tree_ens els cels))
+  : (let c = TCif #a #guard #thn #els pre post cthn cels in
+     repr_steel_t a pre post (tree_req _ c) (tree_ens _ c))
+  = fun () ->
+    if guard then rthn () else rels ()
+
+[@@ __repr_M__]
+inline_for_extraction
+let ite (#a : Type) (guard : bool) (thn : repr a) (els : repr a)
+  : repr a
+  = {
+    repr_tree  = Tif a guard thn.repr_tree els.repr_tree;
+    repr_steel = (fun pre0 post0 c ->
+                    let (TCif pre post cthn cels) = c in
+                    U.cast (repr_steel_t a pre0 post0 (tree_req _ c) (tree_ens _ c))
+                           (ite_steel a guard _ _ pre post cthn cels
+                              (thn.repr_steel _ _ cthn) (els.repr_steel _ _ cels)))
   }

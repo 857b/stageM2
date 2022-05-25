@@ -73,6 +73,10 @@ let rec repr_Fun_of_SF_req #val_t #sel_t (t : prog_tree val_t sel_t)
           <==> {_ by T.(apply_lemma (`U.iff_refl); trefl ())}
             Fun.tree_req (repr_Fun_of_SF (TbindP a b post wp f g));
           }
+  | Tif a guard post thn els ->
+          if guard
+          then repr_Fun_of_SF_req thn
+          else repr_Fun_of_SF_req els
 
 and repr_Fun_of_SF_ens #val_t #sel_t (t : prog_tree val_t sel_t)
                           (val_v : val_t) (sel_v : Fl.flist (sel_t val_v))
@@ -113,6 +117,10 @@ and repr_Fun_of_SF_ens #val_t #sel_t (t : prog_tree val_t sel_t)
           introduce forall (x : a) .
                     (tree_ens (g x) val_v sel_v <==> Fun.tree_ens (repr_Fun_of_SF (g x)) ({val_v; sel_v}))
             with repr_Fun_of_SF_ens (g x) val_v sel_v
+  | Tif a guard post thn els ->
+          if guard
+          then repr_Fun_of_SF_ens thn val_v sel_v
+          else repr_Fun_of_SF_ens els val_v sel_v
 
 #pop-options
 
@@ -136,4 +144,8 @@ let rec repr_Fun_of_SF_shape
           introduce forall (x : a) .
               Fun.prog_has_shape (repr_Fun_of_SF (g x)) (shape_Fun_of_SF s_g)
             with repr_Fun_of_SF_shape (g x) (mk_prog_shape _ s_g)
+  | Tif a guard post thn els ->
+          let Sif _ s_thn s_els = s.shp in
+          repr_Fun_of_SF_shape thn (mk_prog_shape thn s_thn);
+          repr_Fun_of_SF_shape els (mk_prog_shape els s_els)
 #pop-options

@@ -516,6 +516,46 @@ let test_frame_equalities_2 (#a : Type) (r0 r1 : ref a)
       (requires fun h0 -> sel r0 h0 == sel r1 h0) (ensures fun h0 () h1 -> sel r0 h1 == sel r1 h1)
   = F.(to_steel (call (test_steel_with_frame_equality r0) r1) (_ by (mk_steel [Dump Stage_WP])))
 
+////////// test if-then-else //////////
+
+let test_ite_0 (r : ref U32.t)
+  : F.steel unit (vptr r) (fun () -> vptr r)
+      (requires fun _ -> True) (ensures fun _ () h1 -> U32.v (sel r h1) <= 10)
+  = F.(to_steel begin
+    x <-- call read r;
+    ite U32.(x >=^ 10ul) (
+      call (write r) 0ul
+    ) (
+      call (write r) (U32.(x +%^ 1ul))
+    )
+  end (_ by (mk_steel [Dump Stage_WP])))
+
+let test_ite_1 (r : ref U32.t)
+  : F.steel (ref U32.t) (vptr r) (fun r' -> vptr r')
+      (requires fun _ -> True) (ensures fun h0 r' h1 -> sel r' h1 == sel r h0)
+  = F.(to_steel begin
+    ite true (
+      return r
+    ) (
+      return r
+    )
+  end (_ by (mk_steel [])))
+
+
+////////// test pure //////////
+
+// This generate another SMT query that fails
+//[@@ handle_smt_goals ]
+//let tac () = T.dump "SMT query"
+[@@ expect_failure [19]]
+let test_pure (x : U32.t)
+  : F.steel unit emp (fun () -> emp)
+      (requires fun _ -> U32.v x <= 10) (ensures fun _ () _ -> True)
+  = F.(to_steel begin
+    x' <-- pure (fun () -> U32.(x +^ 1ul));
+    return ()
+  end (_ by (mk_steel [Dump Stage_WP])))
+
 ////////// test failures //////////
 
 [@@ expect_failure [228]]

@@ -32,6 +32,8 @@ let rec repr_SF_of_ST
           Tbind a b  _ _ (repr_SF_of_ST f sl0) (fun x sl1 -> repr_SF_of_ST (g x) sl1)
   | ST.TbindP a b pre post wp f g ->
           TbindP a b _ wp f (fun x -> repr_SF_of_ST (g x) sl0)
+  | ST.Tif a guard pre post thn els ->
+          Tif a guard post (repr_SF_of_ST thn sl0) (repr_SF_of_ST els sl0)
 
 let rec shape_SF_of_ST
       (#pre_n #post_n : nat) (t : ST.shape_tree pre_n post_n)
@@ -49,6 +51,8 @@ let rec shape_SF_of_ST
           Sbind _ _ (shape_SF_of_ST s_f) (shape_SF_of_ST s_g)
   | ST.SbindP pre_n post_n s_g ->
           SbindP _ (shape_SF_of_ST s_g)
+  | ST.Sif pre_n post_n s_thn s_els ->
+          Sif _ (shape_SF_of_ST s_thn) (shape_SF_of_ST s_els)
 
 
 (*** Soundness *)

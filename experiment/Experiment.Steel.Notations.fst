@@ -43,6 +43,16 @@ let bind (#a #b : Type) (f : M.repr a) (g : a -> M.repr b)
   = M.bind #a #b f g
 
 unfold
+let pure (#a : Type) (#wp : pure_wp a) ($f : unit -> PURE a wp)
+  : M.repr a
+  = M.bindP wp f (fun x -> M.return x)
+
+unfold
+let ite (#a : Type) (guard : bool) (thn : M.repr a) (els : M.repr a)
+  : M.repr a
+  = M.ite guard thn els
+
+unfold
 let call (#b : Type)
       (#a : b -> Type) (#pre : b -> SE.pre_t) (#post : (x : b) -> SE.post_t (a x))
       (#req : (x : b) -> SE.req_t (pre x)) (#ens : (x : b) -> SE.ens_t (pre x) (a x) (post x))

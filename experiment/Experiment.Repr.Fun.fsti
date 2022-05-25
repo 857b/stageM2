@@ -102,6 +102,9 @@ type prog_tree (#s : tys u#t u#v u#r) : s.t -> Type u#(max t v r a + 1) =
   | TbindP : (a : Type u#a) -> (b : s.t) ->
              (wp : pure_wp a) -> (x : unit -> PURE a wp) -> (g : a -> prog_tree #s b) ->
              prog_tree #s b
+  | Tif    : (a : s.t) -> (guard : bool) ->
+             (thn : prog_tree #s a) -> (els : prog_tree #s a) ->
+             prog_tree #s a
 
 unfold
 let return (#s : tys) (#a : s.t) ($x : s.v a) : prog_tree #s a
@@ -119,6 +122,7 @@ type shape_tree : Type0 =
   | Sret   : (smp_ret : bool) -> shape_tree
   | Sbind  : (f : shape_tree) -> (g : shape_tree) -> shape_tree
   | SbindP : (g : shape_tree) -> shape_tree
+  | Sif    : (thn : shape_tree) -> (els : shape_tree) -> shape_tree
 
 let rec prog_has_shape (#ts : tys) (#a : ts.t) (t : prog_tree u#t u#v u#r u#a #ts a) (s : shape_tree)
   : Tot prop (decreases t)
@@ -136,6 +140,10 @@ let rec prog_has_shape (#ts : tys) (#a : ts.t) (t : prog_tree u#t u#v u#r u#a #t
   | TbindP a _ _ f g -> exists (s_g : shape_tree) .
                        s == SbindP s_g /\
                       (forall (x : a) . prog_has_shape (g x) s_g)
+  | Tif _ _ thn els  -> exists (s_thn : shape_tree) (s_els : shape_tree) .
+                       s == Sif s_thn s_els /\
+                       prog_has_shape thn s_thn /\
+                       prog_has_shape els s_els
 
 let rec prog_has_shape' (#ts : tys) (#a : ts.t) (t : prog_tree u#t u#v u#r u#a #ts a) (s : shape_tree)
   : Pure prop (requires True) (ensures fun p -> p <==> prog_has_shape t s) (decreases t)
@@ -156,6 +164,11 @@ let rec prog_has_shape' (#ts : tys) (#a : ts.t) (t : prog_tree u#t u#v u#r u#a #
                        | SbindP s_g ->
                           (forall (x : a) . prog_has_shape' (g x) s_g)
                        | _ -> False)
+  | Tif _ _ thn els  -> (match s with
+                       | Sif s_thn s_els ->
+                          prog_has_shape' thn s_thn /\
+                          prog_has_shape' els s_els
+                       | _ -> False)
 
 
 type prog_shape (#ts : tys) (#a : ts.t) (t : prog_tree #ts a) =
@@ -173,24 +186,26 @@ type prog_shape (#ts : tys) (#a : ts.t) (t : prog_tree #ts a) =
 let rec tree_req (#s : tys) (#a : s.t) (t : prog_tree #s a)
   : Tot pure_pre (decreases t)
   = match t with
-  | Tnew   _          -> True
-  | Tasrt  p          -> p
-  | Tasum  _          -> True
-  | Tspec  _ pre _    -> pre
-  | Tret   _ _        -> True
-  | Tbind  a b f g    -> tree_req f /\ s.all a (fun (x : s.v a) -> tree_ens f x ==> tree_req (g x))
-  | TbindP a _ wp _ g -> wp (fun x -> tree_req (g x))
+  | Tnew   _            -> True
+  | Tasrt  p            -> p
+  | Tasum  _            -> True
+  | Tspec  _ pre _      -> pre
+  | Tret   _ _          -> True
+  | Tbind  a b f g      -> tree_req f /\ s.all a (fun (x : s.v a) -> tree_ens f x ==> tree_req (g x))
+  | TbindP a _ wp _ g   -> wp (fun x -> tree_req (g x))
+  | Tif    a gd thn els -> if gd then tree_req thn else tree_req els
 
 and tree_ens (#s : tys) (#a : s.t) (t : prog_tree #s a)
   : Tot (pure_post (s.v a)) (decreases t)
   = match t with
-  | Tnew   _          -> fun _  -> True
-  | Tasrt  p          -> fun _(*()*) -> True (* p ?*)
-  | Tasum  p          -> fun _(*()*) -> p
-  | Tspec  a _ post   -> post
-  | Tret   _ x        -> fun r  -> r == s.v_of_r x
-  | Tbind  a _ f g    -> fun y  -> s.ex a (fun (x : s.v a) -> tree_ens f x /\ tree_ens (g x) y)
-  | TbindP a _ wp _ g -> fun y -> (exists (x : a) . as_ensures wp x /\ tree_ens (g x) y)
+  | Tnew   _            -> fun _  -> True
+  | Tasrt  p            -> fun _(*()*) -> True (* p ?*)
+  | Tasum  p            -> fun _(*()*) -> p
+  | Tspec  a _ post     -> post
+  | Tret   _ x          -> fun r  -> r == s.v_of_r x
+  | Tbind  a _ f g      -> fun y  -> s.ex a (fun (x : s.v a) -> tree_ens f x /\ tree_ens (g x) y)
+  | TbindP a _ wp _ g   -> fun y -> (exists (x : a) . as_ensures wp x /\ tree_ens (g x) y)
+  | Tif    a gd thn els -> fun y -> if gd then tree_ens thn y else tree_ens els y
 
 
 (***** Equivalence *)
@@ -224,6 +239,12 @@ val equiv_TbindP
       (eq_g : (x : a) -> squash (equiv (g x) (g' x)))
   : Lemma (equiv (TbindP a b wp f g) (TbindP a b wp f g'))
 
+val equiv_Tif
+      (#s : tys) (#a : s.t) (guard : bool)
+      (thn thn' : prog_tree a) (els els' : prog_tree a)
+      (eq_thn : squash (equiv thn thn')) (eq_els : squash (equiv els els'))
+  : Lemma (equiv (Tif a guard thn els) (Tif a guard thn' els'))
+
 val equiv_Tbind_assoc_Tbind
       (#s : tys) (#a #b #c : s.t)
       (f : prog_tree #s a) (g : (x : s.v a) -> prog_tree b) (h : (y : s.v b) -> prog_tree c)
@@ -246,6 +267,9 @@ let rec tree_wp (#s : tys) (#a : s.t) (t : prog_tree #s a)
                         MP.as_pure_wp (fun pt -> tree_wp f (fun (x : s.v a) -> tree_wp (g x) pt))
   | TbindP a _ wp _ g -> MP.elim_pure_wp_monotonicity_forall ();
                         MP.as_pure_wp (fun pt -> wp (fun (x : a) -> tree_wp (g x) pt))
+  | Tif a gd thn els  -> MP.elim_pure_wp_monotonicity_forall ();
+                        MP.as_pure_wp (fun pt -> (  gd  ==> tree_wp thn pt) /\
+                                              ((~gd) ==> tree_wp els pt))
 
 val tree_wp_sound (#s : tys) (#a : s.t) (t : prog_tree #s a) (post : pure_post (s.v a))
   : Lemma (requires tree_wp t post)
@@ -261,6 +285,7 @@ val tree_wp_sound (#s : tys) (#a : s.t) (t : prog_tree #s a) (post : pure_post (
 /// returns in order to be able to push them below [TbindP].
 /// We only simplify the returns marked with [smp_ret] in the shape, that is, the returns introduced by the
 /// previous transformations. (TODO: test)
+/// The shape is also used to detect return on the right of bind.
 
 noeq
 type elim_returns_k (st : tys) (a a1 : st.t) =
@@ -319,6 +344,9 @@ and elim_returns_aux
          | ERetKfun kf -> TbindP a a1 wp f (fun (x : a) -> elim_returns_aux lm (g x) s_g (ERetKfun kf))
          | ERetKtrm kt -> bind #b #a1 (TbindP a b wp f (fun (x : a) -> elim_returns lm (g x) s_g)) kt
          end
+  | Tif a guard thn els ->
+        let Sif s_thn s_els = s in
+        bind (Tif a guard (elim_returns lm thn s_thn) (elim_returns lm els s_els)) (elim_returns_k_trm k)
 
 val elim_returns_equiv
       (#st : tys) (lm : tys_lam u#t u#v u#r u#(max t v r a + 1) st)

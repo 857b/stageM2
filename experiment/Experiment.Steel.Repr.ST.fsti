@@ -41,6 +41,10 @@ type prog_tree : (a : Type u#a) -> (pre : pre_t u#b) -> (post : post_t u#a u#b a
              (pre : pre_t) -> (post : post_t b) ->
              (wp : pure_wp a) -> (x : unit -> PURE a wp) -> (g : a -> prog_tree b pre post) ->
              prog_tree b pre post
+  | Tif    : (a : Type u#a) -> (guard : bool) ->
+             (pre : pre_t) -> (post : post_t a) ->
+             (thn : prog_tree a pre post) -> (els : prog_tree a pre post) ->
+             prog_tree a pre post
 
 
 (* TODO ? r can requires t == t0*) 
@@ -91,14 +95,23 @@ let match_prog_tree
                        (requires a0 == b /\ pre0 == pre /\ post0 == post /\
                                  t0 == TbindP a b pre post wp x g)
                        (ensures fun _ -> True))
+      (c_Tif    : (a : Type) -> (guard : bool) -> (pre : pre_t) -> (post : post_t a) ->
+                  (thn : prog_tree a pre post {thn << t0}) ->
+                  (els : prog_tree a pre post {els << t0}) ->
+                  Pure (r _ _ _ (Tif a guard pre post thn els))
+                       (requires a0 == a /\ pre0 == pre /\ post0 == post /\
+                                 t0 == Tif a guard pre post thn els)
+                       (ensures fun _ -> True))
+
   : r _ _ _ t0
   = match t0 as t returns r _ _ _ t with
-    | Tequiv pre post p           -> c_Tequiv pre post p
-    | Tframe a pre post frame f   -> c_Tframe a pre post frame f
-    | Tspec  a pre post req ens   -> c_Tspec  a pre post req ens
-    | Tret   a x post             -> c_Tret   a x post
-    | Tbind  a b pre itm post f g -> c_Tbind  a b pre itm post f g
-    | TbindP a b pre post wp x g  -> c_TbindP a b pre post wp x g
+    | Tequiv pre post p               -> c_Tequiv pre post p
+    | Tframe a pre post frame f       -> c_Tframe a pre post frame f
+    | Tspec  a pre post req ens       -> c_Tspec  a pre post req ens
+    | Tret   a x post                 -> c_Tret   a x post
+    | Tbind  a b pre itm post f g     -> c_Tbind  a b pre itm post f g
+    | TbindP a b pre post wp x g      -> c_TbindP a b pre post wp x g
+    | Tif    a guard pre post thn els -> c_Tif    a guard pre post thn els
 
 unfold
 let bind (#a : Type) (#b : Type) (#pre : pre_t) (#itm : post_t a) (#post : post_t b)
@@ -123,6 +136,8 @@ let rec tree_req (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree a 
                (forall (x : a) (sl1 : Fl.flist (itm x)) . tree_ens f sl0 x sl1 ==> tree_req (g x) sl1))
   | TbindP a _  _ _  wp _ g ->
              (fun sl0 -> wp (fun (x : a) -> tree_req (g x) sl0))
+  | Tif    _ guard _ _ thn els ->
+             tree_req (if guard then thn else els)
 
 and tree_ens (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree a pre post)
   : Tot (ens_t pre a post) (decreases t)
@@ -144,6 +159,8 @@ and tree_ens (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree a pre 
                (exists (x : a) (sl1 : Fl.flist (itm x)) . tree_ens f sl0 x sl1 /\ tree_ens (g x) sl1 y sl2))
   | TbindP a _  _ _  wp _ g ->
              (fun sl0 y sl1 -> (exists (x : a) . as_ensures wp x /\ tree_ens (g x) sl0 y sl1))
+  | Tif    _ guard _ _ thn els ->
+             tree_ens (if guard then thn else els)
 
 (***** [equiv] *)
 
@@ -170,6 +187,12 @@ val equiv_TbindP
       (f : unit -> PURE a wp) (g g' : (x : a) -> prog_tree b pre post)
       (eq_g : (x : a) -> squash (equiv (g x) (g' x)))
   : squash (equiv (TbindP a b pre post wp f g) (TbindP a b pre post wp f g'))
+
+val equiv_Tif
+      (#a : Type) (guard : bool) (#pre : pre_t) (#post : post_t a)
+      (thn thn' : prog_tree a pre post) (els els' : prog_tree a pre post)
+      (eq_thn : squash (equiv thn thn')) (eq_els : squash (equiv els els'))
+  : squash (equiv (Tif a guard pre post thn els) (Tif a guard pre post thn' els'))
 
 val equiv_Tbind_assoc_Tbind
       (#a #b #c : Type) (#pre : pre_t) (#itm0 : post_t a) (#itm1 : post_t b) (#post : post_t c)
@@ -212,6 +235,9 @@ type shape_tree : (pre_n : nat) -> (post_n : nat) -> Type =
   | SbindP : (pre_n : nat) -> (post_n : nat) ->
              (g : shape_tree pre_n post_n) ->
              shape_tree pre_n post_n
+  | Sif    : (pre_n : nat) -> (post_n : nat) ->
+             (thn : shape_tree pre_n post_n) -> (els : shape_tree pre_n post_n) ->
+             shape_tree pre_n post_n
 
 let post_has_len (#a : Type) (post : post_t a) (len : nat) : prop = forall (x : a) . L.length (post x) = len
 
@@ -243,6 +269,11 @@ let rec prog_has_shape (#a : Type u#a) (#pre : pre_t u#b) (#post : post_t u#a u#
     | TbindP a _ pre post _ _ g   -> exists (s_g : shape_tree (L.length pre) post_n) .
                                     s == SbindP _ _ s_g /\
                                    (forall (x : a) . prog_has_shape (g x) s_g)
+    | Tif    _ _ pre post thn els -> exists (s_thn : shape_tree (L.length pre) post_n)
+                                      (s_els : shape_tree (L.length pre) post_n) .
+                                    s == Sif _ _ s_thn s_els /\
+                                    prog_has_shape thn s_thn /\
+                                    prog_has_shape els s_els
     )
 
 let rec prog_has_shape' (#a : Type u#a) (#pre : pre_t u#b) (#post : post_t u#a u#b a)
@@ -277,6 +308,11 @@ let rec prog_has_shape' (#a : Type u#a) (#pre : pre_t u#b) (#post : post_t u#a u
                                       (forall (x : a) . prog_has_shape' (g x) s_g) /\
                                       (forall (y : b) . post_n = L.length (post y))
                                   | _ -> False)
+  | Tif    _ _ pre post thn els -> (match s with
+                                  | Sif _ _ s_thn s_els ->
+                                      prog_has_shape' thn s_thn /\
+                                      prog_has_shape' els s_els
+                                  | _ -> False)
 
 
 noeq
@@ -290,6 +326,7 @@ let mk_prog_shape (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree a
                   (#post_len : nat) (shp : shape_tree (L.length pre) post_len {prog_has_shape t shp})
   : prog_shape t =
   { post_len; shp}
+
 
 
 (*** Repr.M --> Repr.ST *)
@@ -331,6 +368,8 @@ let rec repr_ST_of_M (#a : Type) (t : M.prog_tree u#a a)
              repr_ST_of_M (g x) (cg x)
   | TCbindP #a #b #wp #x #g  pre post  cg ->
              TbindP a b _ _ wp x (fun x -> repr_ST_of_M (g x) (cg x))
+  | TCif #a #guard #thn #els pre post cthn cels ->
+             Tif a guard _ _ (repr_ST_of_M thn cthn) (repr_ST_of_M els cels)
 
 
 let rec shape_ST_of_M (#pre_n : nat) (#post_n : nat) (s : M.shape_tree pre_n post_n)
@@ -345,6 +384,7 @@ let rec shape_ST_of_M (#pre_n : nat) (#post_n : nat) (s : M.shape_tree pre_n pos
         Sbind _ _ _ (Sequiv n (Perm.perm_f_of_list p)) (Sret false n)
   | M.Sbind _ _ _ f g -> Sbind  _ _ _ (shape_ST_of_M f) (shape_ST_of_M g)
   | M.SbindP _ _ g    -> SbindP _ _ (shape_ST_of_M g)
+  | M.Sif _ _ thn els -> Sif _ _ (shape_ST_of_M thn) (shape_ST_of_M els)
                     
 
 
@@ -397,6 +437,8 @@ and flatten_prog_aux
              // we do not flatten the TbindP since we would need [equiv_Tbind_assoc_Tbind]
              k (TbindP a b pre post wp f (fun (x : a) ->
                flatten_prog (g x)))
+  | Tif a guard pre post thn els ->
+             k (Tif a guard pre post (flatten_prog thn) (flatten_prog els))
 
 
 let flatten_shape_k_id #post_n #pre'_n (t' : shape_tree pre'_n post_n) : shape_tree pre'_n post_n
@@ -420,7 +462,8 @@ and flatten_shape_aux
                Sbind pre'_n itm_n post1_n f' (flatten_shape_aux g k))
   | SbindP _ _ g ->
              k (SbindP _ _ (flatten_shape g))
-
+  | Sif _ _ thn els ->
+             k (Sif _ _ (flatten_shape thn) (flatten_shape els))
 
 
 val flatten_equiv

@@ -34,6 +34,18 @@ let equiv_TbindP
             norm [iota];
             smt ())
 
+let equiv_Tif
+      (#s : tys) (#a : s.t) (guard : bool)
+      (thn thn' : prog_tree a) (els els' : prog_tree a)
+      (eq_thn : squash (equiv thn thn')) (eq_els : squash (equiv els els'))
+  : Lemma (equiv (Tif a guard thn els) (Tif a guard thn' els'))
+  =
+    assert (equiv (Tif a guard thn els) (Tif a guard thn' els'))
+      by T.(norm [delta_only [`%equiv; `%tree_req; `%tree_ens]; zeta];
+            norm [iota];
+            smt ())
+
+
 let equiv_Tbind_assoc_Tbind
       (#s : tys) (#a #b #c : s.t)
       (f : prog_tree #s a) (g : (x : s.v a) -> prog_tree b) (h : (y : s.v b) -> prog_tree c)
@@ -70,6 +82,10 @@ let rec tree_wp_sound (#s : tys) (#a : s.t) (t : prog_tree #s a) (post : pure_po
         with introduce _ ==> _ with _ . tree_wp_sound (g x) post;
       assert (tree_req (TbindP a b wp xf g) == (wp req1)) by T.(trefl ());
       U.prop_equal (fun p -> p) (wp req1) (tree_req (TbindP a b wp xf g))
+  | Tif a guard thn els ->
+      if guard
+      then tree_wp_sound thn post
+      else tree_wp_sound els post
 
 
 (*** Returns elimination *)
@@ -109,7 +125,7 @@ let equiv_bind_ret_ret (#st : tys) (#a #b #c : st.t) (f : prog_tree #st a)
     }
 #pop-options
 
-#push-options "--ifuel 1 --z3rlimit 20"
+#push-options "--ifuel 1 --z3rlimit 30"
 let rec elim_returns_equiv
       (#st : tys) (lm : tys_lam st) (#a : st.t) (t : prog_tree #st a) (s : prog_shape t)
   : Lemma (ensures equiv (elim_returns lm t s) t) (decreases %[t; 1])
@@ -203,4 +219,13 @@ and elim_returns_equiv_aux
                equiv_TbindP wp f g1 g (fun x -> elim_returns_equiv lm (g x) s_g);
                equiv_Tbind (TbindP _ _ wp f g1) (TbindP _ _ wp f g) kt kt () (fun _ -> ())
            end
+
+  | Tif a guard thn els ->
+           let Sif s_thn s_els = s in
+           equiv_Tbind
+             (Tif a guard (elim_returns lm thn s_thn) (elim_returns lm els s_els)) (Tif a guard thn els)
+             (elim_returns_k_trm k) (elim_returns_k_trm k)
+             (equiv_Tif guard (elim_returns lm thn s_thn) thn (elim_returns lm els s_els) els
+                        (elim_returns_equiv lm thn s_thn) (elim_returns_equiv lm els s_els))
+             (fun _ -> ())
 #pop-options

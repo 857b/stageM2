@@ -38,6 +38,10 @@ let rec post_src_f_of_shape (#pre_n : nat) (#post_n : nat) (s : ST.shape_tree pr
            (fun i -> None)
   | ST.SbindP pre_n post_n g ->
            (fun i -> None)
+  | ST.Sif pre_n post_n thn els ->
+           (fun i -> match post_src_f_of_shape thn i, post_src_f_of_shape els i with
+                  | Some j0, Some j1 -> if j0 = j1 then Some j0 else None
+                  | _ -> None)
 
 
 let post_src_well_typed (pre post : Fl.ty_list) (f : post_src_f (L.length pre) (L.length post)) : prop
@@ -82,6 +86,7 @@ type post_bij_t (#pre_n : nat) (#post_n : nat) (s : post_src_f pre_n post_n) =
       r.idx_SF (r.idx_ST j) = j)
   }
 
+(* TODO? this is very similar to the mask operations in CondSolver, factorize *)
 let rec mk_post_bij (#pre_n : nat) (#post_n : nat) (s : post_src_f pre_n post_n)
   : Tot (post_bij_t s) (decreases post_n)
   = if post_n = 0 then {
@@ -117,6 +122,8 @@ let rec post_bij (#post_n : nat) (#pre_n : nat) (s : ST.shape_tree pre_n post_n)
            { len_SF = post_n; idx_SF = (fun i -> i); idx_ST = (fun j -> j) }
   | ST.SbindP pre_n post_n g ->
            { len_SF = post_n; idx_SF = (fun i -> i); idx_ST = (fun j -> j) }
+  | ST.Sif _ _ _ _ ->
+           mk_post_bij (post_src_f_of_shape s)
 
 
 let postl_SF_of_ST
@@ -246,6 +253,19 @@ let rec repr_SF_of_ST
                        (repr_SF_of_ST (g x) s_g sl0) (fun y sl1' ->
             let sl1 = sel_ST_of_SF (g x) s_g sl0 y sl1' in
             return_SF_post_of_ST post s.shp y sl1))
+    | ST.Tif a guard pre post thn els -> fun s sl0 ->
+            (**) let ST.Sif _ _ shp_thn shp_els = s.shp in
+            (**) let s_thn = ST.mk_prog_shape thn shp_thn in
+            (**) let s_els = ST.mk_prog_shape els shp_els in
+            Tif a guard (post_SF_of_ST post s.shp)
+              (Tbind a a (post_SF_of_ST post shp_thn) _
+                 (repr_SF_of_ST thn s_thn sl0) (fun x sl1' ->
+                 let sl1 = sel_ST_of_SF thn s_thn sl0 x sl1' in
+                 return_SF_post_of_ST post s.shp x sl1))
+              (Tbind a a (post_SF_of_ST post shp_els) _
+                 (repr_SF_of_ST els s_els sl0) (fun x sl1' ->
+                 let sl1 = sel_ST_of_SF els s_els sl0 x sl1' in
+                 return_SF_post_of_ST post s.shp x sl1))
 
 /// A version that returns all selectors, to be used at top-level
 let repr_SF_of_ST_rall
@@ -276,6 +296,9 @@ let rec shape_SF_of_ST
                       (Sret true post_n))
     | ST.SbindP pre_n post_n s_g ->
             SbindP _ (Sbind _ _ (shape_SF_of_ST s_g) (Sret true post_n))
+    | ST.Sif pre_n post_n s_thn s_els ->
+            Sif _ (Sbind _ _ (shape_SF_of_ST s_thn) (Sret true _))
+                  (Sbind _ _ (shape_SF_of_ST s_els) (Sret true _))
 
 let shape_SF_of_ST_rall
       (#pre_n #post_n : nat) (t : ST.shape_tree pre_n post_n)

@@ -46,6 +46,11 @@ let rec repr_SF_of_ST_req
           ST.tree_req (g x) sl0 <==> tree_req (repr_SF_of_ST (g x) sl0)
         with repr_SF_of_ST_req (g x) sl0;
       FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp
+    end
+    begin fun (*ST.Tif*) a guard pre post thn els -> fun sl0 ->
+      if guard
+      then repr_SF_of_ST_req thn sl0
+      else repr_SF_of_ST_req els sl0
     end sl0
 
 and repr_SF_of_ST_ens
@@ -108,6 +113,11 @@ and repr_SF_of_ST_ens
       == { _ by T.(trefl ()) }
         tree_ens (repr_SF_of_ST (ST.TbindP a b pre post wp f g) sl0) y sl1;
       }
+    end
+    begin fun (*ST.Tif*) a guard pre post thn els -> fun sl0 x sl1 ->
+      if guard
+      then repr_SF_of_ST_ens thn sl0 x sl1
+      else repr_SF_of_ST_ens els sl0 x sl1
     end sl0 res sl1
 #pop-options
 
@@ -147,5 +157,10 @@ let rec repr_SF_of_ST_shape
                 [SMTPat (g x)]
         = repr_SF_of_ST_shape (g x) s_g sl0
       in ()
+    end
+    begin fun (*ST.Tif*) a guard pre post thn els -> fun s _ sl0 ->
+      let ST.Sif _ _ s_thn s_els = s in
+      repr_SF_of_ST_shape thn s_thn sl0;
+      repr_SF_of_ST_shape els s_els sl0
     end s () sl0
 #pop-options

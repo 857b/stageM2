@@ -31,6 +31,10 @@ type prog_tree : (a : Type u#a) -> (post : post_t u#a u#b a) -> Type u#(1 + max 
              (post : post_t b) ->
              (wp : pure_wp a) -> (x : unit -> PURE a wp) -> (g : a -> prog_tree b post) ->
              prog_tree b post
+  | Tif    : (a : Type u#a) -> (guard : bool) ->
+             (post : post_t a) ->
+             (thn : prog_tree a post) -> (els : prog_tree a post) ->
+             prog_tree a post
 
 let rec tree_req (#a : Type) (#post : post_t a) (t : prog_tree a post)
   : Tot req_t (decreases t)
@@ -44,6 +48,8 @@ let rec tree_req (#a : Type) (#post : post_t a) (t : prog_tree a post)
                (forall (x : a) (sl : post_v itm x) . tree_ens f x sl ==> tree_req (g x sl))
   | TbindP a _  _  wp _ g ->
              wp (fun (x : a) -> tree_req (g x))
+  | Tif a guard _ thn els ->
+             tree_req (if guard then thn else els)
 
 and tree_ens (#a : Type) (#post : post_t a) (t : prog_tree a post)
   : Tot (ens_t a post) (decreases t)
@@ -59,6 +65,8 @@ and tree_ens (#a : Type) (#post : post_t a) (t : prog_tree a post)
   | TbindP a _  post0  wp _ g ->
              (fun y (sl1 : post_v post y) ->
                (exists (x : a) . as_ensures wp x /\ tree_ens (g x) y sl1))
+  | Tif a guard _ thn els ->
+             tree_ens (if guard then thn else els)
 
 
 (***** Shape *)
@@ -73,6 +81,9 @@ type shape_tree : (post_n : nat) -> Type =
              shape_tree post_n
   | SbindP : (post_n : nat) ->
              (g : shape_tree post_n) ->
+             shape_tree post_n
+  | Sif    : (post_n : nat) ->
+             (thn : shape_tree post_n) -> (els : shape_tree post_n) ->
              shape_tree post_n
 
 let rec prog_has_shape (#a : Type u#a) (#post : post_t u#a u#b a)
@@ -96,6 +107,11 @@ let rec prog_has_shape (#a : Type u#a) (#post : post_t u#a u#b a)
     | TbindP a _ post _ _ g   -> exists (s_g : shape_tree post_n) .
                                 s == SbindP _ s_g /\
                                (forall (x : a) . prog_has_shape (g x) s_g)
+    | Tif a gd post thn els   -> exists (s_thn : shape_tree post_n)
+                                  (s_els : shape_tree post_n) .
+                                s == Sif _ s_thn s_els /\
+                                prog_has_shape thn s_thn /\
+                                prog_has_shape els s_els
     )
 
 noeq
@@ -259,6 +275,8 @@ let rec repr_Fun_of_SF (#val_t : Type u#a) (#sel_t : post_t u#a u#b val_t) (t : 
           Fun.Tbind _ _ (repr_Fun_of_SF f) (sl_uncurrify (fun x sls -> repr_Fun_of_SF (g x sls)))
   | TbindP a b post wp f g ->
           Fun.TbindP a ({val_t = b; sel_t = post}) wp f (fun (x : a) -> repr_Fun_of_SF (g x))
+  | Tif a guard post thn els ->
+          Fun.Tif ({val_t = a; sel_t = post}) guard (repr_Fun_of_SF thn) (repr_Fun_of_SF els)
 
 let rec shape_Fun_of_SF (#post_n : nat) (s : shape_tree post_n)
   : Tot (Fun.shape_tree) (decreases s)
@@ -267,6 +285,7 @@ let rec shape_Fun_of_SF (#post_n : nat) (s : shape_tree post_n)
   | Sret  smp_ret _   -> Fun.Sret smp_ret
   | Sbind _ _ s_f s_g -> Fun.Sbind  (shape_Fun_of_SF s_f) (shape_Fun_of_SF s_g)
   | SbindP  _ s_g     -> Fun.SbindP (shape_Fun_of_SF s_g)
+  | Sif   _ thn els   -> Fun.Sif    (shape_Fun_of_SF thn) (shape_Fun_of_SF els)
 
 (***** soundness of SF --> Fun *)
 

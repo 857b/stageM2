@@ -804,6 +804,10 @@ type pre_shape_tree : (pre_n : int) -> (post_n : int) -> Type =
   | PSbindP : (pre_n : int) -> (post_n : int) ->
               (g : pre_shape_tree pre_n post_n) ->
               pre_shape_tree pre_n post_n
+  | PSif    : (pre_n : int) -> (post_n : int) ->
+              (thn : pre_shape_tree pre_n post_n) ->
+              (els : pre_shape_tree pre_n post_n) ->
+              pre_shape_tree pre_n post_n
 
 type shape_tree_t = (pre_n : nat & post_n : nat & pre_shape_tree pre_n post_n)
 
@@ -829,6 +833,10 @@ let rec shape_tree_of_pre (#pre_n : nat) (#post_n : nat) (ps : pre_shape_tree pr
   | PSbindP pre_n post_n g ->
           (match shape_tree_of_pre g with
           | Some g -> Some (M.SbindP pre_n post_n g)
+          | _ -> None)
+  | PSif pre_n post_n thn els ->
+          (match shape_tree_of_pre thn, shape_tree_of_pre els with
+          | Some thn, Some els -> Some (M.Sif pre_n post_n thn els)
           | _ -> None)
 
 
@@ -1041,6 +1049,18 @@ and build_TCbindP (post : bool) : Tac shape_tree_t
     let (|pre_g, post_g, s_g|) = build_tree_cond post in
     (|pre_g, post_g, PSbindP pre_g post_g s_g|)
 
+/// If the post-condition of an `if` statement is not specified, it is inferred from the `then` branch.
+/// Any annotation ([sl_hint] for the return) for the post-condition of the `if` should thus be on the first branch.
+and build_TCif (post : bool) : Tac shape_tree_t
+  = apply (`M.TCif);
+    let (|pre_thn, post_thn, s_thn|) = build_tree_cond post in
+    let (|pre_els, post_els, s_els|) = build_tree_cond true in
+
+    let ctx () = [Info_location "in the if statement"] in
+    if pre_thn  <> pre_els  then cs_raise ctx (fun m -> fail (m (Fail_shape_unification pre_thn pre_els) []));
+    if post_thn <> post_els then cs_raise ctx (fun m -> fail (m (Fail_shape_unification post_thn post_els) []));
+    (|pre_thn, post_thn, PSif pre_thn post_thn s_thn s_els|)
+
 and build_tree_cond (post : bool) : Tac shape_tree_t
   =
     let build_tac : bool -> Tac shape_tree_t =
@@ -1062,6 +1082,7 @@ and build_tree_cond (post : bool) : Tac shape_tree_t
           | "Tret"   -> build_TCret 
           | "Tbind"  -> build_TCbind
           | "TbindP" -> build_TCbindP
+          | "Tif"    -> build_TCif
           | _ -> fail_shape ()
           end
       | _ -> fail_shape ()
