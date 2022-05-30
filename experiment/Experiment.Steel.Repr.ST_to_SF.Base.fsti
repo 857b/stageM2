@@ -13,6 +13,7 @@ open Experiment.Steel.Repr.SF
 
 #set-options "--fuel 1 --ifuel 1"
 
+[@@ strict_on_arguments [3]] (* strict on t *)
 let rec repr_SF_of_ST
       (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
       (t : ST.prog_tree a pre post) (sl0 : Fl.flist pre)
@@ -35,6 +36,7 @@ let rec repr_SF_of_ST
   | ST.Tif a guard pre post thn els ->
           Tif a guard post (repr_SF_of_ST thn sl0) (repr_SF_of_ST els sl0)
 
+[@@ strict_on_arguments [2]] (* strict on t *)
 let rec shape_SF_of_ST
       (#pre_n #post_n : nat) (t : ST.shape_tree pre_n post_n)
   : Tot (shape_tree post_n) (decreases t)

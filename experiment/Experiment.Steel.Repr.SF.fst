@@ -95,13 +95,11 @@ and repr_Fun_of_SF_ens #val_t #sel_t (t : prog_tree val_t sel_t)
                == (exists (x : a) (sl1 : post_v itm x) . tree_ens f x sl1 /\ tree_ens (g x sl1) val_v sel_v) )
                by T.(trefl ());
           assert (Fun.tree_ens (repr_Fun_of_SF (Tbind a b itm post f g)) ({val_v; sel_v})
-               == (let () = U.block_red in
-                   sl_tys.ex ({val_t=a; sel_t=itm}) (fun (x_sl1 : sl_tys_v ({val_t=a; sel_t=itm})) ->
+               == sl_tys.ex ({val_t=a; sel_t=itm}) (fun (x_sl1 : sl_tys_v ({val_t=a; sel_t=itm})) ->
                      Fun.tree_ens (repr_Fun_of_SF f) x_sl1 /\
                      Fun.tree_ens
-                      (sl_uncurrify (fun x sls -> repr_Fun_of_SF (g x sls)) x_sl1) ({val_v; sel_v}))))
-               by T.(norm [delta_only [`%repr_Fun_of_SF; `%Fun.tree_ens]; zeta];
-                     norm [delta_only [`%U.block_red]; iota];
+                      (sl_uncurrify (fun x sls -> repr_Fun_of_SF (g x sls)) x_sl1) ({val_v; sel_v})))
+               by T.(norm [delta_only [`%repr_Fun_of_SF; `%Fun.tree_ens]; iota; zeta];
                      trefl ());
           introduce forall (x : a) (sl1 : post_v itm x) .
                     (tree_ens f x sl1   <==> Fun.tree_ens (repr_Fun_of_SF f) ({val_v=x; sel_v=sl1})) /\

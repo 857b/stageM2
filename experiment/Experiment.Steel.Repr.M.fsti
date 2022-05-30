@@ -487,6 +487,7 @@ let tree_cond_has_shape_Spec
        p1')
   | _ -> False
 
+[@@ strict_on_arguments [4;6]] (* strict on c;s *)
 let rec tree_cond_has_shape
       (#a : Type) (#pre : pre_t) (#post0 : post_t a) (#t : prog_tree a)
       (c : tree_cond t pre post0)
@@ -610,6 +611,7 @@ let ite_ens (#a : Type) (guard : bool) (#pre : pre_t) (#post : post_t a)
 
 (** prog_tree *)
 
+[@@ strict_on_arguments [4]] (* strict on c *)
 let rec tree_req (#a : Type u#a) (t : prog_tree a)
                  (#pre : pre_t) (#post : post_t a) (c : tree_cond t pre post)
   : Tot (req_t pre) (decreases t) =
@@ -646,7 +648,6 @@ and tree_ens (#a : Type u#a) (t : prog_tree a)
              bind_pure_ens wp (fun x -> tree_ens (g x) (cg x))
   | TCif #a #guard  pre post thn els ->
              ite_ens #a guard (tree_ens _ thn) (tree_ens _ els)
-
 
 
 (*** "Monad" *)

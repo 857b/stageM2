@@ -36,6 +36,7 @@ type prog_tree : (a : Type u#a) -> (post : post_t u#a u#b a) -> Type u#(1 + max 
              (thn : prog_tree a post) -> (els : prog_tree a post) ->
              prog_tree a post
 
+[@@ strict_on_arguments [2]] (* strict on t *)
 let rec tree_req (#a : Type) (#post : post_t a) (t : prog_tree a post)
   : Tot req_t (decreases t)
   = match t with
@@ -86,6 +87,7 @@ type shape_tree : (post_n : nat) -> Type =
              (thn : shape_tree post_n) -> (els : shape_tree post_n) ->
              shape_tree post_n
 
+[@@ strict_on_arguments [2]] (* strict on t *)
 let rec prog_has_shape (#a : Type u#a) (#post : post_t u#a u#b a)
                        (t : prog_tree a post)
                        (#post_n : nat) (s : shape_tree post_n)
@@ -262,6 +264,7 @@ let sl_tys_lam : Fun.tys_lam sl_tys =
 
 (***** Translation of the representation *)
 
+[@@ strict_on_arguments [2]] (* strict on t *)
 let rec repr_Fun_of_SF (#val_t : Type u#a) (#sel_t : post_t u#a u#b val_t) (t : prog_tree val_t sel_t)
   : Tot (Fun.prog_tree u#(max a b + 1) u#(max a (b + 1)) u#(max a (b + 1)) u#a
                        #(sl_tys u#a u#b) ({val_t; sel_t}))
@@ -278,6 +281,7 @@ let rec repr_Fun_of_SF (#val_t : Type u#a) (#sel_t : post_t u#a u#b val_t) (t : 
   | Tif a guard post thn els ->
           Fun.Tif ({val_t = a; sel_t = post}) guard (repr_Fun_of_SF thn) (repr_Fun_of_SF els)
 
+[@@ strict_on_arguments [1]] (* strict on s *)
 let rec shape_Fun_of_SF (#post_n : nat) (s : shape_tree post_n)
   : Tot (Fun.shape_tree) (decreases s)
   = match s with

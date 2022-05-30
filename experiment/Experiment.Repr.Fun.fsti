@@ -124,6 +124,7 @@ type shape_tree : Type0 =
   | SbindP : (g : shape_tree) -> shape_tree
   | Sif    : (thn : shape_tree) -> (els : shape_tree) -> shape_tree
 
+[@@ strict_on_arguments [2]] (* strict on t *)
 let rec prog_has_shape (#ts : tys) (#a : ts.t) (t : prog_tree u#t u#v u#r u#a #ts a) (s : shape_tree)
   : Tot prop (decreases t)
   = match t returns prop with
@@ -183,6 +184,7 @@ type prog_shape (#ts : tys) (#a : ts.t) (t : prog_tree #ts a) =
 /// to the post-condition of `f` only when the pre-condition holds.
 /// The same holds for [as_requires wp] in the post-condition of [TbindP].
 
+[@@ strict_on_arguments [2]] (* strict on t *)
 let rec tree_req (#s : tys) (#a : s.t) (t : prog_tree #s a)
   : Tot pure_pre (decreases t)
   = match t with
@@ -255,6 +257,7 @@ val equiv_Tbind_assoc_Tbind
 
 (***** Weakest-precondition *)
 
+[@@ strict_on_arguments [2]] (* strict on t *)
 let rec tree_wp (#s : tys) (#a : s.t) (t : prog_tree #s a)
   : Tot (pure_wp (s.v a)) (decreases t)
   = match t with

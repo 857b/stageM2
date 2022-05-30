@@ -211,6 +211,7 @@ val post_SF_of_ST__ret
   : Lemma (post_SF_of_ST post (ST.Sret smp_ret post_n) == U.eta post)
 
 
+[@@ strict_on_arguments [3]] (* strict on t *)
 let rec repr_SF_of_ST
       (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
       (t : ST.prog_tree a pre post)
@@ -278,6 +279,7 @@ let repr_SF_of_ST_rall
     Tret a x post (Fl.dlist_of_f sl1))
 
 
+[@@ strict_on_arguments [2]] (* strict on t *)
 let rec shape_SF_of_ST
       (#pre_n #post_n : nat) (t : ST.shape_tree pre_n post_n)
   : Tot (shape_tree (post_bij t).len_SF) (decreases t)

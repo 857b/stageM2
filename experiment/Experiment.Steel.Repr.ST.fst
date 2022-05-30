@@ -10,15 +10,12 @@ open FStar.Calc
 #push-options "--ifuel 0"
 
 let equiv_Tframe #a #pre #post frame f f' eq_f
-  = _ by T.(//unfold one level of tree_ens / tree_req
-            norm [delta_only [`%equiv; `%tree_req; `%tree_ens]; zeta];
-            norm [iota];
+  = _ by T.(norm [delta_only [`%equiv; `%tree_req; `%tree_ens]; iota; zeta];
             smt ())
 
 let equiv_Tbind #a #b #pre #itm #post f f' g g' eq_f eq_g
   = let eq_g = FStar.Classical.forall_intro_squash_gtot eq_g in
-    _ by T.(norm [delta_only [`%equiv; `%tree_req; `%tree_ens]; zeta];
-            norm [iota];
+    _ by T.(norm [delta_only [`%equiv; `%tree_req; `%tree_ens]; iota; zeta];
             smt ())
 
 let equiv_TbindP #a #b #pre #post wp f g g' eq_g
@@ -26,19 +23,16 @@ let equiv_TbindP #a #b #pre #post wp f g g' eq_g
     FStar.Classical.forall_intro_squash_gtot eq_g;
     FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp;
     assert (equiv (TbindP a b pre post wp f g) (TbindP a b pre post wp f g'))
-      by T.(norm [delta_only [`%equiv; `%tree_req; `%tree_ens]; zeta];
-            norm [iota];
+      by T.(norm [delta_only [`%equiv; `%tree_req; `%tree_ens]; iota; zeta];
             smt ())
 
 let equiv_Tif #a guard #pre #post thn thn' els els' eq_thn eq_els
-  = _ by T.(norm [delta_only [`%equiv; `%tree_req; `%tree_ens]; zeta];
-            norm [iota];
+  = _ by T.(norm [delta_only [`%equiv; `%tree_req; `%tree_ens]; iota; zeta];
             smt ())
 
 let equiv_Tbind_assoc_Tbind #a #b #c #pre #itm0 #itm1 #post f g h
   : squash (equiv (bind (bind f g) h) (bind f (fun x -> bind (g x) h)))
-  = _ by T.(norm [delta_only [`%equiv; `%tree_req; `%tree_ens; `%bind]; zeta];
-            norm [iota];
+  = _ by T.(norm [delta_only [`%equiv; `%tree_req; `%tree_ens; `%bind]; iota; zeta];
             smt ())
 
 #pop-options

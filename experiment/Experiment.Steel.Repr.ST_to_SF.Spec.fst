@@ -112,6 +112,12 @@ let post_eq_src_ST_SF_ST
 #pop-options
 
 
+let normal_equiv : list norm_step = [
+  delta_only [`%req_equiv; `%ens_equiv; `%repr_SF_of_ST; `%return_SF_post_of_ST;
+              `%ST.tree_req; `%ST.tree_ens; `%tree_req; `%tree_ens;
+              `%ST.Mkprog_shape?.shp; `%ST.mk_prog_shape];
+  iota; zeta
+]
 
 #push-options "--z3rlimit 10"
 let repr_SF_of_ST_ens__Tframe a pre post frame f
@@ -375,7 +381,7 @@ let repr_SF_of_ST_ens__TbindP a b pre post
       (let sl1f = sel_ST_of_SF (g x) (s_g x) sl0 yg sl1g in
        y == yg /\ sl1' == Fl.flist_of_d (Fl.dlist_of_f (sel_SF_of_ST post s.shp yg sl1f))
       )))))
-    )) by T.(trefl ());
+    )) by T.(norm normal_equiv; trefl ());
 
     assert (post_eq_src post_src_t sl0 sl1);
   
@@ -419,22 +425,9 @@ let repr_SF_of_ST_req__Tif a pre post
   =
     calc (<==>) {
       ST.tree_req (ST.Tif a guard pre post thn els) sl0;
-    == { _ by T.(trefl ()) }
-      ST.tree_req (if guard then thn else els) sl0;
-    <==> { _ by T.(norm [simplify]; smt ()) }
-      if guard
-      then (tree_req (repr_SF_of_ST thn (ST.mk_prog_shape thn shp_thn) sl0) /\
-            (forall (x : a) (sl1 : post_v (post_SF_of_ST post shp_thn) x) .
-             tree_ens (repr_SF_of_ST thn (ST.mk_prog_shape thn shp_thn) sl0) x sl1 ==> True))
-      else (tree_req (repr_SF_of_ST els (ST.mk_prog_shape els shp_els) sl0) /\
-            (forall (x : a) (sl1 : post_v (post_SF_of_ST post shp_els) x) .
-             tree_ens (repr_SF_of_ST els (ST.mk_prog_shape els shp_els) sl0) x sl1 ==> True));
-    == { _ by T.(clear_top (); clear_top (); revert(*guard*)();
-                 norm [delta_only [`%repr_SF_of_ST]; zeta]; norm [iota];
-                 norm [delta_only [`%ST.mk_prog_shape; `%ST.Mkprog_shape?.shp]]; norm [iota];
-                 norm [delta_only [`%tree_req]; zeta]; norm [iota];
+    <==> { _ by T.(clear_top (); clear_top (); revert(*guard*)();
                  apply (`case_bool);
-                 iterAll trefl) }
+                 let _ = repeatn 2 (fun () -> norm normal_equiv; smt ()) in ()) }
       tree_req (repr_SF_of_ST (ST.Tif a guard pre post thn els)
                               (ST.mk_prog_shape _ (ST.Sif _ _ shp_thn shp_els)) sl0);
     }
@@ -483,7 +476,7 @@ let repr_SF_of_ST_ens__add_ret #a #pre #post
                          let sl1_0 = sel_ST_of_SF t s sl0 x sl1' in
                          return_SF_post_of_ST post shp' x sl1_0))
                   x (sel_SF_of_ST post shp' x sl1);
-       == { _ by T.(trefl ()) }
+       == { _ by T.(norm normal_equiv; trefl ()) }
          exists (x' : a) (sl1' : post_v (post_SF_of_ST post s.shp) x') .
            tree_ens (repr_SF_of_ST t s sl0) x' sl1' /\
            (x == x' /\
@@ -542,12 +535,7 @@ let repr_SF_of_ST_ens__Tif a guard pre post
                  let sl1_0 = sel_ST_of_SF thn s_thn sl0 x sl1' in
                  return_SF_post_of_ST post s.shp x sl1_0))
                  x (sel_SF_of_ST post s.shp x sl1))
-      )) by T.(norm [delta_only [`%ens_equiv; `%ST.mk_prog_shape; `%ST.Mkprog_shape?.shp]; iota];
-               apply_lemma (`U.eq2_trans);
-               norm [delta_only [`%repr_SF_of_ST; `%ST.tree_ens]; zeta]; norm [iota];
-               norm [delta_only [`%ST.Mkprog_shape?.shp]; iota];
-               norm [delta_only [`%tree_ens]; zeta]; norm [iota];
-               trefl (); trefl ());
+      )) by T.(norm normal_equiv; trefl ());
       repr_SF_of_ST_ens__add_ret thn s_thn s.shp sl0 x sl1
         ens_eq_thn (fun i -> ())
    end else begin
@@ -559,12 +547,7 @@ let repr_SF_of_ST_ens__Tif a guard pre post
                  let sl1_0 = sel_ST_of_SF els s_els sl0 x sl1' in
                  return_SF_post_of_ST post s.shp x sl1_0))
                  x (sel_SF_of_ST post s.shp x sl1))
-      )) by T.(norm [delta_only [`%ens_equiv; `%ST.mk_prog_shape; `%ST.Mkprog_shape?.shp]; iota];
-               apply_lemma (`U.eq2_trans);
-               norm [delta_only [`%repr_SF_of_ST; `%ST.tree_ens]; zeta]; norm [iota];
-               norm [delta_only [`%ST.Mkprog_shape?.shp]; iota];
-               norm [delta_only [`%tree_ens]; zeta]; norm [iota];
-               trefl (); trefl ());
+      )) by T.(norm normal_equiv; trefl ());
       repr_SF_of_ST_ens__add_ret els s_els s.shp sl0 x sl1
         ens_eq_els (fun i -> ())
    end

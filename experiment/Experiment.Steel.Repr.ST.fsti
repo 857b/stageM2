@@ -119,7 +119,7 @@ let bind (#a : Type) (#b : Type) (#pre : pre_t) (#itm : post_t a) (#post : post_
   : prog_tree b pre post
   = Tbind a b pre itm post f g
 
-(* TODO? generalize Experiment.Steel.Repr.M.bind_req... *)
+[@@ strict_on_arguments [3]] (* strict on t *)
 let rec tree_req (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree a pre post)
   : Tot (req_t pre) (decreases t)
   = match t with
@@ -241,6 +241,7 @@ type shape_tree : (pre_n : nat) -> (post_n : nat) -> Type =
 
 let post_has_len (#a : Type) (post : post_t a) (len : nat) : prop = forall (x : a) . L.length (post x) = len
 
+[@@ strict_on_arguments [3]] (* strict on t *)
 let rec prog_has_shape (#a : Type u#a) (#pre : pre_t u#b) (#post : post_t u#a u#b a)
                        (t : prog_tree a pre post)
                        (#post_n : nat) (s : shape_tree (L.length pre) post_n)
@@ -351,6 +352,7 @@ let repr_ST_of_M_Spec
            (vequiv_sl (tcs.tcs_post_eq x));;
     Tret _ x (post_ST_of_M tcs.tcs_post)
 
+[@@ strict_on_arguments [4]] (* strict on c *)
 let rec repr_ST_of_M (#a : Type) (t : M.prog_tree u#a a)
                      (#pre0 : M.pre_t) (#post0 : M.post_t a) (c : M.tree_cond t pre0 post0)
   : Tot (prog_tree a (vprop_list_sels_t pre0) (post_ST_of_M post0))
@@ -371,7 +373,7 @@ let rec repr_ST_of_M (#a : Type) (t : M.prog_tree u#a a)
   | TCif #a #guard #thn #els pre post cthn cels ->
              Tif a guard _ _ (repr_ST_of_M thn cthn) (repr_ST_of_M els cels)
 
-
+[@@ strict_on_arguments [2]] (* strict on s *)
 let rec shape_ST_of_M (#pre_n : nat) (#post_n : nat) (s : M.shape_tree pre_n post_n)
   : Tot (shape_tree pre_n post_n) (decreases s)
   = match s with
