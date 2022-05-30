@@ -315,6 +315,7 @@ let build_to_repr_t fr ctx : Tac unit
 
     // apply the rewriting hypothesis [eq_lem] to solve a goal [squash (h v == sl ?i)]
     let apply_rew ctx eq_lem =
+      let u_i' = fresh_uvar None in
       apply_raw eq_lem;
       // [VUnit?]
       norm [delta_only [`%SE.VUnit?]; iota];
@@ -322,6 +323,8 @@ let build_to_repr_t fr ctx : Tac unit
       // [elem_index]
       norm __normal_Steel_logical_spec;
       build_elem_index fr ctx;
+      // [i']
+      exact u_i';
       // [i' <- i]
       norm [delta_attr [`%__cond_solver__; `%__tac_helper__]];
       trefl ()

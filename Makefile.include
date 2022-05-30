@@ -22,14 +22,17 @@ INCLUDE_DIRS = \
   $(PROJECT_HOME)/obj
 
 IGNORE_KRML_FILES=\
+	obj/FStar_MST.krml \
+	obj/FStar_MSTTotal.krml \
 	obj/FStar_NMST.krml \
+	obj/FStar_NMSTTotal.krml \
 	obj/Steel_%.krml \
 	obj/Learn_Effect%.krml \
 	obj/Experiment_%.krml
 
 NO_IGNORE_KRML_FILES=\
 	obj/Experiment_Steel_Repr_M.krml \
-	obj/Experiment_Steel_Repr_Test_Extract.krml \
+	obj/Experiment_Steel_Test_Extract.krml \
 	obj/Steel_Effect_Common.krml
 
 FSTAR_INCLUDES  = $(addprefix --include ,$(INCLUDE_DIRS))

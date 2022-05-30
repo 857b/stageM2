@@ -10,7 +10,7 @@
 
 #include <stdint.h>
 #include "krml/internal/target.h"
-void Experiment_Steel_Repr_Test_Extract_test3(uint32_t *r0, uint32_t *r1);
+void Experiment_Steel_Test_Extract_test3(uint32_t *r0, uint32_t *r1);
 
 
 #define __experiment_H_DEFINED

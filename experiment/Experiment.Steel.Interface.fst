@@ -11,6 +11,7 @@ type stage =
   | Stage_SF
   | Stage_Fun
   | Stage_WP
+  | Stage_Extract
 
 type flag =
   | No of flag

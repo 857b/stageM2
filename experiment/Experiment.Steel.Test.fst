@@ -544,7 +544,8 @@ let test_ite_1 (r : ref U32.t)
 
 ////////// test pure //////////
 
-// This generate another SMT query that fails
+// This generates another SMT query that fails
+// ? because of a `pure_wp_monotonic`
 //[@@ handle_smt_goals ]
 //let tac () = T.dump "SMT query"
 [@@ expect_failure [19]]

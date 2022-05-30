@@ -196,7 +196,7 @@ dist/Makefile.basic: $(ALL_KRML_FILES) c/*
 	  $(filter %.krml,$^) \
 	  -warn-error @4@5@18 \
 	  -fparentheses \
-	  -bundle 'Experiment.Steel.Repr.Test.Extract=Experiment.Steel.*'[rename=experiment] \
+	  -bundle 'Experiment.Steel.Test.Extract=Experiment.Steel.*'[rename=experiment] \
 	  -bundle "$(NOEXTRACT)"\
 	  -bundle 'Learn.LowStar.List+Learn.LowStar.List.Impl=Learn.LowStar.List.*'[rename=list] \
 	  -bundle 'Learn.LowStar.Queue.Test=Learn.LowStar.Queue,Learn.LowStar.Queue.*'[rename=queue] \

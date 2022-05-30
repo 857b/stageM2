@@ -323,8 +323,9 @@ let solve_by_wp (fr : flags_record) : Tac unit
     // We normalize the resulting Steel program so that it can be extracted
     let t = timer_enter t "extract   " in
     unshelve u_ext_eq;
-    norm [delta_qualifier ["inline_for_extraction"];
+    norm [delta_qualifier ["inline_for_extraction"; "unfold"];
           iota; zeta; primops];
+    if fr.f_dump Stage_Extract then dump "at stage Extract";
     trefl ();
     timer_stop t
 
