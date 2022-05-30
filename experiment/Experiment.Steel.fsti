@@ -22,9 +22,11 @@ open FStar.Tactics
 open Learn.Tactics.Util
 open Experiment.Steel.Interface
 
+#push-options "--ifuel 0"
+(**) private val __begin_prog_M_to_Fun : unit
 
 let prog_M_to_Fun
-      (opti_ST2SF : bool)
+      (opt : prog_M_to_Fun_opt)
       (#a : Type) (t : M.repr a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
@@ -35,66 +37,81 @@ let prog_M_to_Fun
     let t_ST    = ST.repr_ST_of_M t.repr_tree t_M   in
     let shp_ST  = ST.shape_ST_of_M shp_M            in
     (**) ST.repr_ST_of_M_shape t.repr_tree t_M shp_M;
-    let t_ST'   = if opti_ST2SF
-                  then ST.flatten_prog t_ST
-                  else t_ST                         in
-    let shp_ST' = ST.flatten_shape shp_ST           in
-    (**) ST.flatten_prog_shape t_ST shp_ST;
+    let (|t_ST', shp_ST'|)
+      : (t : ST.prog_tree a _ _ & s : ST.shape_tree _ _ {ST.prog_has_shape t s}) =
+      if opt.o_flatten
+      then ((**) ST.flatten_prog_shape t_ST shp_ST;
+           (|ST.flatten_prog t_ST, ST.flatten_shape shp_ST|))
+      else (|t_ST, shp_ST|)                         in
     begin fun (sl0 : M.sl_f pre) ->
-      let t_SF = if opti_ST2SF then
-                   let s_ST' = ST.mk_prog_shape t_ST' shp_ST' in
-                   ST2SF_Spec.repr_SF_of_ST_rall t_ST' s_ST' sl0
-                 else ST2SF_Base.repr_SF_of_ST t_ST' sl0
+      let (|t_SF, shp_SF|)
+        : (t : SF.prog_tree a _ & s : SF.shape_tree _ {SF.prog_has_shape t s})
+        = if opt.o_ST2SF then (
+             let s_ST' = ST.mk_prog_shape t_ST' shp_ST' in
+             (**) ST2SF_Spec.repr_SF_of_ST_shape t_ST' s_ST' sl0;
+             (|ST2SF_Spec.repr_SF_of_ST_rall t_ST' s_ST' sl0, ST2SF_Spec.shape_SF_of_ST_rall shp_ST'|)
+          ) else (
+             (**) ST2SF_Base.repr_SF_of_ST_shape t_ST' shp_ST' sl0;
+             (|ST2SF_Base.repr_SF_of_ST t_ST' sl0, ST2SF_Base.shape_SF_of_ST shp_ST'|)
+          )
       in
-      SF.repr_Fun_of_SF t_SF
+      let t_Fun   = SF.repr_Fun_of_SF t_SF    in
+      let shp_Fun = SF.shape_Fun_of_SF shp_SF in
+      (**) SF.repr_Fun_of_SF_shape t_SF (SF.mk_prog_shape t_SF shp_SF);
+      if opt.o_elim_ret
+      then Fun.elim_returns SF.sl_tys_lam t_Fun shp_Fun
+      else t_Fun
     end
 
+#pop-options
+(**) private val __end_prog_M_to_Fun : unit
+
 val prog_M_to_Fun_equiv
-      (opti_ST2SF : bool)
+      (opt : prog_M_to_Fun_opt)
       (#a : Type) (t : M.repr a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
       (sl0 : M.sl_f pre)
-  : Lemma (M.tree_req t.repr_tree c.pc_tree sl0 <==> Fun.tree_req (prog_M_to_Fun opti_ST2SF t c sl0) /\
+  : Lemma (M.tree_req t.repr_tree c.pc_tree sl0 <==> Fun.tree_req (prog_M_to_Fun opt t c sl0) /\
           (M.tree_req t.repr_tree c.pc_tree sl0 ==>
           (forall (x : a) (sl1 : M.sl_f (post x)) .
                (M.tree_ens t.repr_tree c.pc_tree sl0 x sl1 <==>
-                Fun.tree_ens (prog_M_to_Fun opti_ST2SF t c sl0) SF.({val_v = x; sel_v = sl1})))))
+                Fun.tree_ens (prog_M_to_Fun opt t c sl0) SF.({val_v = x; sel_v = sl1})))))
 
 inline_for_extraction
 let prog_M_to_Fun_extract
-      (opti_ST2SF : bool)
+      (opt : prog_M_to_Fun_opt)
       (#a : Type) (t : M.repr a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
       (req : M.req_t pre) (ens : M.ens_t pre a post)
       (sub : (sl0 : M.sl_f pre) -> Lemma (requires req sl0)
-               (ensures Fun.tree_req (prog_M_to_Fun opti_ST2SF t c sl0) /\
+               (ensures Fun.tree_req (prog_M_to_Fun opt t c sl0) /\
                   (forall (x : a) (sl1 : M.sl_f (post x)) .
-                    Fun.tree_ens (prog_M_to_Fun opti_ST2SF t c sl0) SF.({val_v = x; sel_v = sl1}) ==>
+                    Fun.tree_ens (prog_M_to_Fun opt t c sl0) SF.({val_v = x; sel_v = sl1}) ==>
                     ens sl0 x sl1)))
   : M.repr_steel_t a pre post req ens
   =
     M.repr_steel_subcomp _ _ _ _
-      (fun sl0       -> let _ = sub sl0; prog_M_to_Fun_equiv opti_ST2SF t c sl0 in ())
-      (fun sl0 x sl1 -> let _ = prog_M_to_Fun_equiv opti_ST2SF t c sl0; sub sl0 in ())
+      (fun sl0       -> let _ = sub sl0; prog_M_to_Fun_equiv opt t c sl0 in ())
+      (fun sl0 x sl1 -> let _ = prog_M_to_Fun_equiv opt t c sl0; sub sl0 in ())
       (t.repr_steel pre post c.pc_tree)
 
 
 inline_for_extraction
 let prog_M_to_Fun_extract_wp
-      (opti_ST2SF : bool)
+      (opt : prog_M_to_Fun_opt)
       (#a : Type) (t : M.repr a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
       (req : M.req_t pre) (ens : M.ens_t pre a post)
       (wp : (sl0 : M.sl_f pre) -> Lemma
               (requires req sl0)
-              (ensures Fun.tree_wp (prog_M_to_Fun opti_ST2SF t c sl0) (fun res -> ens sl0 res.val_v res.sel_v)))
+              (ensures Fun.tree_wp (prog_M_to_Fun opt t c sl0) (fun res -> ens sl0 res.val_v res.sel_v)))
   : M.repr_steel_t a pre post req ens
-  = prog_M_to_Fun_extract opti_ST2SF t c req ens
+  = prog_M_to_Fun_extract opt t c req ens
       (fun sl0 -> wp sl0;
-               Fun.tree_wp_sound (prog_M_to_Fun opti_ST2SF t c sl0) (fun res -> ens sl0 res.val_v res.sel_v))
+               Fun.tree_wp_sound (prog_M_to_Fun opt t c sl0) (fun res -> ens sl0 res.val_v res.sel_v))
 
 
 (**** normalisation steps *)
@@ -236,19 +253,19 @@ let extract (a : Type) (pre : M.pre_t) (post : M.post_t a) (req : M.req_t pre) (
 [@@ __tac_helper__]
 inline_for_extraction
 let __solve_by_wp
-      (opti_ST2SF : bool)
+      (opt : prog_M_to_Fun_opt)
       (#a : Type) (#t : M.repr a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (#req : M.req_t pre) (#ens : M.ens_t pre a post)
       (c : M.prog_cond t.repr_tree pre post)
       (t_Fun : (sl0 : M.sl_f pre) ->
                GTot (Fun.prog_tree #SF.sl_tys SF.({val_t = a; sel_t = ST.post_ST_of_M post})))
-      (t_Fun_eq : squash (t_Fun == (fun sl0 -> prog_M_to_Fun opti_ST2SF t c sl0)))
+      (t_Fun_eq : squash (t_Fun == (fun sl0 -> prog_M_to_Fun opt t c sl0)))
       (wp : squash (Fl.forall_flist (M.vprop_list_sels_t pre) (fun sl0 ->
                req sl0 ==>
                Fun.tree_wp (t_Fun sl0) (fun res -> ens sl0 res.val_v res.sel_v))))
       (ext : M.repr_steel_t a pre post req ens)
-      (ext_eq : ext == prog_M_to_Fun_extract_wp opti_ST2SF t c req ens (fun sl0 -> ()))
+      (ext_eq : ext == prog_M_to_Fun_extract_wp opt t c req ens (fun sl0 -> ()))
   : extract a pre post req ens t
   =
     ext
@@ -256,21 +273,21 @@ let __solve_by_wp
 /// Solves a goal of the form [extract a pre post req ens t]
 let solve_by_wp (fr : flags_record) : Tac unit
   =
-    let opti_ST2SF = fr.o_ST2SF      in
+    let opt        = fr.o_M2Fun      in
     let u_c        = fresh_uvar None in
     let u_t_Fun    = fresh_uvar None in
     let u_t_Fun_eq = fresh_uvar None in
     let u_wp       = fresh_uvar None in
     let u_ext      = fresh_uvar None in
     let u_ext_eq   = fresh_uvar None in
-    apply_raw (`(__solve_by_wp (`#(quote opti_ST2SF)) (`#u_c) (`#u_t_Fun)
+    apply_raw (`(__solve_by_wp (`#(quote opt)) (`#u_c) (`#u_t_Fun)
                                (`#u_t_Fun_eq) (`#u_wp) (`#u_ext) (`#u_ext_eq)));
 
     let t = timer_start   "prog_cond " fr.f_timer in
     (* c *)
     unshelve u_c;
     norm __normal_M;
-    CSl.build_prog_cond ();
+    CSl.build_prog_cond fr;
 
     (* t_Fun *)
     unshelve u_t_Fun_eq;
@@ -286,6 +303,10 @@ let solve_by_wp (fr : flags_record) : Tac unit
     if fr.f_dump Stage_SF then dump "at stage SF";
     let t = timer_enter t "normal_Fun" in
     norm __normal_Fun;
+    if opt.o_elim_ret then begin
+      norm __normal_Fun_elim_returns_0;
+      norm __normal_Fun_elim_returns_1
+    end;
     if fr.f_dump Stage_Fun then dump "at stage Fun";
     let t = timer_enter t "misc      " in
     trefl ();
@@ -339,7 +360,7 @@ let build_to_steel (fr : flags_record) : Tac unit
     
     let t = timer_start "specs     " fr.f_timer in
     apply_raw (`__build_to_steel);
-    CSl.build_to_repr_t (fun () -> [Info_location "in the specification"]);
+    CSl.build_to_repr_t fr (fun () -> [Info_location "in the specification"]);
     timer_stop t;
 
     // [extract]

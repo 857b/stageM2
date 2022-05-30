@@ -572,3 +572,8 @@ let test_fail_slcond_0 (#a : Type) (r : ref a)
 let test_fail_slcond_1 (#a : Type) (r : ref a)
   : F.steel a (vptr r) (fun () -> emp) (fun _ -> True) (fun _ _ _ -> True)
   = F.(to_steel (call read r) (_ by (mk_steel [])))
+
+[@@ expect_failure [228]]
+let test_fail_to_repr_t (#a : Type) (r : ref a) (p : rmem (vptr r) -> prop)
+  : F.steel unit (vptr r) (fun () -> vptr r) (fun h0 -> p h0) (fun _ _ _ -> True)
+  = F.(to_steel (return ()) (_ by (mk_steel [])))

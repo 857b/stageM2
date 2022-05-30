@@ -12,19 +12,22 @@ open Learn.Tactics.Util
 open Steel.Effect
 open Steel.FractionalPermission
 open Steel.Reference
+open Experiment.Steel.Interface
 open Experiment.Steel.CondSolver
 
 
+let test_flags = make_flags_record [Full_Msg]
+
 let _ : elem_index #int 4 [1;3;4;2;7]
-  = _ by (build_elem_index dummy_ctx)
+  = _ by (build_elem_index test_flags dummy_ctx)
 
 [@@ expect_failure [228]]
 let _ : elem_index #int 5 [1;3;4;2;7]
-  = _ by (build_elem_index dummy_ctx)
+  = _ by (build_elem_index test_flags dummy_ctx)
 
 [@@ expect_failure [228]]
 let _ : elem_index #int 4 L.(0 :: ([1;3] @ [4;2;7]))
-  = _ by (build_elem_index dummy_ctx)
+  = _ by (build_elem_index test_flags dummy_ctx)
 
 unfold
 let specT (a : Type) (pre : M.pre_t) (post : M.post_t a) : M.prog_tree a
@@ -45,13 +48,13 @@ let test_TCspec_u (v0 v1 : vprop') : squash True =
         let _ =
           build (`(M.tree_cond (specT int [(`@v0)] (fun _ -> [(`@v1)]))
                                [(`@v0)] (`#post')))
-          (fun () -> norm_test (); build_TCspec false false)
+          (fun () -> norm_test (); build_TCspec test_flags false false)
         in ())
 
 let test_TCspec_p (v0 v1 v2 : vprop') (vx : int -> vprop')
   : M.tree_cond (specT int [v0; v1] (fun x -> [v0; vx x]))
                 ([v0; v1; v2]) (fun x -> [v2; vx x; v0])
-  = _ by (norm_test (); let _ = build_TCspec false true in ())
+  = _ by (norm_test (); let _ = build_TCspec test_flags false true in ())
 
 
 let test_TCspecS_u (v0 v1 : vprop') : squash True =
@@ -59,27 +62,27 @@ let test_TCspecS_u (v0 v1 : vprop') : squash True =
         let _ =
           build (`(M.tree_cond (M.TspecS int (VUnit (`@v0)) (fun _ -> VUnit (`@v1)) (fun _ -> True) (fun _ _ _ -> True))
                                [(`@v0)] (`#post')))
-          (fun () -> norm_test (); build_TCspec true false)
+          (fun () -> norm_test (); build_TCspec test_flags true false)
         in ())
 
 let test_TCspecS_p (v0 v1 v2 : vprop') (vx : int -> vprop')
   : M.tree_cond (M.TspecS int (VUnit v0 `star` VUnit v1) (fun x -> VUnit v0 `star` VUnit (vx x))
                             (fun _ -> True) (fun _ _ _ -> True))
                 ([v0; v1; v2]) (fun x -> [v2; vx x; v0])
-  = _ by (norm_test (); let _ = build_TCspec true true in ())
+  = _ by (norm_test (); let _ = build_TCspec test_flags true true in ())
 
 
 let test_TCret_u (v0 v1 : vprop') : squash True =
   _ by (let post' = fresh_uvar (Some (`(M.post_t int))) in
         let _,_ =
           build (`(M.tree_cond (M.Tret int 42 (fun _ -> [])) [(`@v0); (`@v1)] (`#post')))
-          (fun () -> build_TCret false)
+          (fun () -> build_TCret test_flags false)
         in ())
 
 let test_TCret_p (v0 : vprop') (vx0 vx1 : int -> vprop')
   : M.tree_cond (M.Tret int 42 (fun _ -> []))
                 ([v0; vx0 42; vx1 42]) (fun x -> [v0; vx1 x; vx0 42])
-  = _ by (let _ = build_TCret true in ())
+  = _ by (let _ = build_TCret test_flags true in ())
 
 
 let test_TCbind_u (v0 v1 : vprop') (vx0 : int -> vprop') : squash True =
@@ -92,12 +95,12 @@ let test_TCbind_u (v0 v1 : vprop') (vx0 : int -> vprop') : squash True =
           (fun () ->
             norm_test ();
             apply (`M.TCbind);
-            let _ = build_TCspec false false in
+            let _ = build_TCspec test_flags false false in
             let x = intro () in
             norm_cond_sol ();
             let post1 = fresh_uvar None in
             apply_raw (`(__defer_post_unification (`#post1)));
-            let _ = build_TCspec false false in
+            let _ = build_TCspec test_flags false false in
             norm_cond_sol (); trefl ()
           )
         in ())
@@ -110,10 +113,10 @@ let test_TCbind_p (v0 v1 : vprop') (vx0 vx1 : int -> vprop')
   = _ by (
     norm_test ();
     apply (`M.TCbind);
-    let _ = build_TCspec false false in
+    let _ = build_TCspec test_flags false false in
     let x = intro () in
     norm_cond_sol ();
-    let _ = build_TCspec false true in
+    let _ = build_TCspec test_flags false true in
     ()
   )
 
@@ -131,7 +134,7 @@ let test_TCbindP_u (v0 v1 : vprop') (vx0 : int -> vprop') (wp : pure_wp int) (f 
             let x = intro () in
             let post1 = fresh_uvar None in
             apply_raw (`(__defer_post_unification (`#post1)));
-            let _ = build_TCspec false false in
+            let _ = build_TCspec test_flags false false in
             norm_cond_sol (); trefl ()
           )
         in ())
@@ -145,7 +148,7 @@ let test_TCbindP_p (v0 v1 : vprop') (vx0 : int -> vprop') (wp : pure_wp int) (f 
     norm_test ();
     apply (`M.TCbindP);
     let x = intro () in
-    let _ = build_TCspec false true in ()
+    let _ = build_TCspec test_flags false true in ()
   )
 
 
@@ -154,14 +157,14 @@ let test_build_tree_cond_0 (v0 v1 : vprop') (vx0 vx1 : int -> vprop')
         (M.Tbind int int (specT int []      (fun x -> [vx0 x]))
                (fun x -> specT int [vx0 x] (fun y -> [v1; vx1 y])))
             [v0] (fun y -> [v0; vx1 y; v1])
-  = _ by (norm_test (); let shp = build_tree_cond true in _)
+  = _ by (norm_test (); let shp = build_tree_cond test_flags true in _)
 
 let test_build_prog_cond_0 (v0 v1 : vprop') (vx0 vx1 : int -> vprop')
   : M.prog_cond
         (M.Tbind int int (specT int []      (fun x -> [vx0 x]))
                (fun x -> specT int [vx0 x] (fun y -> [v1; vx1 y])))
         [v0] (fun y -> [v0; vx1 y; v1])
-  = _ by (norm_test (); build_prog_cond ())
+  = _ by (norm_test (); build_prog_cond test_flags)
 
 let _ = fun v0 v1 vx0 vx1 ->
   assert (U.print_util (test_build_prog_cond_0 v0 v1 vx0 vx1))
@@ -189,7 +192,7 @@ let test_build_tree_cond__Tret_u_0 (vx0 : int -> vprop')
             (M.Tbind int int (specT int [] (fun x -> [vx0 x])) (fun x -> M.Tret int x (fun _ -> [])))
             (fun x -> M.Tret int x (fun _ -> [])))
         [] (fun x -> [vx0 x])
-  = _ by (norm_test (); let _ = build_tree_cond true in ())
+  = _ by (norm_test (); let _ = build_tree_cond test_flags true in ())
 
 /// This example works because the resolution of [M.Tret] is given the expected post (the post of the whole
 /// program), [fun x' -> [vx0 x']].
@@ -197,7 +200,7 @@ let test_build_tree_cond__Tret_u_1 (vx0 : int -> vprop')
   : M.tree_cond
         (M.Tbind int int (specT int [] (fun x -> [vx0 x])) (fun x -> M.Tret int x (fun _ -> [])))
         [] (fun x -> [vx0 x])
-  = _ by (norm_test (); let _ = build_tree_cond true in ())
+  = _ by (norm_test (); let _ = build_tree_cond test_flags true in ())
 
 /// This example works because we annotate the innermost [M.Tret] with an hint.
 let test_build_tree_cond__Tret_u_2 (v0 : vprop') (vx0 : int -> vprop')
@@ -206,7 +209,7 @@ let test_build_tree_cond__Tret_u_2 (v0 : vprop') (vx0 : int -> vprop')
             (M.Tbind int int (specT int [] (fun x -> [v0; vx0 x])) (fun x -> M.Tret int x (fun x' -> [vx0 x'])))
             (fun x -> M.Tret int x (fun _ -> [])))
         [] (fun x -> [v0; vx0 x])
-  = _ by (norm_test (); let _ = build_tree_cond true in ())
+  = _ by (norm_test (); let _ = build_tree_cond test_flags true in ())
 
 
 /// This example fails because we cannot find a [v0] in the pre.
@@ -215,7 +218,7 @@ let test_build_tree_cond__not_found (v0 : vprop')
   : M.tree_cond
         (specT int [v0] (fun _ -> []))
         [] (fun _ -> [])
-  = _ by (norm_test (); let _ = build_tree_cond true in ())
+  = _ by (norm_test (); let _ = build_tree_cond test_flags true in ())
 
 /// This example fails because we obtain [fun _ -> [v0]] as post which is not unifiable with the expected post
 /// [fun _ -> []].
@@ -224,14 +227,14 @@ let test_build_tree_cond__post (v0 : vprop')
   : M.tree_cond
         (specT int [] (fun _ -> [v0]))
         [] (fun _ -> [])
-  = _ by (norm_test (); let _ = build_tree_cond true in ())
+  = _ by (norm_test (); let _ = build_tree_cond test_flags true in ())
 
 
 let test_build_tree_cond__if_0 (v0 v1 v2 : vprop')
   : M.tree_cond
         (M.Tif _ true (specT int [v0] (fun _ -> [v1])) (specT int [v0] (fun _ -> [v1])))
         [v0; v2] (fun _ -> [v1; v2])
-  = _ by (norm_test (); let _ = build_tree_cond true in ())
+  = _ by (norm_test (); let _ = build_tree_cond test_flags true in ())
 
 let test_build_tree_cond__if_1 (v0 v1 v2 : vprop')
   : M.tree_cond
@@ -239,7 +242,7 @@ let test_build_tree_cond__if_1 (v0 v1 v2 : vprop')
            (M.Tif _ true (specT int [v0] (fun _ -> [v1])) (specT int [v0] (fun _ -> [v1])))
            (fun _ -> M.Tret int 42 (fun _ -> [])))
         [v0; v2] (fun _ -> [v1; v2])
-  = _ by (norm_test (); let _ = build_tree_cond true in ())
+  = _ by (norm_test (); let _ = build_tree_cond test_flags true in ())
 
 /// This example fails because the inference of the post-condition of the `if` statement uses the inference of
 /// the first branch, hence chooses [fun _ -> vx 0].
@@ -250,7 +253,7 @@ let test_build_tree_cond__if_2 (vx : int -> vprop')
           (M.Tif _ true (M.Tret int 0 (fun _ -> [])) (specT int [vx 0] (fun x -> [vx x])) )
           (fun x -> M.Tret int x (fun _ -> [])))
         [vx 0] (fun x -> [vx x])
-  = _ by (norm_test (); let _ = build_tree_cond true in ())
+  = _ by (norm_test (); let _ = build_tree_cond test_flags true in ())
 
 /// The solution is to add a [sl_hint] to the return of the first branch.
 let test_build_tree_cond__if_3 (vx : int -> vprop')
@@ -259,14 +262,14 @@ let test_build_tree_cond__if_3 (vx : int -> vprop')
           (M.Tif _ true (M.Tret int 0 (fun x -> [vx x])) (specT int [vx 0] (fun x -> [vx x])) )
           (fun x -> M.Tret int x (fun _ -> [])))
         [vx 0] (fun x -> [vx x])
-  = _ by (norm_test (); let _ = build_tree_cond true in ())
+  = _ by (norm_test (); let _ = build_tree_cond test_flags true in ())
 
 /// Here the post-condition is known from the specification.
 let test_build_tree_cond__if_4 (vx : int -> vprop')
   : M.tree_cond
         (M.Tif _ true (M.Tret int 0 (fun x -> [])) (specT int [vx 0] (fun x -> [vx x])))
         [vx 0] (fun x -> [vx x])
-  = _ by (norm_test (); let _ = build_tree_cond true in ())
+  = _ by (norm_test (); let _ = build_tree_cond test_flags true in ())
 
 /// Note that there is an asymmetry between the two branches in the inference.
 let test_build_tree_cond__if_5 (vx : int -> vprop')
@@ -275,7 +278,7 @@ let test_build_tree_cond__if_5 (vx : int -> vprop')
           (M.Tif _ true (specT int [vx 0] (fun x -> [vx x])) (M.Tret int 0 (fun _ -> [])))
           (fun x -> M.Tret int x (fun _ -> [])))
         [vx 0] (fun x -> [vx x])
-  = _ by (norm_test (); let _ = build_tree_cond true in ())
+  = _ by (norm_test (); let _ = build_tree_cond test_flags true in ())
 
 
 [@@expect_failure [228]]
@@ -304,4 +307,4 @@ let test_build_tree_cond__ret_f (v : int -> vprop') (x : int) (f : int -> int)
   : M.tree_cond
         (M.Tret int (f x) (fun _ -> []))
         [v (f x)] (fun y -> [v y])
-   = _ by (norm_test (); let _ = build_tree_cond true in ())
+   = _ by (norm_test (); let _ = build_tree_cond test_flags true in ())

@@ -31,24 +31,24 @@ let ctx_app_loc (c : cs_context) (m : string) : cs_context
 // FIXME? raise a CSFailure exception with a meaningful location
 private unfold
 let cs_try (#a : Type) (f : unit -> Tac a)
-           (ctx : cs_context)
+           (fr : flags_record) (ctx : cs_context)
            (fail_f : (failure_enum -> list info -> Tac string) ->
                      TacH a (requires fun _ -> True) (ensures fun _ r -> Tactics.Result.Failed? r))
   : Tac a
   = try f ()
     with | e -> fail_f (fun fail_enum infos ->
                  let failure = {fail_enum; fail_info = L.(infos @ ctx () @ [Info_original_exn e])} in
-                 failure_to_string failure)
+                 failure_to_string fr failure)
 
 private unfold
 let cs_raise (#a : Type)
-             (ctx : cs_context)
+             (fr : flags_record) (ctx : cs_context)
              (fail_f : (failure_enum -> list info -> Tac string) ->
                        TacH a (requires fun _ -> True) (ensures fun _ r -> Tactics.Result.Failed? r))
   : TacH a (requires fun _ -> True) (ensures fun _ r -> Tactics.Result.Failed? r)
   = fail_f (fun fail_enum infos -> let
       failure = {fail_enum; fail_info = L.(infos @ ctx ())} in
-      failure_to_string failure)
+      failure_to_string fr failure)
 
 
 (***** [truth_refl] *)
@@ -98,17 +98,18 @@ val truth_refl_list_index (#ps : list prop) (#bs : list bool) (rfl : truth_refl_
                           (i : Fin.fin (L.length bs))
   : Lemma (requires L.index bs i) (ensures L.length ps = L.length bs /\ L.index ps i)
 
-let build_truth_refl_list ctx : Tac (list bool) =
+let build_truth_refl_list fr ctx : Tac (list bool) =
   norm [iota; primops; simplify];
   repeatb (fun () ->
     try (apply (`ReflLNil); None)
     with | _ -> try (apply (`ReflLTrue); Some true)
     with | _ -> try (apply (`ReflLFalse); Some false)
-    with | _ -> cs_raise ctx (fun m -> fail (m (Fail_goal_shape GShape_truth_refl_list) [Info_goal (cur_goal ())])))
+    with | _ -> cs_raise fr ctx (fun m -> fail (m (Fail_goal_shape GShape_truth_refl_list)
+                                              [Info_goal (cur_goal ())])))
 
-let mk_truth_refl_list ctx (ps : term) : Tac (list bool & term & binder) =
+let mk_truth_refl_list fr ctx (ps : term) : Tac (list bool & term & binder) =
   let bs = fresh_uvar (Some (`(list bool))) in
-  let bd, res = build (`truth_refl_list (`#ps) (`#bs)) (fun () -> build_truth_refl_list ctx)
+  let bd, res = build (`truth_refl_list (`#ps) (`#bs)) (fun () -> build_truth_refl_list fr ctx)
   in res, bs, bd
 
 (*let _ = assert True by (let bs,_,_ = mk_truth_refl_list (`[(1 == 1);
@@ -121,14 +122,14 @@ let mk_truth_refl_list ctx (ps : term) : Tac (list bool & term & binder) =
 (**) private val __begin_opt_0 : unit
 
 /// Solves a goal [vprop_with_emp vp]
-let rec build_vprop_with_emp ctx : Tac unit =
+let rec build_vprop_with_emp fr ctx : Tac unit =
   try apply (`M.VeUnit) with | _ -> 
   match catch (fun () -> apply (`M.VeStar)) with
-  | Inr () -> build_vprop_with_emp ctx; (* left  *)
-             build_vprop_with_emp ctx  (* right *)
+  | Inr () -> build_vprop_with_emp fr ctx; (* left  *)
+             build_vprop_with_emp fr ctx  (* right *)
   | Inl _ ->
   try apply (`M.VeEmp ) with | _ ->
-    cs_raise ctx (fun m -> fail (m (Fail_goal_shape GShape_vprop) [Info_goal (cur_goal ())]))
+    cs_raise fr ctx (fun m -> fail (m (Fail_goal_shape GShape_vprop) [Info_goal (cur_goal ())]))
 
 #pop-options
 (**) private val __end_opt_0 : unit
@@ -159,14 +160,14 @@ let __build_elem_index
     i
 
 /// Solves a goal of the form [elem_index x l]
-let build_elem_index ctx : Tac unit =
+let build_elem_index fr ctx : Tac unit =
   let goal = cur_goal () in
   apply (`__build_elem_index);
   norm [delta_only [`%L.map]; iota; zeta];
-  let _ = build_truth_refl_list ctx in
+  let _ = build_truth_refl_list fr ctx in
   norm [delta_only [`%findi_true; `%Opt.map];
        iota; zeta; primops];
-  cs_try trefl ctx (fun m -> fail (m Fail_elem_index [Info_goal goal]))
+  cs_try trefl fr ctx (fun m -> fail (m Fail_elem_index [Info_goal goal]))
 
 
 (*** Building a [M.to_repr_t] *)
@@ -180,11 +181,12 @@ let __normal_flatten_vprop : list norm_step = [
 ]
 
 /// Steps for the normalisation of Steel's requires and ensures clauses.
-/// We need [__steel_reduce__] in order to unfold the selector functions
-/// (for instance [Steel.Reference.sel])
+/// We use:
+/// - [__steel_reduce__] to unfold the selector functions (for instance [Steel.Reference.sel]).
+/// - [__inner_steel_reduce__] to unfold [focus_rmem]
 let __normal_Steel_logical_spec : list norm_step = [
   delta_only [`%SE.VUnit?._0];
-  delta_attr [`%SE.__reduce__; `%SE.__steel_reduce__];
+  delta_attr [`%SE.__reduce__; `%SE.__steel_reduce__; `%SE.__inner_steel_reduce__];
   delta_qualifier ["unfold"];
   iota; zeta; primops
 ]
@@ -283,19 +285,11 @@ let match_rmem_apply (t : term) : Tac (option (term & term))
       | _ -> None)
     | _ -> fail "unexpected shape0"
 
-/// This lemma is used to remove the [focus_rmem] form the pre & post (in particular those that are introduced by
-/// [frame_equalities]).
-let rewrite_focus_rmem
-      (#p : SE.vprop) (h : SE.rmem p) (q : SE.vprop {SE.can_be_split p q}) (r : SE.vprop {SE.can_be_split q r})
-      #sl (_ : (SE.can_be_split_trans p q r; squash (h r == sl)))
-  : squash (SE.focus_rmem h q r == sl)
-  = M.focus_rmem_feq p q r h
-
 #push-options "--ifuel 2"
 (**) private val __begin_opt_1 : unit
 
 /// Solves a goal [to_repr_t a pre post req ens]
-let build_to_repr_t ctx : Tac unit
+let build_to_repr_t fr ctx : Tac unit
   =
     let u_r_pre  = fresh_uvar None in
     let u_r_post = fresh_uvar None in
@@ -304,14 +298,16 @@ let build_to_repr_t ctx : Tac unit
     apply_raw (`__build_to_repr_t);
 
     (* [r_pre] *)
-    build_vprop_with_emp (ctx_app_loc ctx "in the pre-condition");
+    let ctx_pre = ctx_app_loc ctx "in the pre-condition" in
+    build_vprop_with_emp fr ctx_pre;
     exact u_r_pre;
     norm __normal_flatten_vprop;
     trefl ();
 
     (* [r_post] *)
+    let ctx_post = ctx_app_loc ctx "in the post-condition" in
     let _ = intro () in
-      build_vprop_with_emp (ctx_app_loc ctx "in the post-condition");
+      build_vprop_with_emp fr ctx_post;
     exact u_r_post;
     let _ = intro () in
       norm __normal_flatten_vprop;
@@ -325,7 +321,7 @@ let build_to_repr_t ctx : Tac unit
       trivial ();
       // [elem_index]
       norm __normal_Steel_logical_spec;
-      build_elem_index ctx;
+      build_elem_index fr ctx;
       // [i' <- i]
       norm [delta_attr [`%__cond_solver__; `%__tac_helper__]];
       trefl ()
@@ -339,13 +335,12 @@ let build_to_repr_t ctx : Tac unit
       // seemingly because of the normalisation of [t_of].
       norm __normal_Steel_logical_spec;
       pointwise' begin fun () ->
-        repeat' (fun () -> apply_raw (`rewrite_focus_rmem));
         match catch (fun () -> apply_raw (`filter_rmem_apply (`#h0))) with
         | Inr () -> // For some reason, this can only be applied on the goal produced by [filter_rmem_apply]
                    apply_rew ctx_req eq0
         | Inl _  -> trefl ()
       end;
-      trefl ();
+      cs_try trefl fr ctx_req (fun m -> fail (m Fail_elem_index []));
 
     (* [r_ens] *)
     let ctx_ens = ctx_app_loc ctx "in the ensures" in
@@ -356,7 +351,6 @@ let build_to_repr_t ctx : Tac unit
     let eq0 = intro () in let eq1 = intro () in
       norm __normal_Steel_logical_spec;
       pointwise' begin fun () ->
-        repeat' (fun () -> apply_raw (`rewrite_focus_rmem));
         match catch (fun () -> apply_raw (`filter_rmem_apply (`#h0))) with
         | Inr () -> apply_rew ctx_ens eq0
         | Inl _ ->
@@ -364,7 +358,7 @@ let build_to_repr_t ctx : Tac unit
         | Inr () -> apply_rew ctx_ens eq1
         | Inl _  -> trefl ()
       end;
-      trefl ()
+      cs_try trefl fr ctx_ens (fun m -> fail (m Fail_elem_index []))
 
 #pop-options
 (**) private val __end_opt_1 : unit
@@ -508,10 +502,10 @@ let normal_build_partial_injection : list norm_step = [
   iota; zeta; primops]
 
 /// solves a goal of the form [partial_injection src dst]
-let build_partial_injection ctx : Tac unit =
+let build_partial_injection fr ctx : Tac unit =
   apply (`__build_partial_injection);
   norm normal_list_of_equalities;
-  let _ = build_truth_refl_list ctx in
+  let _ : list _ = build_truth_refl_list fr ctx in
   ()
 
 
@@ -704,15 +698,15 @@ let normal_ij_mask : list norm_step = [
   iota; zeta; primops]
 
 /// This tactics solves a goal of the form [cond_sol all src trg]
-let build_cond_sol ctx (all : bool) : Tac unit
+let build_cond_sol fr ctx (all : bool) : Tac unit
   = try if all then apply (`CSeq) else apply (`CSnil)
     with | _ ->
       apply_raw (`CSinj);
-      build_partial_injection ctx;
+      build_partial_injection fr ctx;
       norm normal_build_partial_injection;
       norm normal_ij_mask;
     try if all then apply (`CSeq) else apply (`CSnil)
-    with | _ -> cs_raise ctx (fun m -> fail (m Fail_cond_sol []))
+    with | _ -> cs_raise fr ctx (fun m -> fail (m Fail_cond_sol []))
 
 
 let normal_cond_sol_to_equiv : list norm_step = [
@@ -978,19 +972,19 @@ let __build_TCret_p
     M.TCret #a #x pre post (serialize_perm (cond_sol_all_to_equiv cs))
 
 
-let build_TCspec (is_Steel : bool) (post : bool) : Tac shape_tree_t
+let build_TCspec fr (is_Steel : bool) (post : bool) : Tac shape_tree_t
   =
     if post then begin
       if is_Steel then (
         apply_raw (`__build_TCspecS_p);
-        build_to_repr_t (fun () -> [Info_location "in the TCspecS statement"]);
+        build_to_repr_t fr (fun () -> [Info_location "in the TCspecS statement"]);
         norm_cond_sol ()
       ) else
         apply_raw (`__build_TCspec_p);
-      build_cond_sol (fun () -> [Info_location "before the spec statement"]) false;
+      build_cond_sol fr (fun () -> [Info_location "before the spec statement"]) false;
       norm_cond_sol ();
       let x = intro () in
-      build_cond_sol (fun () -> [Info_location "after the spec statement"]) true
+      build_cond_sol fr (fun () -> [Info_location "after the spec statement"]) true
     end else begin
       // FIXME : why apply_raw shelves cs0 ?
       let cs0 = fresh_uvar None in
@@ -998,14 +992,14 @@ let build_TCspec (is_Steel : bool) (post : bool) : Tac shape_tree_t
         let tr = fresh_uvar None in
         apply_raw (`(__build_TCspecS_u (`#tr) (`#cs0)));
         unshelve tr;
-        build_to_repr_t (fun () -> [Info_location "in the TCspecS statement"]);
+        build_to_repr_t fr (fun () -> [Info_location "in the TCspecS statement"]);
         unshelve cs0;
         norm_cond_sol ()
       ) else (
         apply_raw (`(__build_TCspec_u (`#cs0)));
         unshelve cs0
       );
-      build_cond_sol (fun () -> [Info_location "before the spec statement"]) false
+      build_cond_sol fr (fun () -> [Info_location "before the spec statement"]) false
     end;
 
     let pre_n   = tc_extract_nat () in
@@ -1018,56 +1012,56 @@ let build_TCspec (is_Steel : bool) (post : bool) : Tac shape_tree_t
     in
     (|pre_n + frame_n, post_n + frame_n, PSspec pre_n post_n frame_n p0 p1|)
 
-let build_TCret (post : bool) : Tac shape_tree_t
+let build_TCret fr (post : bool) : Tac shape_tree_t
   = if post then begin
       apply_raw (`__build_TCret_p);
-      build_cond_sol (fun () -> [Info_location "after the return statement"]) true
+      build_cond_sol fr (fun () -> [Info_location "after the return statement"]) true
     end else begin
       let cs = fresh_uvar None in
       apply_raw (`(__build_TCret_u (`#cs)));
       unshelve cs;
-      build_cond_sol (fun () -> [Info_location "after the return statement"]) false
+      build_cond_sol fr (fun () -> [Info_location "after the return statement"]) false
     end;
 
     let n = tc_extract_nat () in
     let p = tc_extract_perm n in
     (|n, n, PSret n p|)
 
-let rec build_TCbind (post : bool) : Tac shape_tree_t
+let rec build_TCbind fr (post : bool) : Tac shape_tree_t
   = apply (`M.TCbind);
-    let (|pre_f, post_f, s_f|) = build_tree_cond false in
+    let (|pre_f, post_f, s_f|) = build_tree_cond fr false in
     let x = intro () in
-    let (|pre_g, post_g, s_g|) = build_tree_cond post  in
+    let (|pre_g, post_g, s_g|) = build_tree_cond fr post  in
 
-    if post_f <> pre_g then cs_raise (fun () -> [Info_location "in the bind statement"])
+    if post_f <> pre_g then cs_raise fr (fun () -> [Info_location "in the bind statement"])
                                     (fun m -> fail (m (Fail_shape_unification post_f pre_g) []));
     (|pre_f, post_g, PSbind pre_f post_f post_g s_f s_g|)
 
-and build_TCbindP (post : bool) : Tac shape_tree_t
+and build_TCbindP fr (post : bool) : Tac shape_tree_t
   = apply (`M.TCbindP);
     let x = intro () in
-    let (|pre_g, post_g, s_g|) = build_tree_cond post in
+    let (|pre_g, post_g, s_g|) = build_tree_cond fr post in
     (|pre_g, post_g, PSbindP pre_g post_g s_g|)
 
 /// If the post-condition of an `if` statement is not specified, it is inferred from the `then` branch.
 /// Any annotation ([sl_hint] for the return) for the post-condition of the `if` should thus be on the first branch.
-and build_TCif (post : bool) : Tac shape_tree_t
+and build_TCif fr (post : bool) : Tac shape_tree_t
   = apply (`M.TCif);
-    let (|pre_thn, post_thn, s_thn|) = build_tree_cond post in
-    let (|pre_els, post_els, s_els|) = build_tree_cond true in
+    let (|pre_thn, post_thn, s_thn|) = build_tree_cond fr post in
+    let (|pre_els, post_els, s_els|) = build_tree_cond fr true in
 
     let ctx () = [Info_location "in the if statement"] in
-    if pre_thn  <> pre_els  then cs_raise ctx (fun m -> fail (m (Fail_shape_unification pre_thn pre_els) []));
-    if post_thn <> post_els then cs_raise ctx (fun m -> fail (m (Fail_shape_unification post_thn post_els) []));
+    if pre_thn  <> pre_els  then cs_raise fr ctx (fun m -> fail (m (Fail_shape_unification pre_thn pre_els) []));
+    if post_thn <> post_els then cs_raise fr ctx (fun m -> fail (m (Fail_shape_unification post_thn post_els) []));
     (|pre_thn, post_thn, PSif pre_thn post_thn s_thn s_els|)
 
-and build_tree_cond (post : bool) : Tac shape_tree_t
+and build_tree_cond fr (post : bool) : Tac shape_tree_t
   =
     let build_tac : bool -> Tac shape_tree_t =
       let goal = cur_goal () in
       let args = (collect_app goal)._2 in
       let fail_shape () =
-        cs_raise dummy_ctx (fun m -> fail (m (Fail_goal_shape GShape_tree_cond) [Info_goal goal])) in
+        cs_raise fr dummy_ctx (fun m -> fail (m (Fail_goal_shape GShape_tree_cond) [Info_goal goal])) in
       if L.length args <> 4
       then fail_shape ()
       else let hd = (collect_app (L.index args 1)._1)._1 in
@@ -1077,12 +1071,12 @@ and build_tree_cond (post : bool) : Tac shape_tree_t
           let nd = inspect_fv fv in
           if Nil? nd then (let _ = fail_shape () in fail "unreachable");
           begin match L.last nd with
-          | "Tspec"  -> build_TCspec false
-          | "TspecS" -> build_TCspec true
-          | "Tret"   -> build_TCret 
-          | "Tbind"  -> build_TCbind
-          | "TbindP" -> build_TCbindP
-          | "Tif"    -> build_TCif
+          | "Tspec"  -> build_TCspec  fr false
+          | "TspecS" -> build_TCspec  fr true
+          | "Tret"   -> build_TCret   fr
+          | "Tbind"  -> build_TCbind  fr
+          | "TbindP" -> build_TCbindP fr
+          | "Tif"    -> build_TCif    fr
           | _ -> fail_shape ()
           end
       | _ -> fail_shape ()
@@ -1105,7 +1099,7 @@ and build_tree_cond (post : bool) : Tac shape_tree_t
       // [?post1] is now inferred as [post1] and we are presented with a goal [?post0 == post1].
       // We normalize [post1] and assign the result to [?post0].
       norm_cond_sol ();
-      cs_try trefl dummy_ctx (fun m -> fail (m Fail_post_unification []));
+      cs_try trefl fr dummy_ctx (fun m -> fail (m Fail_post_unification []));
 
       shp
     end
@@ -1130,7 +1124,7 @@ let intro_l_True : l_True = ()
 let intro_squash_l_True : squash (l_True) = ()
 
 /// This is the front-end tactics. It solves a goal of the form [M.prog_cond t pre post].
-let build_prog_cond () : Tac unit
+let build_prog_cond fr : Tac unit
   = 
     let tc0   = fresh_uvar None in
     let tc_eq = fresh_uvar None in
@@ -1138,7 +1132,7 @@ let build_prog_cond () : Tac unit
     apply (`(__build_prog_cond (`#tc0) (`#tc_eq) (`#ushp)));
     // [M.tree_cond t pre post]
     unshelve tc0;
-    let (|pre_n, post_n, shp|) = build_tree_cond true in
+    let (|pre_n, post_n, shp|) = build_tree_cond fr true in
     // tc <- tc0
     unshelve tc_eq;
     norm_cond_sol ();

@@ -13,31 +13,53 @@ type stage =
   | Stage_WP
 
 type flag =
+  | No of flag
   | Timer
   | Dump of stage
+  | Full_Msg
+  | O_Flatten
   | O_ST2SF
+  | O_Elim_Ret
+
+[@@ Learn.Tactics.Util.__tac_helper__]
+type prog_M_to_Fun_opt = {
+  o_flatten  : bool;
+  o_ST2SF    : bool;
+  o_elim_ret : bool;
+}
 
 noeq
 type flags_record = {
   f_timer : bool;
   f_dump  : stage -> bool;
-  o_ST2SF : bool;
+  f_flmsg : bool;
+  o_M2Fun : prog_M_to_Fun_opt;
 }
 
 let default_flags : flags_record = {
   f_timer = false;
   f_dump  = (fun _ -> false);
-  o_ST2SF = false;
+  f_flmsg = false;
+  o_M2Fun = {
+    o_flatten  = false;
+    o_ST2SF    = false;
+    o_elim_ret = false
+  }
 }
 
-let record_flag (r : flags_record) (f : flag) : flags_record =
+let rec record_flag (pos : bool) (r : flags_record) (f : flag)
+  : Tot flags_record (decreases f) =
   match f with
-  | Timer   -> {r with f_timer = true}
-  | Dump s  -> {r with f_dump  = (fun s' -> s' = s || r.f_dump s')}
-  | O_ST2SF -> {r with o_ST2SF = true}
+  | No f       -> record_flag (not pos) r f
+  | Timer      -> {r with f_timer = pos}
+  | Dump s     -> {r with f_dump  = (fun s' -> if s' = s then pos else r.f_dump s')}
+  | Full_Msg   -> {r with f_flmsg = pos}
+  | O_Flatten  -> {r with o_M2Fun = {r.o_M2Fun with o_flatten  = pos}}
+  | O_ST2SF    -> {r with o_M2Fun = {r.o_M2Fun with o_flatten  = pos; o_ST2SF = pos}}
+  | O_Elim_Ret -> {r with o_M2Fun = {r.o_M2Fun with o_elim_ret = pos}}
 
 let make_flags_record : list flag -> flags_record =
-  L.fold_left record_flag default_flags
+  L.fold_left (record_flag true) default_flags
 
 
 type failure_goal_shape =
@@ -52,6 +74,7 @@ type failure_enum =
   | Fail_cond_sol
   | Fail_elem_index
   | Fail_shape_unification : nat -> nat -> failure_enum
+  | Fail_to_repr_t
 
 noeq
 type info =
@@ -67,13 +90,21 @@ type failure_t = {
 
 exception Failure of failure_t
 
-let info_to_string (i : info) : Tac string =
+private
+let shorten_string (fr : flags_record) (s : string) : Tot string
+  = if fr.f_flmsg then s
+    else let idx_newl = String.index_of s '\n' in
+    if 0 <= idx_newl && idx_newl < String.length s
+    then String.sub s 0 idx_newl^"..."
+    else s
+
+let info_to_string (fr : flags_record) (i : info) : Tac string =
   match i with
-  | Info_goal g -> "on goal: "^term_to_string g
+  | Info_goal g -> "on goal: "^shorten_string fr (term_to_string g)
   | Info_original_exn exn ->
       begin match exn with
-      | TacticFailure msg -> "original failure: "^msg
-      | exn -> "original exception: "^term_to_string (quote exn)
+      | TacticFailure msg -> "original failure: "^shorten_string fr msg
+      | exn -> "original exception: "^shorten_string fr (term_to_string (quote exn))
       end
   | Info_location s -> s
 
@@ -85,7 +116,7 @@ let rec concat_sep (sep : string) (l : list string)
   | [x] -> x
   | x :: y :: tl -> x^sep^concat_sep sep (y :: tl)
 
-let failure_to_string (f : failure_t) : Tac string =
+let failure_to_string (fr : flags_record) (f : failure_t) : Tac string =
   let enum = f.fail_enum in
   let msg = term_to_string (quote enum) in
-  concat_sep "\n" (msg :: map info_to_string f.fail_info)
+  concat_sep "\n" (msg :: map (info_to_string fr) f.fail_info)
