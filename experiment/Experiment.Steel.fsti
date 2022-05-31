@@ -83,12 +83,12 @@ inline_for_extraction
 let prog_M_to_Fun_extract
       (opt : prog_M_to_Fun_opt)
       (#a : Type) (t : M.repr SH.KSteel a)
-      (#pre : M.pre_t) (#post : M.post_t a)
-      (c : M.prog_cond t.repr_tree pre post)
+      (#pre : Ghost.erased M.pre_t) (#post : Ghost.erased (M.post_t a))
+      (c : Ghost.erased (M.prog_cond t.repr_tree pre post))
       (req : M.req_t pre) (ens : M.ens_t pre a post)
       (sub : (sl0 : M.sl_f pre) -> Lemma (requires req sl0)
                (ensures Fun.tree_req (prog_M_to_Fun opt t c sl0) /\
-                  (forall (x : a) (sl1 : M.sl_f (post x)) .
+                  (forall (x : a) (sl1 : M.sl_f (Ghost.reveal post x)) .
                     Fun.tree_ens (prog_M_to_Fun opt t c sl0) SF.({val_v = x; sel_v = sl1}) ==>
                     ens sl0 x sl1)))
   : M.repr_steel_t SH.KSteel a pre post req ens
@@ -96,7 +96,7 @@ let prog_M_to_Fun_extract
     M.repr_steel_subcomp _ _ _ _
       (fun sl0       -> let _ = sub sl0; prog_M_to_Fun_equiv opt t c sl0 in ())
       (fun sl0 x sl1 -> let _ = prog_M_to_Fun_equiv opt t c sl0; sub sl0 in ())
-      (t.repr_steel pre post c.pc_tree)
+      (t.repr_steel pre post M.(c.pc_tree))
 
 
 inline_for_extraction
@@ -104,7 +104,7 @@ let prog_M_to_Fun_extract_wp
       (opt : prog_M_to_Fun_opt)
       (#a : Type) (t : M.repr SH.KSteel a)
       (#pre : M.pre_t) (#post : M.post_t a)
-      (c : M.prog_cond t.repr_tree pre post)
+      (c : Ghost.erased (M.prog_cond t.repr_tree pre post))
       (req : M.req_t pre) (ens : M.ens_t pre a post)
       (wp : (sl0 : M.sl_f pre) -> Lemma
               (requires req sl0)
@@ -125,7 +125,7 @@ let __normal_M : list norm_step = [
   delta_attr [`%__tac_helper__; `%M.__repr_M__;
               `%SE.__steel_reduce__; `%SE.__reduce__];
   delta_qualifier ["unfold"];
-  iota; zeta
+  iota; zeta; primops
 ]
 
 let __normal_ST : list norm_step = [
@@ -258,18 +258,16 @@ let __solve_by_wp
       (#a : Type) (#t : M.repr SH.KSteel a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (#req : M.req_t pre) (#ens : M.ens_t pre a post)
-      (c : M.prog_cond t.repr_tree pre post)
+      (c : Ghost.erased (M.prog_cond t.repr_tree pre post))
       (t_Fun : (sl0 : M.sl_f pre) ->
                GTot (Fun.prog_tree #SF.sl_tys SF.({val_t = a; sel_t = ST.post_ST_of_M post})))
       (t_Fun_eq : squash (t_Fun == (fun sl0 -> prog_M_to_Fun opt t c sl0)))
       (wp : squash (Fl.forall_flist (M.vprop_list_sels_t pre) (fun sl0 ->
                req sl0 ==>
                Fun.tree_wp (t_Fun sl0) (fun res -> ens sl0 res.val_v res.sel_v))))
-      (ext : M.repr_steel_t SH.KSteel a pre post req ens)
-      (ext_eq : ext == prog_M_to_Fun_extract_wp opt t c req ens (fun sl0 -> ()))
   : extract a pre post req ens t
   =
-    ext
+    prog_M_to_Fun_extract_wp opt t c req ens (fun sl0 -> ())
 
 /// Solves a goal of the form [extract a pre post req ens t]
 let solve_by_wp (fr : flags_record) : Tac unit
@@ -279,15 +277,13 @@ let solve_by_wp (fr : flags_record) : Tac unit
     let u_t_Fun    = fresh_uvar None in
     let u_t_Fun_eq = fresh_uvar None in
     let u_wp       = fresh_uvar None in
-    let u_ext      = fresh_uvar None in
-    let u_ext_eq   = fresh_uvar None in
-    apply_raw (`(__solve_by_wp (`#(quote opt)) (`#u_c) (`#u_t_Fun)
-                               (`#u_t_Fun_eq) (`#u_wp) (`#u_ext) (`#u_ext_eq)));
+    apply_raw (`(__solve_by_wp (`#(quote opt)) (`#u_c) (`#u_t_Fun) (`#u_t_Fun_eq) (`#u_wp)));
 
     let t = timer_start   "prog_cond " fr.f_timer in
     (* c *)
     unshelve u_c;
     norm __normal_M;
+    apply (`Ghost.hide);
     CSl.build_prog_cond fr;
 
     (* t_Fun *)
@@ -320,14 +316,6 @@ let solve_by_wp (fr : flags_record) : Tac unit
     if fr.f_dump Stage_WP then dump "at stage WP";
     smt ();
 
-    (* ext *)
-    // We normalize the resulting Steel program so that it can be extracted
-    let t = timer_enter t "extract   " in
-    unshelve u_ext_eq;
-    norm [delta_qualifier ["inline_for_extraction"; "unfold"];
-          iota; zeta; primops];
-    if fr.f_dump Stage_Extract then dump "at stage Extract";
-    trefl ();
     timer_stop t
 
 
@@ -344,8 +332,8 @@ inline_for_extraction
 let __build_to_steel
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
       (#t : M.repr SH.KSteel a)
-      (goal_tr : M.to_repr_t a pre post req ens)
-      (goal_f  : extract a goal_tr.r_pre goal_tr.r_post goal_tr.r_req goal_tr.r_ens t)
+      (goal_tr : Ghost.erased (M.to_repr_t a pre post req ens))
+      (goal_f  : M.(extract a goal_tr.r_pre goal_tr.r_post goal_tr.r_req goal_tr.r_ens) t)
   : __to_steel_goal a pre post req ens t
   = M.steel_of_repr goal_tr goal_f
 
@@ -362,6 +350,7 @@ let build_to_steel (fr : flags_record) : Tac unit
     
     let t = timer_start "specs     " fr.f_timer in
     apply_raw (`__build_to_steel);
+    apply_raw (`Ghost.hide);
     CSl.build_to_repr_t fr (fun () -> [Info_location "in the specification"]);
     timer_stop t;
 

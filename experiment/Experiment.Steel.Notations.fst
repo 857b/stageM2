@@ -18,7 +18,7 @@ let steel (a : Type) (pre : SE.pre_t) (post : SE.post_t a)
   : Type
   = SH.unit_steel a pre post req ens
 
-unfold
+inline_for_extraction unfold
 let to_steel
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
       (t : M.repr SH.KSteel a)
@@ -30,34 +30,34 @@ let mk_steel (fs : list flag) : Tac unit
   = build_to_steel (make_flags_record fs)
 
 
-unfold
+inline_for_extraction unfold
 let return_hint (#a : Type) (x : a) (sl_hint : M.post_t a)
   : M.repr SH.KSteel a
   = M.return_hint #a x sl_hint
 
-unfold
+inline_for_extraction unfold
 let return (#a : Type) (x : a)
   : M.repr SH.KSteel a
   = M.return #a x
 
 // TODO? generalize with typeclass
-unfold
+inline_for_extraction unfold
 let bind (#a #b : Type) (f : M.repr SH.KSteel a) (g : a -> M.repr SH.KSteel b)
   : M.repr SH.KSteel b
   = M.bind #a #b f g
 
-unfold
+inline_for_extraction unfold
 let pure (#a : Type) (#wp : pure_wp a) ($f : unit -> PURE a wp)
   : M.repr SH.KSteel a
   = M.bindP wp f (fun x -> M.return x)
 
-unfold
+inline_for_extraction unfold
 let ite (#a : Type) (guard : bool) (thn : M.repr SH.KSteel a) (els : M.repr SH.KSteel a)
   : M.repr SH.KSteel a
   = M.ite guard thn els
 
 /// Calling a Steel function from our representation
-unfold
+inline_for_extraction unfold
 let call (#b : Type)
       (#a : b -> Type) (#pre : b -> SE.pre_t) (#post : (x : b) -> SE.post_t (a x))
       (#req : (x : b) -> SE.req_t (pre x)) (#ens : (x : b) -> SE.ens_t (pre x) (a x) (post x))
@@ -65,7 +65,7 @@ let call (#b : Type)
   : M.repr SH.KSteel (a x)
   = M.repr_of_steel (pre x) (post x) (req x) (ens x) (fun () -> f x)
 
-unfold
+inline_for_extraction unfold
 let call_g (#b : Type)
       (#a : b -> Type) (#opened : b -> Mem.inames) (#pre : b -> SE.pre_t) (#post : (x : b) -> SE.post_t (a x))
       (#req : (x : b) -> SE.req_t (pre x)) (#ens : (x : b) -> SE.ens_t (pre x) (a x) (post x))

@@ -423,7 +423,7 @@ let steel_of_repr_lem #a #pre #post #req #ens (tr : to_repr_t a pre post req ens
 inline_for_extraction noextract
 let steel_of_repr
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
-      (tr : to_repr_t a pre post req ens)
+      (tr : Ghost.erased (to_repr_t a pre post req ens))
       (f : repr_steel_t SH.KSteel a tr.r_pre tr.r_post tr.r_req tr.r_ens)
   : SH.unit_steel a pre post req ens
   =
@@ -447,7 +447,7 @@ let repr_steel_of_steel_lem #a #pre #post #req #ens (tr : to_repr_t a pre post r
 inline_for_extraction noextract
 let repr_steel_of_steel
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
-      (tr : to_repr_t a pre post req ens)
+      (tr : Ghost.erased (to_repr_t a pre post req ens))
       ($f  : SH.unit_steel a pre post req ens)
   : repr_steel_t SH.KSteel a tr.r_pre tr.r_post tr.r_req tr.r_ens
   =
@@ -466,7 +466,7 @@ let repr_steel_of_steel
 inline_for_extraction noextract
 let steel_ghost_of_repr
       #a #opened (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
-      (tr : to_repr_t a pre post req ens)
+      (tr : Ghost.erased (to_repr_t a pre post req ens))
       f
   =
     (**) steel_of_repr_lem tr;
@@ -481,7 +481,7 @@ let steel_ghost_of_repr
 inline_for_extraction noextract
 let repr_steel_of_steel_ghost
       #a #opened (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
-      (tr : to_repr_t a pre post req ens)
+      (tr : Ghost.erased (to_repr_t a pre post req ens))
       ($f  : SH.unit_steel_ghost a opened pre post req ens)
   : repr_steel_t (SH.KGhost opened) a tr.r_pre tr.r_post tr.r_req tr.r_ens
   =
@@ -499,6 +499,9 @@ let repr_steel_of_steel_ghost
 
 
 (***** Monad combiners *)  
+
+(**) #push-options "--ifuel 1 --z3rlimit 20"
+(**) private let __begin_combinators = ()
 
 let elim_tree_req_bind (#a #b : Type) (f : prog_tree a) (g : a -> prog_tree b)
       (#pre : pre_t) (#post : post_t b) (#itm : post_t a)
@@ -531,3 +534,6 @@ let intro_tree_ens_bind (#a #b : Type) (f : prog_tree a) (g : a -> prog_tree b)
           tree_ens f cf (vpl_sels_f pre sl0) x sl1 /\
           tree_ens (g x) (cg x) sl1 y (vpl_sels_f (post y) sl2))
     ))
+
+(**) #pop-options
+(**) private let __end_combinators = ()

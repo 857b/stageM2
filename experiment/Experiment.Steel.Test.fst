@@ -443,6 +443,15 @@ let test3_steel' (r0 r1 : ref U32.t)
       call (write r1) U32.(x +%^ 1ul)
     ) (_ by (mk_steel [Timer(*; O_ST2SF; Dump Stage_ST*)])))
 
+(*let _ = fun r0 r1 ->
+  assert (U.print_util (test3_steel' r0 r1))
+    by T.(norm [delta_only [`%test3_steel'; `%__build_to_steel; `%__solve_by_wp; `%prog_M_to_Fun_extract_wp;
+                            `%prog_M_to_Fun_extract];
+                iota; primops];
+          norm [delta_qualifier ["inline_for_extraction"; "unfold"];
+                iota; primops];
+          fail "print")*)
+
 inline_for_extraction
 let test3_steel'' (r0 r1 : ref U32.t)
   : F.steel unit
