@@ -13,7 +13,7 @@ module SF = Experiment.Steel.Repr.SF
 #push-options "--z3rlimit 20"
 let prog_M_to_Fun_equiv
       opt
-      (#a : Type) (t : M.repr a)
+      #ek (#a : Type) (t : M.repr ek a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
       (sl0 : M.sl_f pre)
@@ -105,20 +105,21 @@ let steel_subcomp_eq
       (req_g : SE.req_t pre) (ens_g : SE.ens_t pre a post)
       (pf_req : unit -> squash (req_f == req_g))
       (pf_ens : unit -> squash (ens_f == ens_g))
-      (f : M.unit_steel a pre post req_f ens_f)
-  : M.unit_steel a pre post req_g ens_g
+      (f : SH.unit_steel a pre post req_f ens_f)
+  : SH.unit_steel a pre post req_g ens_g
   = pf_req ();
     pf_ens ();
-    U.cast #(M.unit_steel a pre post req_f ens_f) (M.unit_steel a pre post req_g ens_g) f
+    U.cast #(SH.unit_steel a pre post req_f ens_f) (SH.unit_steel a pre post req_g ens_g) f
 
 
+#push-options "--ifuel 1"
 inline_for_extraction
 let __call_repr_steel_0
       (#a : Type)
       (#pre : M.pre_t)     (#post : M.post_t a)
       (#req : M.req_t pre) (#ens  : M.ens_t pre a post)
-      (r : M.repr_steel_t a pre post req ens)
-  : M.unit_steel a (M.vprop_of_list pre) (fun x -> M.vprop_of_list (post x))
+      (r : M.repr_steel_t SH.KSteel a pre post req ens)
+  : SH.unit_steel a (M.vprop_of_list pre) (fun x -> M.vprop_of_list (post x))
       (requires fun h0      -> req (norm_vpl (M.sel_f' pre h0)))
       (ensures  fun h0 x h1 -> ens (norm_vpl (M.sel_f' pre h0)) x (norm_vpl (M.sel_f' (post x) h1)))
   = steel_subcomp_eq
@@ -131,7 +132,8 @@ let __call_repr_steel_0
                     norm [delta_only [`%norm_vpl]]; trefl ()))
       (fun () -> _ by (pointwise (fun () -> try exact (`M.sel_eq') with | _ -> trefl ());
                     norm [delta_only [`%norm_vpl]]; trefl ()))
-      r
+      (SH.FSteel?.f r)
+#pop-options
 
 inline_for_extraction
 let call_repr_steel #a #pre #post #req #ens r = __call_repr_steel_0 r ()

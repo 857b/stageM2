@@ -121,11 +121,11 @@ let test_TCbind_p (v0 v1 : vprop') (vx0 vx1 : int -> vprop')
   )
 
 
-let test_TCbindP_u (v0 v1 : vprop') (vx0 : int -> vprop') (wp : pure_wp int) (f : unit -> PURE int wp) : squash True =
+let test_TCbindP_u (v0 v1 : vprop') (vx0 : int -> vprop') (wp : pure_wp int) : squash True =
   _ by (let post' = fresh_uvar (Some (`(M.post_t int))) in
         let _,() =
           build (`(M.tree_cond
-            (M.TbindP int int (`@wp) (`@f)
+            (M.TbindP int int (`@wp)
                     (fun x -> specT int [(`@v0)] (fun y -> [(`@vx0) y])))
             [(`@v0); (`@v1)] (`#post')))
           (fun () ->
@@ -139,9 +139,9 @@ let test_TCbindP_u (v0 v1 : vprop') (vx0 : int -> vprop') (wp : pure_wp int) (f 
           )
         in ())
 
-let test_TCbindP_p (v0 v1 : vprop') (vx0 : int -> vprop') (wp : pure_wp int) (f : unit -> PURE int wp)
+let test_TCbindP_p (v0 v1 : vprop') (vx0 : int -> vprop') (wp : pure_wp int)
   : M.tree_cond
-        (M.TbindP int int wp f
+        (M.TbindP int int wp
                 (fun x -> specT int [v0] (fun y -> [vx0 y])))
             [v0; v1] (fun y -> [v1; vx0 y])
   = _ by (

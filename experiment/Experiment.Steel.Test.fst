@@ -13,6 +13,7 @@ module F     = Experiment.Steel.Notations
 module M     = Experiment.Steel.Repr.M
 module ST    = Experiment.Steel.Repr.ST
 module SF    = Experiment.Steel.Repr.SF
+module SH    = Experiment.Steel.SteelHack
 module Fun   = Experiment.Repr.Fun
 module CSl   = Experiment.Steel.CondSolver
 module ST2SF = Experiment.Steel.Repr.ST_to_SF.Spec
@@ -54,8 +55,7 @@ let normal_flatten_prog : list norm_step = [
 let test_elim_returns : Fun.prog_tree #Fun.can_tys int = Fun.(
   (**) let wp pt = pt 1 in
   (**) FStar.Monotonic.Pure.intro_pure_wp_monotonicity wp;
-  y <-- TbindP int int wp (fun () -> 1)
-                     (fun x -> return (x + 1));
+  y <-- TbindP int int wp (fun x -> return (x + 1));
   return (y + 2))
 
 unfold
@@ -115,8 +115,8 @@ let steel_read #a (r : ref a) () :
 
 [@@ __test__; __steel_reduce__]
 inline_for_extraction
-let r_read #a (r : ref a) : M.repr a =
-  M.repr_of_steel_r (read_pre r) (read_post r) (read_req r) (read_ens r) (steel_read r)
+let r_read #a (r : ref a) : M.repr SH.KSteel a =
+  M.repr_of_steel_r (read_pre r) (read_post r) (read_req r) (read_ens r) (SH.FSteel (steel_read r))
 
 inline_for_extraction
 let steel_write #a (r : ref a) (x : a) ()
@@ -129,13 +129,13 @@ let steel_write #a (r : ref a) (x : a) ()
 
 [@@ __test__; __steel_reduce__]
 inline_for_extraction
-let r_write #a (r : ref a) (x : a) : M.repr unit =
+let r_write #a (r : ref a) (x : a) : M.repr SH.KSteel unit =
   M.repr_of_steel_r [vptr' r full_perm] (fun _ -> [vptr' r full_perm])
                     (fun sl0 -> True) (fun sl0 () sl1 -> x == sl1 0)
-                    (steel_write r x)
+                    (SH.FSteel (steel_write r x))
 
 [@@ __test__; __steel_reduce__]
-let test0_M (r : ref nat) : M.repr nat = M.(
+let test0_M (r : ref nat) : M.repr SH.KSteel nat = M.(
   x <-- r_read r;
   return x)
 
@@ -386,7 +386,7 @@ let _ =
 
 [@@ __reduce__]
 inline_for_extraction
-let test3_M (r0 r1 : ref U32.t) : M.repr unit = M.(
+let test3_M (r0 r1 : ref U32.t) : M.repr SH.KSteel unit = M.(
   x <-- r_read r0;
   r_write r1 U32.(x +%^ 1ul))
 
@@ -578,3 +578,53 @@ let test_fail_slcond_1 (#a : Type) (r : ref a)
 let test_fail_to_repr_t (#a : Type) (r : ref a) (p : rmem (vptr r) -> prop)
   : F.steel unit (vptr r) (fun () -> vptr r) (fun h0 -> p h0) (fun _ _ _ -> True)
   = F.(to_steel (return ()) (_ by (mk_steel [])))
+
+////////// test time //////////
+
+let steel_id (#a : Type) (r : ref a)
+  : Steel unit (vptr r) (fun () -> vptr r)
+      (requires fun _ -> True) (ensures fun h0 () h1 -> frame_equalities (vptr r) h0 h1)
+  = Steel.Effect.Atomic.return ()
+
+[@@ __reduce__]
+let rec repeat_n (n : nat) (t : M.repr SH.KSteel unit) : M.repr SH.KSteel unit
+  = F.(if n = 0 then return () else (t;; repeat_n (n-1) t))
+
+(*let test_time (#a : Type) (r : ref a)
+  : F.steel unit (vptr r) (fun () -> vptr r)
+      (requires fun _ -> True) (ensures fun h0 () h1 -> frame_equalities (vptr r) h0 h1)
+  = F.(to_steel (repeat_n 30 (call steel_id r))
+        (_ by (T.norm [delta_only [
+                         `%M.vprop_list_sels_t;     `%M.Mkrepr?.repr_tree;
+                         `%M.Mkprog_cond?.pc_tree;  `%M.Mkprog_cond?.pc_post_len; `%M.Mkprog_cond?.pc_shape;
+                         `%L.map; `%Mkvprop'?.t;
+                         `%prog_M_to_Fun];
+                      delta_attr [`%__tac_helper__; `%M.__repr_M__; `%__steel_reduce__; `%__reduce__];
+                      delta_qualifier ["unfold"];
+                      iota; zeta; primops];
+               mk_steel [Timer])))*)
+
+////////// test ghost //////////
+
+let aux_ghost #opened (r : ref U32.t)
+  : SteelGhost int opened (vptr r) (fun _ -> vptr r)
+               (requires fun _ -> True) (ensures fun h0 x h1 -> frame_equalities (vptr r) h0 h1 /\ x <= U32.v (sel r h1))
+  =
+    let x = gget (vptr r) in
+    U32.v x
+
+inline_for_extraction
+let aux_steel (r : ref U32.t) (x : Ghost.erased int)
+  : Steel U32.t (vptr r) (fun _ -> vptr r)
+          (requires fun h0 -> x <= U32.v (sel r h0)) (ensures fun h0 x h1 -> frame_equalities (vptr r) h0 h1)
+  = read r
+
+inline_for_extraction
+let test_ghost (r : ref U32.t)
+  : F.steel U32.t (vptr r) (fun _ -> vptr r)
+            (requires fun _ -> True) (ensures fun h0 _ h1 -> frame_equalities (vptr r) h0 h1)
+  = F.(to_steel (
+    x <-- M.ghost_to_steel (M.bind_ghost (call_g aux_ghost r) (fun x ->
+                                         M.return_ghost (Ghost.hide x)));
+    call (aux_steel r) x
+  ) (_ by (mk_steel [])))

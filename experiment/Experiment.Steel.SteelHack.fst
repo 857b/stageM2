@@ -79,6 +79,10 @@ let tac () =
     exact b
   ) <: Tac unit) (cur_binders ()))
 
-inline_for_extraction
+inline_for_extraction noextract
 let steel_subcomp a pre_f post_f req_f ens_f pre_g post_g req_g ens_g frame pr p1 p2 sc $f ()
+  = f ()
+
+inline_for_extraction noextract
+let steel_ghost_subcomp a opened pre_f post_f req_f ens_f pre_g post_g req_g ens_g frame pr p1 p2 sc $f ()
   = f ()

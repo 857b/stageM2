@@ -31,6 +31,7 @@ IGNORE_KRML_FILES=\
 	obj/Experiment_%.krml
 
 NO_IGNORE_KRML_FILES=\
+	obj/Experiment_Steel_SteelHack.krml \
 	obj/Experiment_Steel_Repr_M.krml \
 	obj/Experiment_Steel_Test_Extract.krml \
 	obj/Steel_Effect_Common.krml

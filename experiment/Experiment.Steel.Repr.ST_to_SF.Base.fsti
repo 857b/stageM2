@@ -31,8 +31,8 @@ let rec repr_SF_of_ST
           Tret a x post (Fl.dlist_of_f sl0)
   | ST.Tbind a b pre itm post f g ->
           Tbind a b  _ _ (repr_SF_of_ST f sl0) (fun x sl1 -> repr_SF_of_ST (g x) sl1)
-  | ST.TbindP a b pre post wp f g ->
-          TbindP a b _ wp f (fun x -> repr_SF_of_ST (g x) sl0)
+  | ST.TbindP a b pre post wp g ->
+          TbindP a b _ wp (fun x -> repr_SF_of_ST (g x) sl0)
   | ST.Tif a guard pre post thn els ->
           Tif a guard post (repr_SF_of_ST thn sl0) (repr_SF_of_ST els sl0)
 

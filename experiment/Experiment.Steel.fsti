@@ -5,6 +5,7 @@ module Experiment.Steel
 module U    = Learn.Util
 module L    = FStar.List.Pure
 module SE   = Steel.Effect
+module SH   = Experiment.Steel.SteelHack
 module Ll   = Learn.List
 module Dl   = Learn.DList
 module Fl   = Learn.FList
@@ -27,7 +28,7 @@ open Experiment.Steel.Interface
 
 let prog_M_to_Fun
       (opt : prog_M_to_Fun_opt)
-      (#a : Type) (t : M.repr a)
+      (#ek : SH.effect_kind) (#a : Type) (t : M.repr ek a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
   : (sl0 : M.sl_f pre) ->
@@ -68,7 +69,7 @@ let prog_M_to_Fun
 
 val prog_M_to_Fun_equiv
       (opt : prog_M_to_Fun_opt)
-      (#a : Type) (t : M.repr a)
+      (#ek : SH.effect_kind) (#a : Type) (t : M.repr ek a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
       (sl0 : M.sl_f pre)
@@ -81,7 +82,7 @@ val prog_M_to_Fun_equiv
 inline_for_extraction
 let prog_M_to_Fun_extract
       (opt : prog_M_to_Fun_opt)
-      (#a : Type) (t : M.repr a)
+      (#a : Type) (t : M.repr SH.KSteel a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
       (req : M.req_t pre) (ens : M.ens_t pre a post)
@@ -90,7 +91,7 @@ let prog_M_to_Fun_extract
                   (forall (x : a) (sl1 : M.sl_f (post x)) .
                     Fun.tree_ens (prog_M_to_Fun opt t c sl0) SF.({val_v = x; sel_v = sl1}) ==>
                     ens sl0 x sl1)))
-  : M.repr_steel_t a pre post req ens
+  : M.repr_steel_t SH.KSteel a pre post req ens
   =
     M.repr_steel_subcomp _ _ _ _
       (fun sl0       -> let _ = sub sl0; prog_M_to_Fun_equiv opt t c sl0 in ())
@@ -101,14 +102,14 @@ let prog_M_to_Fun_extract
 inline_for_extraction
 let prog_M_to_Fun_extract_wp
       (opt : prog_M_to_Fun_opt)
-      (#a : Type) (t : M.repr a)
+      (#a : Type) (t : M.repr SH.KSteel a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
       (req : M.req_t pre) (ens : M.ens_t pre a post)
       (wp : (sl0 : M.sl_f pre) -> Lemma
               (requires req sl0)
               (ensures Fun.tree_wp (prog_M_to_Fun opt t c sl0) (fun res -> ens sl0 res.val_v res.sel_v)))
-  : M.repr_steel_t a pre post req ens
+  : M.repr_steel_t SH.KSteel a pre post req ens
   = prog_M_to_Fun_extract opt t c req ens
       (fun sl0 -> wp sl0;
                Fun.tree_wp_sound (prog_M_to_Fun opt t c sl0) (fun res -> ens sl0 res.val_v res.sel_v))
@@ -235,7 +236,7 @@ val call_repr_steel
       (#a : Type)
       (#pre : M.pre_t)     (#post : M.post_t a)
       (#req : M.req_t pre) (#ens  : M.ens_t pre a post)
-      (r : M.repr_steel_t a pre post req ens)
+      (r : M.repr_steel_t SH.KSteel a pre post req ens)
   : SE.Steel a (M.vprop_of_list' pre) (fun x -> M.vprop_of_list' (post x))
       (requires fun h0      -> norm_vpl (req (M.sel_f' pre h0)))
       (ensures  fun h0 x h1 -> norm_vpl (ens (M.sel_f' pre h0) x (M.sel_f' (post x) h1)))
@@ -245,16 +246,16 @@ val call_repr_steel
 
 /// We mention [t] so that it is specified by the goal, but this type is just a synonym for [M.repr_steel_t].
 let extract (a : Type) (pre : M.pre_t) (post : M.post_t a) (req : M.req_t pre) (ens : M.ens_t pre a post)
-            (t : M.repr a)
+            (t : M.repr SH.KSteel a)
   : Type
-  = M.repr_steel_t a pre post req ens
+  = M.repr_steel_t SH.KSteel a pre post req ens
 
 
 [@@ __tac_helper__]
 inline_for_extraction
 let __solve_by_wp
       (opt : prog_M_to_Fun_opt)
-      (#a : Type) (#t : M.repr a)
+      (#a : Type) (#t : M.repr SH.KSteel a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (#req : M.req_t pre) (#ens : M.ens_t pre a post)
       (c : M.prog_cond t.repr_tree pre post)
@@ -264,7 +265,7 @@ let __solve_by_wp
       (wp : squash (Fl.forall_flist (M.vprop_list_sels_t pre) (fun sl0 ->
                req sl0 ==>
                Fun.tree_wp (t_Fun sl0) (fun res -> ens sl0 res.val_v res.sel_v))))
-      (ext : M.repr_steel_t a pre post req ens)
+      (ext : M.repr_steel_t SH.KSteel a pre post req ens)
       (ext_eq : ext == prog_M_to_Fun_extract_wp opt t c req ens (fun sl0 -> ()))
   : extract a pre post req ens t
   =
@@ -330,19 +331,19 @@ let solve_by_wp (fr : flags_record) : Tac unit
     timer_stop t
 
 
-(***** Extracting a [M.unit_steel] from a [M.repr] *)
+(***** Extracting a [unit_steel] from a [M.repr] *)
 
 /// Similarly to [extract], [t] is only mentioned so that it can be retrieved by the tactic
 type __to_steel_goal
       (a : Type) (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t pre) (ens : SE.ens_t pre a post)
-      (t : M.repr a)
-  = M.unit_steel a pre post req ens
+      (t : M.repr SH.KSteel a)
+  = SH.unit_steel a pre post req ens
 
 [@@ __tac_helper__]
 inline_for_extraction
 let __build_to_steel
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
-      (#t : M.repr a)
+      (#t : M.repr SH.KSteel a)
       (goal_tr : M.to_repr_t a pre post req ens)
       (goal_f  : extract a goal_tr.r_pre goal_tr.r_post goal_tr.r_req goal_tr.r_ens t)
   : __to_steel_goal a pre post req ens t
@@ -373,7 +374,7 @@ let build_to_steel (fr : flags_record) : Tac unit
 inline_for_extraction
 let to_steel
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
-      (t : M.repr a)
+      (t : M.repr SH.KSteel a)
       (g : __to_steel_goal a pre post req ens t)
-  : M.unit_steel a pre post req ens
+  : SH.unit_steel a pre post req ens
   = g

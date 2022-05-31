@@ -246,9 +246,9 @@ let rec repr_SF_of_ST
                        (repr_SF_of_ST (g x) s_g sl1) (fun y sl2' ->
             let sl2 = sel_ST_of_SF (g x) s_g sl1 y sl2' in
             return_SF_post_of_ST post s.shp y sl2))
-    | ST.TbindP a b pre post wp f g -> fun s sl0 ->
+    | ST.TbindP a b pre post wp g -> fun s sl0 ->
             (**) let ST.SbindP _ post_n shp_g = s.shp in
-            TbindP a b _ wp f (fun x ->
+            TbindP a b _ wp (fun x ->
             (**) let s_g : ST.prog_shape (g x) = ST.mk_prog_shape (g x) shp_g in
             Tbind  b b (post_SF_of_ST post #(L.length #Type pre) shp_g) _
                        (repr_SF_of_ST (g x) s_g sl0) (fun y sl1' ->

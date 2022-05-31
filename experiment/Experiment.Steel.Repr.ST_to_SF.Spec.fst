@@ -24,7 +24,7 @@ let rec post_src_of_shape_ty
                post_src_of_shape_ty f (ST.mk_prog_shape f s_f) x i
              end else Ll.append_index pre frame (i - post_n + L.length pre)
     | ST.Tspec  _ pre post _ _ -> ()
-    | ST.Tret _ _ _ | ST.Tbind _ _  _ _ _  _ _ | ST.TbindP _ _  _ _  _ _ _ -> ()
+    | ST.Tret _ _ _ | ST.Tbind _ _  _ _ _  _ _ | ST.TbindP _ _  _ _  _ _ -> ()
     | ST.Tif _ _ pre post thn els ->
              let ST.Sif _ post_n shp_thn _ = s.shp in
              post_src_of_shape_ty thn (ST.mk_prog_shape thn shp_thn) x i
@@ -348,17 +348,17 @@ let repr_SF_of_ST_ens__Tbind a b pre (itm : ST.post_t a) post
 #pop-options
 
 let repr_SF_of_ST_ens__TbindP a b pre post
-      wp f (g : a -> ST.prog_tree b pre post)
+      wp (g : a -> ST.prog_tree b pre post)
       (post_n : nat {ST.post_has_len post post_n})
       (shp_g : ST.shape_tree _ post_n {forall (x : a) . ST.prog_has_shape (g x) shp_g})
       sl0 y sl1
       (ens_eq_g : (x : a) ->
                   Lemma (ens_equiv (g x) (ST.mk_prog_shape (g x) shp_g) sl0 y sl1))
   : Lemma
-      (ensures ens_equiv (ST.TbindP a b pre post wp f g)
+      (ensures ens_equiv (ST.TbindP a b pre post wp g)
                          (ST.mk_prog_shape _ (ST.SbindP _ _ shp_g)) sl0 y sl1)
   =
-    let t = ST.TbindP a b pre post wp f g                              in
+    let t = ST.TbindP a b pre post wp g                                in
     let s = ST.mk_prog_shape t (ST.SbindP (L.length pre) post_n shp_g) in
     let s_g (x : a) = ST.mk_prog_shape (g x) shp_g                     in
     let r_g (x : a) = repr_SF_of_ST (g x) (s_g x) sl0                  in
@@ -580,7 +580,7 @@ let rec repr_SF_of_ST_req
         (fun x sl1 -> repr_SF_of_ST_req (g x) (s_g x) sl1)
         (fun x sl1 -> repr_SF_of_ST_ens f s_f sl0 x sl1)
     end
-    begin fun (*ST.TbindP*) a b pre post wp f g -> fun s sl0 ->
+    begin fun (*ST.TbindP*) a b pre post wp g -> fun s sl0 ->
       let ST.SbindP _ post_n shp_g = s.shp           in
       let s_g (x : a) = ST.mk_prog_shape (g x) shp_g in
       let pt0 x = ST.tree_req (g x) sl0              in
@@ -588,7 +588,7 @@ let rec repr_SF_of_ST_req
                     (forall (y : b) (sl1' : post_v (post_SF_of_ST post #(L.length #Type pre) shp_g) y) .
                     tree_ens (repr_SF_of_ST (g x) (s_g x) sl0) y sl1' ==> True) in
       calc (<==>) {
-        ST.tree_req (ST.TbindP a b pre post wp f g) sl0;
+        ST.tree_req (ST.TbindP a b pre post wp g) sl0;
       <==> { _ by T.(apply_lemma (`U.iff_refl); trefl ()) }
         wp (fun x -> ST.tree_req (g x) sl0);
       <==> {}
@@ -600,7 +600,7 @@ let rec repr_SF_of_ST_req
                 (forall (y : b) (sl1' : post_v (post_SF_of_ST post #(L.length #Type pre) shp_g) y) .
                 tree_ens (repr_SF_of_ST (g x) (ST.mk_prog_shape (g x) shp_g) sl0) y sl1' ==> True));
       <==> { _ by T.(apply_lemma (`U.iff_refl); trefl ())}
-        tree_req (repr_SF_of_ST (ST.TbindP a b pre post wp f g)
+        tree_req (repr_SF_of_ST (ST.TbindP a b pre post wp g)
                                  (ST.mk_prog_shape _ (ST.SbindP _ _ shp_g)) sl0);
       }
     end
@@ -653,10 +653,10 @@ and repr_SF_of_ST_ens
         (fun x sl1 -> repr_SF_of_ST_ens f s_f sl0 x sl1)
         (fun x sl1 -> repr_SF_of_ST_ens (g x) (s_g x) sl1 y sl2)
     end
-    begin fun (*ST.TbindP*) a b pre post wp f g -> fun s sl0 y sl1 ->
+    begin fun (*ST.TbindP*) a b pre post wp g -> fun s sl0 y sl1 ->
       let ST.SbindP _ post_n shp_g = s.shp           in
       let s_g (x : a) = ST.mk_prog_shape (g x) shp_g in
-      repr_SF_of_ST_ens__TbindP a b pre post wp f g post_n shp_g sl0 y sl1
+      repr_SF_of_ST_ens__TbindP a b pre post wp g post_n shp_g sl0 y sl1
         (fun x -> repr_SF_of_ST_ens (g x) (s_g x) sl0 y sl1)
     end
     begin fun (*ST.Tif*) a guard pre post thn els -> fun s sl0 x sl1 ->
@@ -739,7 +739,7 @@ let rec repr_SF_of_ST_shape
            prog_has_shape (repr_SF_of_ST (g x) (s_g x) sl1) (shape_SF_of_ST shp_g)
         with repr_SF_of_ST_shape (g x) (s_g x) sl1
     end
-    begin fun (*ST.TbindP*) a b pre post wp f g -> fun s sl0 ->
+    begin fun (*ST.TbindP*) a b pre post wp g -> fun s sl0 ->
       let ST.SbindP _ post_n shp_g = s.shp      in
       let s_g x = ST.mk_prog_shape (g x) shp_g  in
       let lem_g (x : a)

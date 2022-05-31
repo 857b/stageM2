@@ -29,7 +29,7 @@ type prog_tree : (a : Type u#a) -> (post : post_t u#a u#b a) -> Type u#(1 + max 
              prog_tree b post
   | TbindP : (a : Type u#a) -> (b : Type u#a) ->
              (post : post_t b) ->
-             (wp : pure_wp a) -> (x : unit -> PURE a wp) -> (g : a -> prog_tree b post) ->
+             (wp : pure_wp a) -> (g : a -> prog_tree b post) ->
              prog_tree b post
   | Tif    : (a : Type u#a) -> (guard : bool) ->
              (post : post_t a) ->
@@ -47,7 +47,7 @@ let rec tree_req (#a : Type) (#post : post_t a) (t : prog_tree a post)
   | Tbind a _  itm _  f g ->
              tree_req f /\
                (forall (x : a) (sl : post_v itm x) . tree_ens f x sl ==> tree_req (g x sl))
-  | TbindP a _  _  wp _ g ->
+  | TbindP a _  _  wp g ->
              wp (fun (x : a) -> tree_req (g x))
   | Tif a guard _ thn els ->
              tree_req (if guard then thn else els)
@@ -63,7 +63,7 @@ and tree_ens (#a : Type) (#post : post_t a) (t : prog_tree a post)
              (fun y (sl2 : post_v post y) ->
                (exists (x : a) (sl1 : post_v itm x) .
                  tree_ens f x sl1 /\ tree_ens (g x sl1) y sl2))
-  | TbindP a _  post0  wp _ g ->
+  | TbindP a _  post0  wp g ->
              (fun y (sl1 : post_v post y) ->
                (exists (x : a) . as_ensures wp x /\ tree_ens (g x) y sl1))
   | Tif a guard _ thn els ->
@@ -106,7 +106,7 @@ let rec prog_has_shape (#a : Type u#a) (#post : post_t u#a u#b a)
                                 s == Sbind _ _ s_f s_g /\
                                 prog_has_shape f s_f /\
                                 (forall (x : a) (sl1 : post_v itm x) . prog_has_shape (g x sl1) s_g)
-    | TbindP a _ post _ _ g   -> exists (s_g : shape_tree post_n) .
+    | TbindP a _ post _ g     -> exists (s_g : shape_tree post_n) .
                                 s == SbindP _ s_g /\
                                (forall (x : a) . prog_has_shape (g x) s_g)
     | Tif a gd post thn els   -> exists (s_thn : shape_tree post_n)
@@ -276,8 +276,8 @@ let rec repr_Fun_of_SF (#val_t : Type u#a) (#sel_t : post_t u#a u#b val_t) (t : 
           Fun.Tret #sl_tys ({val_t = a; sel_t = post}) ({vl = x; sl})
   | Tbind a b itm post f g ->
           Fun.Tbind _ _ (repr_Fun_of_SF f) (sl_uncurrify (fun x sls -> repr_Fun_of_SF (g x sls)))
-  | TbindP a b post wp f g ->
-          Fun.TbindP a ({val_t = b; sel_t = post}) wp f (fun (x : a) -> repr_Fun_of_SF (g x))
+  | TbindP a b post wp g ->
+          Fun.TbindP a ({val_t = b; sel_t = post}) wp (fun (x : a) -> repr_Fun_of_SF (g x))
   | Tif a guard post thn els ->
           Fun.Tif ({val_t = a; sel_t = post}) guard (repr_Fun_of_SF thn) (repr_Fun_of_SF els)
 

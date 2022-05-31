@@ -18,11 +18,11 @@ let equiv_Tbind #a #b #pre #itm #post f f' g g' eq_f eq_g
     _ by T.(norm [delta_only [`%equiv; `%tree_req; `%tree_ens]; iota; zeta];
             smt ())
 
-let equiv_TbindP #a #b #pre #post wp f g g' eq_g
+let equiv_TbindP #a #b #pre #post wp g g' eq_g
   =
     FStar.Classical.forall_intro_squash_gtot eq_g;
     FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp;
-    assert (equiv (TbindP a b pre post wp f g) (TbindP a b pre post wp f g'))
+    assert (equiv (TbindP a b pre post wp g) (TbindP a b pre post wp g'))
       by T.(norm [delta_only [`%equiv; `%tree_req; `%tree_ens]; iota; zeta];
             smt ())
 
@@ -203,11 +203,11 @@ let rec repr_ST_of_M_req (#a : Type) (t : M.prog_tree a)
                tree_req r1 sl0;
              }
 
-  | TCbindP #a #b #wp #x #g  pre post  cg ->
+  | TCbindP #a #b #wp #g  pre post  cg ->
             calc (<==>) {
               M.tree_req _ c sl0;
             <==> {}
-              M.tree_req _ (TCbindP #a #b #wp #x #g pre post cg) sl0;
+              M.tree_req _ (TCbindP #a #b #wp #g pre post cg) sl0;
             <==> {_ by T.(apply_lemma (`U.iff_refl); trefl ())}
               bind_pure_req wp (fun x -> M.tree_req (g x) (cg x)) sl0;
             <==> {
@@ -218,8 +218,8 @@ let rec repr_ST_of_M_req (#a : Type) (t : M.prog_tree a)
             }
               wp (fun x -> tree_req (repr_ST_of_M (g x) (cg x)) sl0);
             <==> {_ by T.(apply_lemma (`U.iff_refl); trefl ())}
-              tree_req (repr_ST_of_M _ (TCbindP #a #b #wp #x #g pre post cg)) sl0;
-            <==> {U.f_equal tree_req (repr_ST_of_M _ (TCbindP #a #b #wp #x #g pre post cg)) (repr_ST_of_M _ c)}
+              tree_req (repr_ST_of_M _ (TCbindP #a #b #wp #g pre post cg)) sl0;
+            <==> {U.f_equal tree_req (repr_ST_of_M _ (TCbindP #a #b #wp #g pre post cg)) (repr_ST_of_M _ c)}
               tree_req (repr_ST_of_M _ c) sl0;
             }
   | TCif #a #guard #thn #els  pre post  cthn cels ->
@@ -280,11 +280,11 @@ and repr_ST_of_M_ens (#a : Type) (t : M.prog_tree a)
                tree_ens (repr_ST_of_M _ c) sl0 res sl1;
              }
 
-  | TCbindP #a #b #wp #x #g  pre post  cg ->
+  | TCbindP #a #b #wp #g  pre post  cg ->
             calc (<==>) {
               M.tree_ens _ c sl0 res sl1;
             <==> {}
-              M.tree_ens _ (TCbindP #a #b #wp #x #g pre post cg) sl0 res sl1;
+              M.tree_ens _ (TCbindP #a #b #wp #g pre post cg) sl0 res sl1;
             <==> {_ by T.(apply_lemma (`U.iff_refl); trefl ())}
               bind_pure_ens wp (fun x -> M.tree_ens (g x) (cg x)) sl0 res sl1;
             <==> {
@@ -294,8 +294,8 @@ and repr_ST_of_M_ens (#a : Type) (t : M.prog_tree a)
             }
               (exists (x : a) . as_ensures wp x /\ tree_ens (repr_ST_of_M (g x) (cg x)) sl0 res sl1);
             <==> {_ by T.(apply_lemma (`U.iff_refl); trefl ())}
-              tree_ens (repr_ST_of_M _ (TCbindP #a #b #wp #x #g pre post cg)) sl0 res sl1;
-            <==> {U.f_equal tree_ens (repr_ST_of_M _ (TCbindP #a #b #wp #x #g pre post cg))
+              tree_ens (repr_ST_of_M _ (TCbindP #a #b #wp #g pre post cg)) sl0 res sl1;
+            <==> {U.f_equal tree_ens (repr_ST_of_M _ (TCbindP #a #b #wp #g pre post cg))
                                    (repr_ST_of_M _ c)}
               tree_ens (repr_ST_of_M _ c) sl0 res sl1;
             }
@@ -342,7 +342,7 @@ let rec repr_ST_of_M_shape
             repr_ST_of_M_shape f cf s_f;
             introduce forall (x : a) . prog_has_shape (repr_ST_of_M (g x) (cg x)) (shape_ST_of_M s_g)
               with repr_ST_of_M_shape (g x) (cg x) s_g
-   | TCbindP #a #b #_ #_ #g _ _ cg ->
+   | TCbindP #a #b #_ #g _ _ cg ->
             let M.SbindP _ _ s_g = s in
             introduce forall (x : a) . prog_has_shape (repr_ST_of_M (g x) (cg x)) (shape_ST_of_M s_g)
               with repr_ST_of_M_shape (g x) (cg x) s_g
@@ -393,14 +393,14 @@ and flatten_equiv_aux
                () (fun (x : a) -> flatten_equiv_aux (g x) k k_equiv k_bind);
              assert (equiv (flatten_prog_aux t k) (Tbind a a1 pre itm post1 f g2));
              k_bind _ _ _ f g
-  | TbindP a b pre post wp f g ->
-             let t = TbindP a b pre post wp f g in
+  | TbindP a b pre post wp g ->
+             let t = TbindP a b pre post wp g in
              let g1 (x : a) = flatten_prog (g x) in
-             assert (flatten_prog_aux t k == k (TbindP _ _ _ _ wp f g1))
+             assert (flatten_prog_aux t k == k (TbindP _ _ _ _ wp g1))
                by T.(trefl ());
-             equiv_TbindP wp f g1 g
+             equiv_TbindP wp g1 g
                (fun x -> flatten_equiv (g x));
-             k_equiv _ (TbindP _ _ _ _ wp f g1) t
+             k_equiv _ (TbindP _ _ _ _ wp g1) t
   | Tif a guard pre post thn els ->
              equiv_Tif guard (flatten_prog thn) thn (flatten_prog els) els
                        (flatten_equiv thn) (flatten_equiv els);
@@ -451,15 +451,15 @@ and flatten_prog_shape_aux
              (fun pre' t' s' ->
                introduce forall (x : a) . prog_has_shape (g1 x) (flatten_shape_aux s_g k_s)
                  with flatten_prog_shape_aux (g x) s_g k_t post1_n k_s k_hyp)
-  | TbindP a b pre post wp f g ->
-           let t = TbindP a b pre post wp f g in
+  | TbindP a b pre post wp g ->
+           let t = TbindP a b pre post wp g in
            let SbindP _ _ s_g = s in
            let g1 (x : a) = flatten_prog (g x) in
-           assert (flatten_prog_aux t k_t == k_t (TbindP _ _ _ _ wp f g1))
+           assert (flatten_prog_aux t k_t == k_t (TbindP _ _ _ _ wp g1))
              by T.(trefl ());
            introduce forall (x : a) . prog_has_shape (g1 x) (flatten_shape s_g)
              with flatten_prog_shape (g x) s_g;
-           k_hyp _ (TbindP _ _ _ _ wp f g1) (SbindP _ _ (flatten_shape s_g))
+           k_hyp _ (TbindP _ _ _ _ wp g1) (SbindP _ _ (flatten_shape s_g))
   | Tif a guard pre post thn els ->
            let Sif _ _ s_thn s_els = s in
            flatten_prog_shape thn s_thn;

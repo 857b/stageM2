@@ -22,14 +22,14 @@ let equiv_Tbind
             smt ())
 
 let equiv_TbindP
-      (#s : tys) (#a : Type) (#b : s.t) (wp : pure_wp a) (f : unit -> PURE a wp)
+      (#s : tys) (#a : Type) (#b : s.t) (wp : pure_wp a)
       (g g' : (x : a) -> prog_tree b)
       (eq_g : (x : a) -> squash (equiv (g x) (g' x)))
-  : Lemma (equiv (TbindP a b wp f g) (TbindP a b wp f g'))
+  : Lemma (equiv (TbindP a b wp g) (TbindP a b wp g'))
   =
     FStar.Classical.forall_intro_squash_gtot eq_g;
     MP.elim_pure_wp_monotonicity wp;
-    assert (equiv (TbindP a b wp f g) (TbindP a b wp f g'))
+    assert (equiv (TbindP a b wp g) (TbindP a b wp g'))
       by T.(norm [delta_only [`%equiv; `%tree_req; `%tree_ens]; zeta];
             norm [iota];
             smt ())
@@ -73,15 +73,15 @@ let rec tree_wp_sound (#s : tys) (#a : s.t) (t : prog_tree #s a) (post : pure_po
       tree_wp_sound f post1;
       introduce forall (x : s.v a) . tree_wp (g x) post ==> (tree_req (g x) /\ (forall (y : s.v b) . tree_ens (g x) y ==> post y))
         with introduce _ ==> _ with _ . tree_wp_sound (g x) post
-  | TbindP a b wp xf g ->
+  | TbindP a b wp g ->
       let post1 (x : a) = tree_wp (g x) post in
       let req1  (x : a) = tree_req (g x)     in
-      assert (tree_wp (TbindP a b wp xf g) post == wp post1) by T.(trefl ());
+      assert (tree_wp (TbindP a b wp g) post == wp post1) by T.(trefl ());
       MP.elim_pure_wp_monotonicity wp;
       introduce forall (x : a) . post1 x ==> (req1 x /\ (forall (y : s.v b) . tree_ens (g x) y ==> post y))
         with introduce _ ==> _ with _ . tree_wp_sound (g x) post;
-      assert (tree_req (TbindP a b wp xf g) == (wp req1)) by T.(trefl ());
-      U.prop_equal (fun p -> p) (wp req1) (tree_req (TbindP a b wp xf g))
+      assert (tree_req (TbindP a b wp g) == wp req1) by T.(trefl ());
+      U.prop_equal (fun p -> p) (wp req1) (tree_req (TbindP a b wp g))
   | Tif a guard thn els ->
       if guard
       then tree_wp_sound thn post
@@ -199,14 +199,14 @@ and elim_returns_equiv_aux
               }
            end
 
-  | TbindP a b wp f g ->
-           let t = TbindP a b wp f g in
-           let SbindP s_g = s        in
-           let s = SbindP s_g        in
+  | TbindP a b wp g ->
+           let t = TbindP a b wp g in
+           let SbindP s_g = s      in
+           let s = SbindP s_g      in
            begin match k with
            | ERetKfun kf ->
               let g1 (x : a) = elim_returns_aux lm (g x) s_g (ERetKfun #st #b kf) in
-              assert (elim_returns_aux lm t s (ERetKfun kf) == TbindP _ _ wp f g1)
+              assert (elim_returns_aux lm t s (ERetKfun kf) == TbindP _ _ wp g1)
                 by T.(trefl ());
               introduce forall (x : a) . equiv_with_fun (g x) (g1 x) kf
                 with (elim_returns_equiv_aux lm (g x) s_g (ERetKfun #st #b kf);
@@ -214,10 +214,10 @@ and elim_returns_equiv_aux
               MP.elim_pure_wp_monotonicity wp
            | ERetKtrm kt ->
                let g1 (x : a) = elim_returns lm (g x) s_g in
-               assert (elim_returns_aux lm t s (ERetKtrm kt) == bind (TbindP _ _ wp f g1) kt)
+               assert (elim_returns_aux lm t s (ERetKtrm kt) == bind (TbindP _ _ wp g1) kt)
                  by T.(trefl ());
-               equiv_TbindP wp f g1 g (fun x -> elim_returns_equiv lm (g x) s_g);
-               equiv_Tbind (TbindP _ _ wp f g1) (TbindP _ _ wp f g) kt kt () (fun _ -> ())
+               equiv_TbindP wp g1 g (fun x -> elim_returns_equiv lm (g x) s_g);
+               equiv_Tbind (TbindP _ _ wp g1) (TbindP _ _ wp g) kt kt () (fun _ -> ())
            end
 
   | Tif a guard thn els ->

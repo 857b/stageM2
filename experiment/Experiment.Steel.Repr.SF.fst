@@ -62,16 +62,16 @@ let rec repr_Fun_of_SF_req #val_t #sel_t (t : prog_tree val_t sel_t)
                     (tree_ens f x sl1   <==> Fun.tree_ens (repr_Fun_of_SF f) ({val_v=x; sel_v=sl1})) /\
                     (tree_req (g x sl1) <==> Fun.tree_req (repr_Fun_of_SF (g x sl1)))
             with (repr_Fun_of_SF_ens f x sl1; repr_Fun_of_SF_req (g x sl1))
-  | TbindP a b post wp f g ->
+  | TbindP a b post wp g ->
           calc (<==>) {
-            tree_req (TbindP a b post wp f g);
+            tree_req (TbindP a b post wp g);
           <==> {_ by T.(apply_lemma (`U.iff_refl); trefl ())}
             wp (fun x -> tree_req (g x));
           <==> {wp_morph_iff wp (fun x -> tree_req (g x)) (fun x -> Fun.tree_req (repr_Fun_of_SF (g x)))
                               (fun x -> repr_Fun_of_SF_req (g x))}
             wp (fun x -> Fun.tree_req (repr_Fun_of_SF (g x)));
           <==> {_ by T.(apply_lemma (`U.iff_refl); trefl ())}
-            Fun.tree_req (repr_Fun_of_SF (TbindP a b post wp f g));
+            Fun.tree_req (repr_Fun_of_SF (TbindP a b post wp g));
           }
   | Tif a guard post thn els ->
           if guard
@@ -105,11 +105,11 @@ and repr_Fun_of_SF_ens #val_t #sel_t (t : prog_tree val_t sel_t)
                     (tree_ens f x sl1   <==> Fun.tree_ens (repr_Fun_of_SF f) ({val_v=x; sel_v=sl1})) /\
                     (tree_ens (g x sl1) val_v sel_v <==> Fun.tree_ens (repr_Fun_of_SF (g x sl1)) ({val_v; sel_v}))
             with (repr_Fun_of_SF_ens f x sl1; repr_Fun_of_SF_ens (g x sl1) val_v sel_v)
-  | TbindP a b post wp f g ->
-          assert (tree_ens (TbindP a b post wp f g) val_v sel_v
+  | TbindP a b post wp g ->
+          assert (tree_ens (TbindP a b post wp g) val_v sel_v
               == (exists (x : a) . as_ensures wp x /\ tree_ens (g x) val_v sel_v))
             by T.(trefl ());
-          assert (Fun.tree_ens (repr_Fun_of_SF (TbindP a b post wp f g)) ({val_v; sel_v})
+          assert (Fun.tree_ens (repr_Fun_of_SF (TbindP a b post wp g)) ({val_v; sel_v})
               == (exists (x : a) . as_ensures wp x /\ Fun.tree_ens (repr_Fun_of_SF (g x)) ({val_v; sel_v})))
             by T.(trefl ());
           introduce forall (x : a) .
@@ -137,7 +137,7 @@ let rec repr_Fun_of_SF_shape
               Fun.prog_has_shape ((sl_uncurrify (fun x sls -> repr_Fun_of_SF (g x sls))) x)
                                  (shape_Fun_of_SF s_g)
             with repr_Fun_of_SF_shape (g x.val_v x.sel_v) (mk_prog_shape _ s_g)
-  | TbindP a b post wp f g ->
+  | TbindP a b post wp g ->
           let SbindP _ s_g = s.shp in
           introduce forall (x : a) .
               Fun.prog_has_shape (repr_Fun_of_SF (g x)) (shape_Fun_of_SF s_g)

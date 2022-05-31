@@ -6,6 +6,7 @@ module Dl   = Learn.DList
 module Fl   = Learn.FList
 module Ll   = Learn.List
 module SE   = Steel.Effect
+module SH   = Experiment.Steel.SteelHack
 module Mem  = Steel.Memory
 module Perm = Learn.Permutation
 module FExt = FStar.FunctionalExtensionality
@@ -18,10 +19,6 @@ irreducible let __repr_M__ : unit = ()
 
 
 (*** Steel *)
-
-unfold
-let unit_steel = Experiment.Steel.SteelHack.unit_steel
-
 
 val focus_rmem_feq (p q r : vprop) (h : rmem p)
   : Lemma (requires can_be_split p q /\ can_be_split q r)
@@ -82,8 +79,19 @@ val unit_steel_subcomp_no_frame
       (eq_pre  : squash (equiv pre_g pre_f))
       (eq_post : (x : a) -> squash (equiv (post_g x) (post_f x)))
       (sb_pre : squash (subcomp_no_frame_pre req_f ens_f req_g ens_g eq_pre eq_post))
-      ($f : unit_steel a pre_f post_f req_f ens_f)
-  : unit_steel a pre_g post_g req_g ens_g
+      ($f : SH.unit_steel a pre_f post_f req_f ens_f)
+  : SH.unit_steel a pre_g post_g req_g ens_g
+
+inline_for_extraction noextract
+val unit_steel_ghost_subcomp_no_frame
+      (#a : Type) (#opened : Mem.inames)
+      (#pre_f:pre_t) (#post_f:post_t a) (req_f:req_t pre_f) (ens_f:ens_t pre_f a post_f)
+      (#pre_g:pre_t) (#post_g:post_t a) (req_g:req_t pre_g) (ens_g:ens_t pre_g a post_g)
+      (eq_pre  : squash (equiv pre_g pre_f))
+      (eq_post : (x : a) -> squash (equiv (post_g x) (post_f x)))
+      (sb_pre : squash (subcomp_no_frame_pre req_f ens_f req_g ens_g eq_pre eq_post))
+      ($f : SH.unit_steel_ghost a opened pre_f post_f req_f ens_f)
+  : SH.unit_steel_ghost a opened pre_g post_g req_g ens_g
 
 
 (*** [vprop_list] *)
@@ -288,13 +296,13 @@ type post_t (a : Type) = a -> vprop_list
 type req_t (pre : pre_t) = sl_f pre -> Type0
 type ens_t (pre : pre_t) (a : Type) (post : post_t a) = sl_f pre -> (x : a) -> sl_f (post x) -> Type0
 
-type repr_steel_t (a : Type)
+type repr_steel_t (ek : SH.effect_kind) (a : Type)
        (pre : pre_t) (post : post_t a)
-       (req : req_t pre) (ens : ens_t pre a post) : Type
-  = unit_steel a
+       (req : req_t pre) (ens : ens_t pre a post)
+  = SH.steel a
       (vprop_of_list pre) (fun x -> vprop_of_list (post x))
-      (requires fun h0      -> req (sel pre h0))
-      (ensures  fun h0 x h1 -> ens (sel pre h0) x (sel_f (post x) h1))
+      (requires fun h0 -> req (sel pre h0)) (ensures fun h0 x h1 -> ens (sel pre h0) x (sel_f (post x) h1))
+      ek
 
 inline_for_extraction noextract
 let repr_steel_subcomp
@@ -305,13 +313,12 @@ let repr_steel_subcomp
                 Lemma (requires req_g sl0) (ensures req_f sl0))
       (pf_ens : (sl0 : sl_f pre) -> (x : a) -> (sl1 : sl_f (post x)) ->
                 Lemma (requires req_f sl0 /\ req_g sl0 /\ ens_f sl0 x sl1) (ensures ens_g sl0 x sl1))
-      (r : repr_steel_t a pre post req_f ens_f)
-  : repr_steel_t a pre post req_g ens_g
-  = 
-    (fun () ->
+      (r : repr_steel_t SH.KSteel a pre post req_f ens_f)
+  : repr_steel_t SH.KSteel a pre post req_g ens_g
+  = SH.steel_f (fun () ->
       (**) let sl0 : Ghost.erased (t_of (vprop_of_list pre)) = gget (vprop_of_list pre) in
       (**) pf_req (vpl_sels_f pre sl0);
-      let x = r () in
+      let x = SH.steel_u r () in
       (**) let sl1 : Ghost.erased (t_of (vprop_of_list (post x))) = gget (vprop_of_list (post x)) in
       (**) pf_ens (vpl_sels_f pre sl0) x (vpl_sels_f (post x) sl1);
       Steel.Effect.Atomic.return x)
@@ -356,15 +363,31 @@ inline_for_extraction noextract
 val steel_of_repr
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
       (tr : to_repr_t a pre post req ens)
-      (f : repr_steel_t a tr.r_pre tr.r_post tr.r_req tr.r_ens)
-  : unit_steel a pre post req ens
+      (f : repr_steel_t SH.KSteel a tr.r_pre tr.r_post tr.r_req tr.r_ens)
+  : SH.unit_steel a pre post req ens
 
 inline_for_extraction noextract
 val repr_steel_of_steel
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
       (tr : to_repr_t a pre post req ens)
-      ($f  : unit_steel a pre post req ens)
-  : repr_steel_t a tr.r_pre tr.r_post tr.r_req tr.r_ens 
+      ($f  : SH.unit_steel a pre post req ens)
+  : repr_steel_t SH.KSteel a tr.r_pre tr.r_post tr.r_req tr.r_ens 
+
+inline_for_extraction noextract
+val steel_ghost_of_repr
+      (#a : Type) (#opened : Mem.inames)
+      (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
+      (tr : to_repr_t a pre post req ens)
+      (f : repr_steel_t (SH.KGhost opened) a tr.r_pre tr.r_post tr.r_req tr.r_ens)
+  : SH.unit_steel_ghost a opened pre post req ens
+
+inline_for_extraction noextract
+val repr_steel_of_steel_ghost
+      (#a : Type) (#opened : Mem.inames)
+      (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
+      (tr : to_repr_t a pre post req ens)
+      ($f  : SH.unit_steel_ghost a opened pre post req ens)
+  : repr_steel_t (SH.KGhost opened) a tr.r_pre tr.r_post tr.r_req tr.r_ens
 
 
 (*** [prog_tree] *)
@@ -388,7 +411,7 @@ type prog_tree : (a : Type u#a) -> Type u#(max (a+1) 2) =
              prog_tree b
   // bind pure, models a polymonadic bind between PURE and our monad
   | TbindP : (a : Type u#a) -> (b : Type u#a) ->
-             (wp : pure_wp a) -> (x : unit -> PURE a wp) -> (g : a -> prog_tree b) ->
+             (wp : pure_wp a) -> (g : a -> prog_tree b) ->
              prog_tree b
   // if-then-else
   | Tif    : (a : Type u#a) -> (guard : bool) ->
@@ -434,10 +457,10 @@ type tree_cond : (#a : Type u#a) -> (t : prog_tree a) -> (pre : pre_t) -> (post 
               (cf : tree_cond f pre itm) -> (cg : ((x : a) -> tree_cond (g x) (itm x) post)) ->
               tree_cond (Tbind a b f g) pre post
   | TCbindP : (#a : Type u#a) -> (#b : Type u#a) ->
-              (#wp : pure_wp a) -> (#x : (unit -> PURE a wp)) -> (#g : (a -> prog_tree b)) ->
+              (#wp : pure_wp a) -> (#g : (a -> prog_tree b)) ->
               (pre : pre_t) -> (post : post_t b) ->
               (cg : ((x : a) -> tree_cond (g x) pre post)) ->
-              tree_cond (TbindP a b wp x g) pre post
+              tree_cond (TbindP a b wp g) pre post
   | TCif    : (#a : Type u#a) -> (#guard : bool) -> (#thn : prog_tree a) -> (#els : prog_tree a) ->
               (pre : pre_t) -> (post : post_t a) ->
               (cthn : tree_cond thn pre post) -> (cels : tree_cond els pre post) ->
@@ -522,7 +545,7 @@ let rec tree_cond_has_shape
         tree_cond_has_shape els s_els
       | _ -> False)
 
-noeq inline_for_extraction
+noeq inline_for_extraction noextract
 type prog_cond (#a : Type) (t : prog_tree a) (pre : pre_t) (post : post_t a) = {
   pc_tree     : tree_cond t pre post;
   pc_post_len : nat;
@@ -614,40 +637,41 @@ let ite_ens (#a : Type) (guard : bool) (#pre : pre_t) (#post : post_t a)
 [@@ strict_on_arguments [4]] (* strict on c *)
 let rec tree_req (#a : Type u#a) (t : prog_tree a)
                  (#pre : pre_t) (#post : post_t a) (c : tree_cond t pre post)
-  : Tot (req_t pre) (decreases t) =
+                 (sl0 : sl_f pre)
+  : Tot Type0 (decreases t) =
   match c with
   | TCspec #_ #pre #_ #req #_  tcs ->
-             spec_req tcs req
+             spec_req tcs req sl0
   | TCspecS #_ tr tcs ->
-             spec_req tcs tr.r_req
+             spec_req tcs tr.r_req sl0
   | TCret #_ #_  pre _  _ ->
-             return_req pre
+             return_req pre sl0
   | TCbind #_ #_ #f #g  pre itm _  cf cg ->
-             bind_req (tree_req f cf) (tree_ens f cf) (fun x -> tree_req (g x) (cg x))
-  | TCbindP #_ #_ #wp #_ #g  pre _  cg ->
-             bind_pure_req wp (fun x -> tree_req (g x) (cg x))
+             bind_req (tree_req f cf) (tree_ens f cf) (fun x -> tree_req (g x) (cg x)) sl0
+  | TCbindP #_ #_ #wp #g  pre _  cg ->
+             bind_pure_req wp (fun x -> tree_req (g x) (cg x)) sl0
   | TCif #a #guard  pre _ thn els ->
-             ite_req #a guard (tree_req _ thn) (tree_req _ els)
+             ite_req #a guard (tree_req _ thn) (tree_req _ els) sl0
 
 and tree_ens (#a : Type u#a) (t : prog_tree a)
              (#pre : pre_t) (#post : post_t a) (c : tree_cond t pre post)
-  : Tot (ens_t pre a post) (decreases t) =
+             (sl0 : sl_f pre) (res : a) (sl1 : sl_f (post res))
+  : Tot Type0 (decreases t) =
   match c with
   | TCspec #a #pre #post #req #ens  tcs ->
-             spec_ens tcs ens
+             spec_ens tcs ens sl0 res sl1
   | TCspecS #_ tr tcs ->
-             spec_ens tcs tr.r_ens
+             spec_ens tcs tr.r_ens sl0 res sl1
   | TCret #a #x  pre post  p ->
-             (fun sl0 x' sl1 ->
-                x' == x /\
+                res == x /\
                (let sl0' = extract_vars p sl0 in
-                sl1 == sl0'))
+                sl1 == sl0')
   | TCbind #_ #_ #f #g  pre itm post  cf cg ->
-             bind_ens (tree_ens f cf) (fun x -> tree_ens (g x) (cg x))
-  | TCbindP #_ #_ #wp #_ #g  pre post  cg ->
-             bind_pure_ens wp (fun x -> tree_ens (g x) (cg x))
+             bind_ens (tree_ens f cf) (fun x -> tree_ens (g x) (cg x)) sl0 res sl1
+  | TCbindP #_ #_ #wp #g  pre post  cg ->
+             bind_pure_ens wp (fun x -> tree_ens (g x) (cg x)) sl0 res sl1
   | TCif #a #guard  pre post thn els ->
-             ite_ens #a guard (tree_ens _ thn) (tree_ens _ els)
+             ite_ens #a guard (tree_ens _ thn) (tree_ens _ els) sl0 res sl1
 
 
 (*** "Monad" *)
@@ -655,24 +679,25 @@ and tree_ens (#a : Type u#a) (t : prog_tree a)
 /// We define a "monad" (which does not satisfy the monad laws) on a [repr] type which contains a representation
 /// of the program as a tree and a corresponding steel function.
 
-noeq inline_for_extraction
-type repr (a : Type) = {
+noeq inline_for_extraction noextract
+type repr (ek : SH.effect_kind) (a : Type) = {
   repr_tree  : prog_tree a;
   repr_steel : (pre : pre_t) -> (post : post_t a) -> (c : tree_cond repr_tree pre post) ->
-               repr_steel_t a pre post (tree_req repr_tree c) (tree_ens repr_tree c)
+               repr_steel_t ek a pre post (tree_req repr_tree c) (tree_ens repr_tree c)
 }
+
 
 inline_for_extraction noextract
 let repr_of_steel_steel
       (a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
       (tcs : tree_cond_Spec a pre post)
-      ($f : repr_steel_t a pre post req ens)
+      ($f : repr_steel_t SH.KSteel a pre post req ens)
   : (let c = TCspec #a #pre #post #req #ens tcs in
-     repr_steel_t a tcs.tcs_pre tcs.tcs_post (tree_req _ c) (tree_ens _ c))
-  = fun () ->
+     repr_steel_t SH.KSteel a tcs.tcs_pre tcs.tcs_post (tree_req _ c) (tree_ens _ c))
+  = SH.steel_f (fun () ->
     (**) steel_change_vequiv tcs.tcs_pre_eq;
     (**) steel_elim_vprop_of_list_append_f pre tcs.tcs_frame;
-    let x = f () in
+    let x = SH.steel_u f () in
     (**) steel_intro_vprop_of_list_append_f (post x) tcs.tcs_frame;
     (**) let sl1' = gget (vprop_of_list L.(post x @ tcs.tcs_frame)) in
     (**) steel_change_vequiv (tcs.tcs_post_eq x);
@@ -680,50 +705,101 @@ let repr_of_steel_steel
     (**) assert (vpl_sels_f (tcs.tcs_post x) sl1''
     (**)      == extract_vars (tcs.tcs_post_eq x) (vpl_sels_f L.(post x @ tcs.tcs_frame) sl1'));
     (**) extract_vars_sym_l (tcs.tcs_post_eq x) (vpl_sels_f L.(post x @ tcs.tcs_frame) sl1');
-    Steel.Effect.Atomic.return x
+    Steel.Effect.Atomic.return x)
+
+inline_for_extraction noextract
+let repr_of_steel_ghost_steel
+      (a : Type) (opened : Mem.inames) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
+      (tcs : tree_cond_Spec a pre post)
+      ($f : repr_steel_t (SH.KGhost opened) a pre post req ens)
+  : (let c = TCspec #a #pre #post #req #ens tcs in
+     repr_steel_t (SH.KGhost opened) a tcs.tcs_pre tcs.tcs_post (tree_req _ c) (tree_ens _ c))
+  = SH.ghost_f #opened (fun () ->
+    (**) steel_change_vequiv tcs.tcs_pre_eq;
+    (**) steel_elim_vprop_of_list_append_f pre tcs.tcs_frame;
+    let x = SH.ghost_u f () in
+    (**) steel_intro_vprop_of_list_append_f (post x) tcs.tcs_frame;
+    (**) let sl1' = gget (vprop_of_list L.(post x @ tcs.tcs_frame)) in
+    (**) steel_change_vequiv (tcs.tcs_post_eq x);
+    (**) let sl1'' = gget (vprop_of_list (tcs.tcs_post x)) in
+    (**) assert (vpl_sels_f (tcs.tcs_post x) sl1''
+    (**)      == extract_vars (tcs.tcs_post_eq x) (vpl_sels_f L.(post x @ tcs.tcs_frame) sl1'));
+    (**) extract_vars_sym_l (tcs.tcs_post_eq x) (vpl_sels_f L.(post x @ tcs.tcs_frame) sl1');
+    (**) noop ();
+    x)
+
 
 [@@ __repr_M__]
 let tree_of_steel_r
-      (#a : Type) (#pre : pre_t) (#post : post_t a) (#req : req_t pre) (#ens : ens_t pre a post)
-      ($f : repr_steel_t a pre post req ens)
+      (#ek : SH.effect_kind) (#a : Type)
+      (#pre : pre_t) (#post : post_t a) (#req : req_t pre) (#ens : ens_t pre a post)
+      ($f : repr_steel_t ek a pre post req ens)
   : prog_tree a
   = Tspec a pre post req ens
 
 [@@ __repr_M__]
-inline_for_extraction
+inline_for_extraction noextract
 let repr_of_steel_r
       (#a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
-      ($f : repr_steel_t a pre post req ens)
-  : repr a
+      ($f : repr_steel_t SH.KSteel a pre post req ens)
+  : repr SH.KSteel a
   = {
     repr_tree  = tree_of_steel_r f;
     repr_steel = (fun pre'0 post'0 c ->
                     let TCspec tcs = c in
-                    U.cast (repr_steel_t a pre'0 post'0 (tree_req _ c) (tree_ens _ c))
-                           (repr_of_steel_steel a pre post req ens tcs f))
+                    repr_of_steel_steel a pre post req ens tcs f)
   }
+
+[@@ __repr_M__]
+inline_for_extraction noextract
+let repr_of_steel_ghost_r
+      (#a : Type) (#opened : Mem.inames) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
+      ($f : repr_steel_t (SH.KGhost opened) a pre post req ens)
+  : repr (SH.KGhost opened) a
+  = {
+    repr_tree  = tree_of_steel_r f;
+    repr_steel = (fun pre'0 post'0 c ->
+                    let TCspec tcs = c in
+                    repr_of_steel_ghost_steel a opened pre post req ens tcs f)
+  }
+
 
 [@@ __repr_M__]
 let tree_of_steel
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
-      ($f : unit_steel a pre post req ens)
+      ($f : SH.unit_steel a pre post req ens)
   : prog_tree a
   = TspecS a pre post req ens
 
 [@@ __repr_M__]
-inline_for_extraction
+inline_for_extraction noextract
 let repr_of_steel
       (#a : Type) (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t pre) (ens : SE.ens_t pre a post)
-      ($f : unit_steel a pre post req ens)
-  : repr a
+      ($f : SH.unit_steel a pre post req ens)
+  : repr SH.KSteel a
   = {
     repr_tree  = tree_of_steel f;
     repr_steel = (fun pre'0 post'0 c ->
                     let TCspecS tr tcs = c in
-                    U.cast (repr_steel_t a pre'0 post'0 (tree_req _ c) (tree_ens _ c))
-                           (repr_of_steel_steel a tr.r_pre tr.r_post tr.r_req tr.r_ens
-                                                tcs (repr_steel_of_steel tr f)))
+                    repr_of_steel_steel a tr.r_pre tr.r_post tr.r_req tr.r_ens
+                                        tcs (repr_steel_of_steel tr f))
   }
+
+[@@ __repr_M__]
+inline_for_extraction noextract
+let repr_of_steel_ghost
+      (#a : Type) (#opened : Mem.inames)
+      (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t pre) (ens : SE.ens_t pre a post)
+      ($f : SH.unit_steel_ghost a opened pre post req ens)
+  : repr (SH.KGhost opened) a
+  = {
+    repr_tree  = TspecS a pre post req ens;
+    repr_steel = (fun pre'0 post'0 c ->
+                    let TCspecS tr tcs = c in
+                    repr_of_steel_ghost_steel a opened tr.r_pre tr.r_post tr.r_req tr.r_ens
+                                        tcs (repr_steel_of_steel_ghost tr f))
+  }
+
 
 
 inline_for_extraction noextract
@@ -732,27 +808,54 @@ let return_steel
       (pre : pre_t) (post : post_t a)
       (p : vequiv pre (post x))
   : (let c = TCret #a #x #sl_hint pre post p in
-     repr_steel_t a pre post (tree_req _ c) (tree_ens _ c))
-  = fun () ->
+     repr_steel_t SH.KSteel a pre post (tree_req _ c) (tree_ens _ c))
+  = SH.steel_f (fun () ->
     (**) steel_change_vequiv p;
-    Steel.Effect.Atomic.return x
+    Steel.Effect.Atomic.return x)
+
+inline_for_extraction noextract
+let return_ghost_steel
+      (a : Type) (opened : Mem.inames) (x : a) (sl_hint : post_t a)
+      (pre : pre_t) (post : post_t a)
+      (p : vequiv pre (post x))
+  : (let c = TCret #a #x #sl_hint pre post p in
+     repr_steel_t (SH.KGhost opened) a pre post (tree_req _ c) (tree_ens _ c))
+  = SH.ghost_f #opened (fun () ->
+    (**) steel_change_vequiv p;
+    x)
 
 [@@ __repr_M__]
-inline_for_extraction
+inline_for_extraction noextract
 let return_hint (#a : Type) (x : a) (sl_hint : post_t a)
-  : repr a
+  : repr SH.KSteel a
   = {
     repr_tree  = Tret a x sl_hint;
     repr_steel = (fun pre0 post0 c ->
         let TCret pre post p = c in
-        U.cast (repr_steel_t a pre0 post0 (tree_req _ c) (tree_ens _ c))
-               (return_steel a x sl_hint pre post p))
+        return_steel a x sl_hint pre post p)
   }
 
 [@@ __repr_M__]
-inline_for_extraction
-let return (#a : Type) (x : a) : repr a
+inline_for_extraction noextract
+let return (#a : Type) (x : a) : repr SH.KSteel a
   = return_hint x (fun _ -> [])
+
+[@@ __repr_M__]
+inline_for_extraction noextract
+let return_ghost_hint (#a : Type) (#opened : Mem.inames) (x : a) (sl_hint : post_t a)
+  : repr (SH.KGhost opened) a
+  = {
+    repr_tree  = Tret a x sl_hint;
+    repr_steel = (fun pre0 post0 c ->
+        let TCret pre post p = c in
+        return_ghost_steel a opened x sl_hint pre post p)
+  }
+
+[@@ __repr_M__]
+inline_for_extraction noextract
+let return_ghost (#a : Type) (#opened : Mem.inames) (x : a) : repr (SH.KGhost opened) a
+  = return_ghost_hint x (fun _ -> [])
+
 
 
 val elim_tree_req_bind (#a #b : Type) (f : prog_tree a) (g : a -> prog_tree b)
@@ -781,61 +884,121 @@ let bind_steel
       (a : Type) (b : Type) (f : prog_tree a) (g : (a -> prog_tree b))
       (pre : pre_t) (itm : post_t a) (post : post_t b)
       (cf : tree_cond f pre itm) (cg : ((x : a) -> tree_cond (g x) (itm x) post))
-      ($rf : repr_steel_t a pre itm (tree_req f cf) (tree_ens f cf))
-      ($rg : (x : a) -> repr_steel_t b (itm x) post (tree_req (g x) (cg x)) (tree_ens (g x) (cg x)))
+      ($rf : repr_steel_t SH.KSteel a pre itm (tree_req f cf) (tree_ens f cf))
+      ($rg : (x : a) -> repr_steel_t SH.KSteel b (itm x) post (tree_req (g x) (cg x)) (tree_ens (g x) (cg x)))
   : (let c = TCbind #a #b #f #g pre itm post cf cg in
-     repr_steel_t b pre post (tree_req _ c) (tree_ens _ c))
-  = fun () ->
+     repr_steel_t SH.KSteel b pre post (tree_req _ c) (tree_ens _ c))
+  = SH.steel_f (fun () ->
     (**) let sl0 = gget (vprop_of_list pre) in
     (**) elim_tree_req_bind f g cf cg sl0;
-    let x = rf () in
+    let x = SH.steel_u rf () in
     (**) let sl1 = gget (vprop_of_list (itm x)) in
-    let y = rg x () in
+    let y = SH.steel_u (rg x) () in
     (**) let sl2 = gget (vprop_of_list (post y)) in
     (**) intro_tree_ens_bind f g cf cg sl0 x sl1 y sl2;
-    Steel.Effect.Atomic.return y
+    Steel.Effect.Atomic.return y)
+
+inline_for_extraction noextract
+let bind_ghost_steel
+      (a : Type) (b : Type) (opened : Mem.inames) (f : prog_tree a) (g : (a -> prog_tree b))
+      (pre : pre_t) (itm : post_t a) (post : post_t b)
+      (cf : tree_cond f pre itm) (cg : ((x : a) -> tree_cond (g x) (itm x) post))
+      ($rf : repr_steel_t (SH.KGhost opened) a pre itm (tree_req f cf) (tree_ens f cf))
+      ($rg : (x : a) -> repr_steel_t (SH.KGhost opened) b (itm x) post (tree_req (g x) (cg x)) (tree_ens (g x) (cg x)))
+  : (let c = TCbind #a #b #f #g pre itm post cf cg in
+     repr_steel_t (SH.KGhost opened) b pre post (tree_req _ c) (tree_ens _ c))
+  = SH.ghost_f #opened (fun () ->
+    (**) let sl0 = gget (vprop_of_list pre) in
+    (**) elim_tree_req_bind f g cf cg sl0;
+    let x = SH.ghost_u rf () in
+    (**) let sl1 = gget (vprop_of_list (itm x)) in
+    let y = SH.ghost_u (rg x) () in
+    (**) let sl2 = gget (vprop_of_list (post y)) in
+    (**) intro_tree_ens_bind f g cf cg sl0 x sl1 y sl2;
+    (**) noop ();
+    y)
 
 [@@ __repr_M__]
-inline_for_extraction
-let bind (#a #b : Type) (f : repr a) (g : a -> repr b)
-  : repr b
+inline_for_extraction noextract
+let bind (#a #b : Type) (f : repr SH.KSteel a) (g : a -> repr SH.KSteel b)
+  : repr SH.KSteel b
   = {
     repr_tree  = Tbind a b f.repr_tree (fun x -> (g x).repr_tree);
     repr_steel = (fun pre0 post0 c ->
                     let (TCbind #a' #b' #tf #tg pre itm post cf cg) = c in
-                    let rg (x : a) : repr_steel_t b (itm x) post _ _
+                    let rg (x : a) : repr_steel_t SH.KSteel b (itm x) post _ _
                                    = (g x).repr_steel _ _ (cg x) in
-                    U.cast (repr_steel_t b pre0 post0 (tree_req _ c) (tree_ens _ c))
-                           (bind_steel a b tf tg pre itm post cf cg (f.repr_steel _ _ cf) rg))
+                    bind_steel a b tf tg pre itm post cf cg (f.repr_steel _ _ cf) rg)
+  }
+
+[@@ __repr_M__]
+inline_for_extraction noextract
+let bind_ghost (#a #b : Type) (#opened : Mem.inames)
+               (f : repr (SH.KGhost opened) a) (g : a -> repr (SH.KGhost opened) b)
+  : repr (SH.KGhost opened) b
+  = {
+    repr_tree  = Tbind a b f.repr_tree (fun x -> (g x).repr_tree);
+    repr_steel = (fun pre0 post0 c ->
+                    let (TCbind #a' #b' #tf #tg pre itm post cf cg) = c in
+                    let rg (x : a) : repr_steel_t (SH.KGhost opened) b (itm x) post _ _
+                                   = (g x).repr_steel _ _ (cg x) in
+                    bind_ghost_steel a b opened tf tg pre itm post cf cg (f.repr_steel _ _ cf) rg)
   }
 
 
 inline_for_extraction noextract
 let bindP_steel
-      (a : Type) (b : Type) (wp : pure_wp a) (f : unit -> PURE a wp) (g : (a -> prog_tree b))
+      (a : Type) (b : Type) (wp : pure_wp a) ($f : unit -> PURE a wp) (g : (a -> prog_tree b))
       (pre : pre_t) (post : post_t b)
       (cg : ((x : a) -> tree_cond (g x) pre post))
-      ($rg : (x : a) -> repr_steel_t b pre post (tree_req (g x) (cg x)) (tree_ens (g x) (cg x)))
-  : (let c = TCbindP #a #b #wp #f #g pre post cg in
-     repr_steel_t b pre post (tree_req _ c) (tree_ens _ c))
+      ($rg : (x : a) -> repr_steel_t SH.KSteel b pre post (tree_req (g x) (cg x)) (tree_ens (g x) (cg x)))
+  : (let c = TCbindP #a #b #wp #g pre post cg in
+     repr_steel_t SH.KSteel b pre post (tree_req _ c) (tree_ens _ c))
   = 
     FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp;
-    fun () ->
+    SH.steel_f (fun () ->
     let x = f () in
-    rg x ()
+    SH.steel_u (rg x) ())
+
+inline_for_extraction noextract
+let bindP_ghost_steel
+      (a : Type) (b : Type) (opened : Mem.inames) (wp : pure_wp a) ($f : unit -> GHOST a wp) (g : (a -> prog_tree b))
+      (pre : pre_t) (post : post_t b)
+      (cg : ((x : a) -> tree_cond (g x) pre post))
+      ($rg : (x : a) -> repr_steel_t (SH.KGhost opened) b pre post (tree_req (g x) (cg x)) (tree_ens (g x) (cg x)))
+  : (let c = TCbindP #a #b #wp #g pre post cg in
+     repr_steel_t (SH.KGhost opened) b pre post (tree_req _ c) (tree_ens _ c))
+  =
+    FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp;
+    SH.ghost_f #opened (fun () ->
+    let x = f () in
+    SH.ghost_u (rg x) ())
 
 [@@ __repr_M__]
-inline_for_extraction
-let bindP (#a #b : Type) (wp : pure_wp a) (f : unit -> PURE a wp) (g : a -> repr b)
-  : repr b
+inline_for_extraction noextract
+let bindP (#a #b : Type) (wp : pure_wp a) ($f : unit -> PURE a wp) (g : a -> repr SH.KSteel b)
+  : repr SH.KSteel b
   = {
-    repr_tree  = TbindP a b wp f (fun x -> (g x).repr_tree);
+    repr_tree  = TbindP a b wp (fun x -> (g x).repr_tree);
     repr_steel = (fun pre0 post0 c ->
-                    let (TCbindP #a' #b' #wp #tf #tg pre post cg) = c in
-                    let rg (x : a) : repr_steel_t b pre post _ _
+                    let (TCbindP #a' #b' #wp #tg pre post cg) = c in
+                    let rg (x : a) : repr_steel_t SH.KSteel b pre post _ _
                                    = (g x).repr_steel _ _ (cg x) in
-                    U.cast (repr_steel_t b pre0 post0 (tree_req _ c) (tree_ens _ c))
-                           (bindP_steel a b wp f tg pre post cg rg))
+                    bindP_steel a b wp f tg pre post cg rg)
+  }
+
+[@@ __repr_M__]
+inline_for_extraction noextract
+let bindP_ghost (#a #b : Type) (#opened : Mem.inames)
+                (wp : pure_wp a) ($f : unit -> GHOST a wp) (g : a -> repr (SH.KGhost opened) b)
+  : repr (SH.KGhost opened) b
+  = {
+    repr_tree  = TbindP a b wp (fun x -> (g x).repr_tree);
+    repr_steel = (fun pre0 post0 c ->
+                    let (TCbindP #a' #b' #wp #tg pre post cg) = c in
+                    let rg (x : a) : repr_steel_t (SH.KGhost opened) b pre post _ _
+                                   = (g x).repr_steel _ _ (cg x) in
+                    bindP_ghost_steel a b opened wp f tg pre post cg rg)
   }
 
 
@@ -844,22 +1007,89 @@ let ite_steel
       (a : Type) (guard : bool) (thn : prog_tree a) (els : prog_tree a)
       (pre : pre_t) (post : post_t a)
       (cthn : tree_cond thn pre post) (cels : tree_cond els pre post)
-      ($rthn : repr_steel_t a pre post (tree_req thn cthn) (tree_ens thn cthn))
-      ($rels : repr_steel_t a pre post (tree_req els cels) (tree_ens els cels))
+      ($rthn : repr_steel_t SH.KSteel a pre post (tree_req thn cthn) (tree_ens thn cthn))
+      ($rels : repr_steel_t SH.KSteel a pre post (tree_req els cels) (tree_ens els cels))
   : (let c = TCif #a #guard #thn #els pre post cthn cels in
-     repr_steel_t a pre post (tree_req _ c) (tree_ens _ c))
-  = fun () ->
-    if guard then rthn () else rels ()
+     repr_steel_t SH.KSteel a pre post (tree_req _ c) (tree_ens _ c))
+  = SH.steel_f (fun () ->
+    if guard then SH.steel_u rthn () else SH.steel_u rels ())
+
+inline_for_extraction noextract
+let ite_ghost_steel
+      (a : Type) (opened : Mem.inames) (guard : bool) (thn : prog_tree a) (els : prog_tree a)
+      (pre : pre_t) (post : post_t a)
+      (cthn : tree_cond thn pre post) (cels : tree_cond els pre post)
+      ($rthn : repr_steel_t (SH.KGhost opened) a pre post (tree_req thn cthn) (tree_ens thn cthn))
+      ($rels : repr_steel_t (SH.KGhost opened) a pre post (tree_req els cels) (tree_ens els cels))
+  : (let c = TCif #a #guard #thn #els pre post cthn cels in
+     repr_steel_t (SH.KGhost opened) a pre post (tree_req _ c) (tree_ens _ c))
+  = SH.ghost_f #opened (fun () ->
+    if guard then SH.ghost_u rthn () else SH.ghost_u rels ())
 
 [@@ __repr_M__]
-inline_for_extraction
-let ite (#a : Type) (guard : bool) (thn : repr a) (els : repr a)
-  : repr a
+inline_for_extraction noextract
+let ite (#a : Type) (guard : bool) (thn els : repr SH.KSteel a)
+  : repr SH.KSteel a
   = {
     repr_tree  = Tif a guard thn.repr_tree els.repr_tree;
     repr_steel = (fun pre0 post0 c ->
                     let (TCif pre post cthn cels) = c in
-                    U.cast (repr_steel_t a pre0 post0 (tree_req _ c) (tree_ens _ c))
-                           (ite_steel a guard _ _ pre post cthn cels
-                              (thn.repr_steel _ _ cthn) (els.repr_steel _ _ cels)))
+                    ite_steel a guard _ _ pre post cthn cels
+                       (thn.repr_steel _ _ cthn) (els.repr_steel _ _ cels))
   }
+
+[@@ __repr_M__]
+inline_for_extraction noextract
+let ite_ghost (#a : Type) (#opened : Mem.inames) (guard : bool) (thn els : repr (SH.KGhost opened) a)
+  : repr (SH.KGhost opened) a
+  = {
+    repr_tree  = Tif a guard thn.repr_tree els.repr_tree;
+    repr_steel = (fun pre0 post0 c ->
+                    let (TCif pre post cthn cels) = c in
+                    ite_ghost_steel a opened guard _ _ pre post cthn cels
+                       (thn.repr_steel _ _ cthn) (els.repr_steel _ _ cels))
+  }
+
+
+inline_for_extraction noextract
+let ghost_to_steel_steel (a : Type) (t : prog_tree (Ghost.erased a)) (pre : pre_t) (post : post_t (Ghost.erased a))
+      (c : tree_cond t pre post)
+      ($r : repr_steel_t (SH.KGhost Set.empty) (Ghost.erased a) pre post (tree_req t c) (tree_ens t c))
+  : repr_steel_t SH.KSteel (Ghost.erased a) pre post (tree_req t c) (tree_ens t c)
+  = SH.steel_f (SH.ghost_u r)
+
+[@@ __repr_M__]
+inline_for_extraction noextract
+let ghost_to_steel (#a : Type) (f : repr (SH.KGhost Set.empty) (Ghost.erased a))
+  : repr SH.KSteel (Ghost.erased a)
+  = {
+    repr_tree  = f.repr_tree;
+    repr_steel = (fun pre post c ->
+                    ghost_to_steel_steel a f.repr_tree pre post c (f.repr_steel _ _ c))
+  }
+
+(*
+inline_for_extraction noextract
+let ghost_to_steel_steel_ct_aux (a : Type) (t : prog_tree a) (pre : pre_t) (post : post_t a)
+      (c : tree_cond t pre post)
+      ($r : repr_steel_t (SH.KGhost Set.empty) a pre post (tree_req t c) (tree_ens t c))
+  : SteelGhost (Ghost.erased a) Set.empty
+             (vprop_of_list pre) (fun x -> vprop_of_list (post (Ghost.reveal x)))
+             (fun h0 -> tree_req t c (sel pre h0))
+             (fun h0 x h1 -> tree_ens t c (sel pre h0) (Ghost.reveal x) (sel (post (Ghost.reveal x)) h1))
+  = let x = ghost_u r () in Ghost.hide x
+
+inline_for_extraction noextract
+let ghost_to_steel_steel_ct (a : Type) (t : prog_tree a) (pre : pre_t) (post : post_t a)
+      (c : tree_cond t pre post)
+      ($r : repr_steel_t (SH.KGhost Set.empty) a pre post (tree_req t c) (tree_ens t c))
+      (rv : (x : Ghost.erased a) -> (x' : a { x' == Ghost.reveal x }))
+  : repr_steel_t SH.KSteel a pre post (tree_req t c) (tree_ens t c)
+  = SH.steel_f (fun () ->
+    let x = ghost_to_steel_steel_ct_aux a t pre post c r in
+    change_equal_slprop (vprop_of_list (post (Ghost.reveal x))) (vprop_of_list (post (rv x)));
+    Steel.Effect.Atomic.return (rv x)
+  )
+*)
+
+// TODO: SteelAtomic

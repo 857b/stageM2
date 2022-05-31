@@ -41,7 +41,7 @@ let rec repr_SF_of_ST_req
         tree_req (repr_SF_of_ST (ST.Tbind a b pre itm post f g) sl0);
       }
     end
-    begin fun (*ST.TbindP*) a b pre post wp f g -> fun sl0 ->
+    begin fun (*ST.TbindP*) a b pre post wp g -> fun sl0 ->
       introduce forall (x : a) .
           ST.tree_req (g x) sl0 <==> tree_req (repr_SF_of_ST (g x) sl0)
         with repr_SF_of_ST_req (g x) sl0;
@@ -101,9 +101,9 @@ and repr_SF_of_ST_ens
         tree_ens (repr_SF_of_ST (ST.Tbind a b pre itm post f g) sl0) y sl2;
       }
     end
-    begin fun (*ST.TbindP*) a b pre post wp f g -> fun sl0 y sl1 ->
+    begin fun (*ST.TbindP*) a b pre post wp g -> fun sl0 y sl1 ->
       calc (<==>) {
-        ST.tree_ens (ST.TbindP a b pre post wp f g) sl0 y sl1;
+        ST.tree_ens (ST.TbindP a b pre post wp g) sl0 y sl1;
       == { _ by T.(trefl ()) }
         exists (x : a) . as_ensures wp x /\ ST.tree_ens (g x) sl0 y sl1;
       <==> { introduce forall (x : a) .
@@ -111,7 +111,7 @@ and repr_SF_of_ST_ens
              with repr_SF_of_ST_ens (g x) sl0 y sl1 }
         exists (x : a) . as_ensures wp x /\ tree_ens (repr_SF_of_ST (g x) sl0) y sl1;
       == { _ by T.(trefl ()) }
-        tree_ens (repr_SF_of_ST (ST.TbindP a b pre post wp f g) sl0) y sl1;
+        tree_ens (repr_SF_of_ST (ST.TbindP a b pre post wp g) sl0) y sl1;
       }
     end
     begin fun (*ST.Tif*) a guard pre post thn els -> fun sl0 x sl1 ->
@@ -150,7 +150,7 @@ let rec repr_SF_of_ST_shape
            prog_has_shape (repr_SF_of_ST (g x) sl1) (shape_SF_of_ST s_g)
         with repr_SF_of_ST_shape (g x) s_g sl1
     end
-    begin fun (*ST.TbindP*) a b pre post wp f g -> fun s _ sl0 ->
+    begin fun (*ST.TbindP*) a b pre post wp g -> fun s _ sl0 ->
       let ST.SbindP _ post_n s_g = s in
       let lem_g (x : a)
         : Lemma (prog_has_shape (repr_SF_of_ST (g x) sl0) (shape_SF_of_ST s_g))

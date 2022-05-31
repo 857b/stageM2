@@ -63,6 +63,28 @@ let intro_subcomp_no_frame_pre
       hyp en_f
   )
 
+let subcomp_no_frame_lem
+      (#a : Type)
+      (#pre_f:pre_t) (#post_f:post_t a) (req_f:req_t pre_f) (ens_f:ens_t pre_f a post_f)
+      (#pre_g:pre_t) (#post_g:post_t a) (req_g:req_t pre_g) (ens_g:ens_t pre_g a post_g)
+      (eq_pre  : squash (equiv pre_g pre_f))
+      (eq_post : (x : a) -> squash (equiv (post_g x) (post_f x)))
+  : Lemma (can_be_split pre_g (pre_f `star` emp) /\ equiv_forall post_g (fun x -> post_f x `star` emp))
+  =
+    equiv_can_be_split pre_g pre_f;
+    assert (can_be_split pre_f (pre_f `star` emp) /\ True)
+      by (T.squash_intro (); selector_tactic ());
+    can_be_split_trans pre_g pre_f (pre_f `star` emp);
+
+    introduce forall (x : a) . post_g x `equiv` (post_f x `star` emp)
+    with (
+      eq_post x;
+      assert (post_f x `equiv` (post_f x `star` emp))
+        by (init_resolve_tac ());
+      equiv_trans (post_g x) (post_f x) (post_f x `star` emp)
+    );
+    equiv_forall_elim post_g (fun x -> post_f x `star` emp)
+
 inline_for_extraction noextract
 let unit_steel_subcomp_no_frame
       (#a : Type)
@@ -71,26 +93,29 @@ let unit_steel_subcomp_no_frame
       (eq_pre  : squash (equiv pre_g pre_f))
       (eq_post : (x : a) -> squash (equiv (post_g x) (post_f x)))
       (sb_pre : squash (subcomp_no_frame_pre req_f ens_f req_g ens_g eq_pre eq_post))
-      (f : unit_steel a pre_f post_f req_f ens_f)
-  : unit_steel a pre_g post_g req_g ens_g
+      (f : SH.unit_steel a pre_f post_f req_f ens_f)
+  : SH.unit_steel a pre_g post_g req_g ens_g
   =
-    U.assert_by (can_be_split pre_g (pre_f `star` emp)) (fun () ->
-      equiv_can_be_split pre_g pre_f;
-      assert (can_be_split pre_f (pre_f `star` emp) /\ True)
-        by (T.squash_intro (); selector_tactic ());
-      can_be_split_trans pre_g pre_f (pre_f `star` emp));
-    U.assert_by (equiv_forall post_g (fun x -> post_f x `star` emp)) (fun () ->
-      introduce forall (x : a) . post_g x `equiv` (post_f x `star` emp)
-      with (
-        eq_post x;
-        assert (post_f x `equiv` (post_f x `star` emp))
-          by (init_resolve_tac ());
-        equiv_trans (post_g x) (post_f x) (post_f x `star` emp)
-      );
-      equiv_forall_elim post_g (fun x -> post_f x `star` emp));
+    subcomp_no_frame_lem req_f ens_f req_g ens_g eq_pre eq_post;
     Experiment.Steel.SteelHack.intro_subcomp_pre' req_f ens_f req_g ens_g #emp #True () ()
       (fun h0 -> ()) (fun h0 -> ()) (fun h0 x h1 -> ());
     Experiment.Steel.SteelHack.steel_subcomp a
+      pre_f post_f req_f ens_f
+      pre_g post_g req_g ens_g
+      emp True () () ()
+      f
+
+inline_for_extraction noextract
+let unit_steel_ghost_subcomp_no_frame
+      #a #opened
+      #pre_f #post_f req_f ens_f
+      #pre_g #post_g req_g ens_g
+      eq_pre eq_post sb_pre f
+  =
+    subcomp_no_frame_lem req_f ens_f req_g ens_g eq_pre eq_post;
+    Experiment.Steel.SteelHack.intro_subcomp_pre' req_f ens_f req_g ens_g #emp #True () ()
+      (fun h0 -> ()) (fun h0 -> ()) (fun h0 x h1 -> ());
+    Experiment.Steel.SteelHack.steel_ghost_subcomp a opened
       pre_f post_f req_f ens_f
       pre_g post_g req_g ens_g
       emp True () () ()
@@ -384,51 +409,93 @@ let steel_change_vequiv (#vs0 #vs1 : vprop_list) (#opened:Mem.inames) (f : vequi
 
 (*** [repr_steel_t] *)
 
-inline_for_extraction noextract
-let steel_of_repr
-      (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
-      (tr : to_repr_t a pre post req ens)
-      (f : repr_steel_t a tr.r_pre tr.r_post tr.r_req tr.r_ens)
-  : unit_steel a pre post req ens
+let steel_of_repr_lem #a #pre #post #req #ens (tr : to_repr_t a pre post req ens)
+  : Lemma (pre `equiv` vprop_of_list tr.r_pre /\
+           pre `can_be_split` vprop_of_list tr.r_pre /\
+           (forall (x : a) . can_be_split (post x) (vprop_of_list (tr.r_post x))))
   =
     tr.r_pre_eq ();
     equiv_can_be_split pre (vprop_of_list tr.r_pre);
     introduce forall (x : a) . can_be_split (post x) (vprop_of_list (tr.r_post x))
       with (tr.r_post_eq x;
-            equiv_can_be_split (post x) (vprop_of_list (tr.r_post x)));
-    FStar.Classical.forall_intro tr.r_req_eq;
-    FStar.Classical.forall_intro_3 tr.r_ens_eq;
+            equiv_can_be_split (post x) (vprop_of_list (tr.r_post x)))
+
+inline_for_extraction noextract
+let steel_of_repr
+      (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
+      (tr : to_repr_t a pre post req ens)
+      (f : repr_steel_t SH.KSteel a tr.r_pre tr.r_post tr.r_req tr.r_ens)
+  : SH.unit_steel a pre post req ens
+  =
+    (**) steel_of_repr_lem tr;
+    (**) FStar.Classical.forall_intro tr.r_req_eq;
+    (**) FStar.Classical.forall_intro_3 tr.r_ens_eq;
     unit_steel_subcomp_no_frame
       _ _ req ens
       (tr.r_pre_eq ()) (fun x -> tr.r_post_eq x)
       ()
-      f
+      (SH.FSteel?.f f)
+
+let repr_steel_of_steel_lem #a #pre #post #req #ens (tr : to_repr_t a pre post req ens)
+  : Lemma (vprop_of_list tr.r_pre `equiv` pre /\
+           (forall (x : a) . vprop_of_list (tr.r_post x) `equiv` post x))
+  =
+    tr.r_pre_eq (); equiv_sym pre (vprop_of_list tr.r_pre);
+    introduce forall (x : a) . vprop_of_list (tr.r_post x) `equiv` post x
+      with (tr.r_post_eq x; equiv_sym (post x) (vprop_of_list (tr.r_post x)))
 
 inline_for_extraction noextract
 let repr_steel_of_steel
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
       (tr : to_repr_t a pre post req ens)
-      ($f  : unit_steel a pre post req ens)
-  : repr_steel_t a tr.r_pre tr.r_post tr.r_req tr.r_ens
+      ($f  : SH.unit_steel a pre post req ens)
+  : repr_steel_t SH.KSteel a tr.r_pre tr.r_post tr.r_req tr.r_ens
   =
-    tr.r_pre_eq ();
-    equiv_can_be_split pre (vprop_of_list tr.r_pre);
-    introduce forall (x : a) . can_be_split (post x) (vprop_of_list (tr.r_post x))
-      with (tr.r_post_eq x;
-            equiv_can_be_split (post x) (vprop_of_list (tr.r_post x)));
-    FStar.Classical.forall_intro tr.r_req_eq;
-    FStar.Classical.forall_intro_3 tr.r_ens_eq;
-    let pre_eq_rev : squash (vprop_of_list tr.r_pre `equiv` pre) =
-      tr.r_pre_eq (); equiv_sym pre (vprop_of_list tr.r_pre)    in
-    let post_eq_rev (x : a) : squash (vprop_of_list (tr.r_post x) `equiv` post x) =
-      tr.r_post_eq x; equiv_sym (post x) (vprop_of_list (tr.r_post x))           in
-    unit_steel_subcomp_no_frame
+    (**) steel_of_repr_lem tr;
+    (**) repr_steel_of_steel_lem tr;
+    (**) FStar.Classical.forall_intro tr.r_req_eq;
+    (**) FStar.Classical.forall_intro_3 tr.r_ens_eq;
+    SH.FSteel (unit_steel_subcomp_no_frame
       req ens _ _
-      pre_eq_rev post_eq_rev
+      () (fun _ -> ())
       (intro_subcomp_no_frame_pre _ _ _ _ _ _
         (fun h0 -> tr.r_req_eq (focus_rmem h0 pre))
         (fun h0 x h1 -> tr.r_ens_eq (focus_rmem h0 pre) x (focus_rmem h1 (post x))))
+      f)
+
+inline_for_extraction noextract
+let steel_ghost_of_repr
+      #a #opened (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
+      (tr : to_repr_t a pre post req ens)
       f
+  =
+    (**) steel_of_repr_lem tr;
+    (**) FStar.Classical.forall_intro tr.r_req_eq;
+    (**) FStar.Classical.forall_intro_3 tr.r_ens_eq;
+    unit_steel_ghost_subcomp_no_frame #a #opened
+      _ _ req ens
+      (tr.r_pre_eq ()) (fun x -> tr.r_post_eq x)
+      ()
+      (SH.FGhost?.f f)
+
+inline_for_extraction noextract
+let repr_steel_of_steel_ghost
+      #a #opened (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
+      (tr : to_repr_t a pre post req ens)
+      ($f  : SH.unit_steel_ghost a opened pre post req ens)
+  : repr_steel_t (SH.KGhost opened) a tr.r_pre tr.r_post tr.r_req tr.r_ens
+  =
+    (**) steel_of_repr_lem tr;
+    (**) repr_steel_of_steel_lem tr;
+    (**) FStar.Classical.forall_intro tr.r_req_eq;
+    (**) FStar.Classical.forall_intro_3 tr.r_ens_eq;
+    SH.FGhost opened (unit_steel_ghost_subcomp_no_frame
+      req ens _ _
+      () (fun _ -> ())
+      (intro_subcomp_no_frame_pre _ _ _ _ _ _
+        (fun h0 -> tr.r_req_eq (focus_rmem h0 pre))
+        (fun h0 x h1 -> tr.r_ens_eq (focus_rmem h0 pre) x (focus_rmem h1 (post x))))
+      f)
 
 
 (***** Monad combiners *)  
