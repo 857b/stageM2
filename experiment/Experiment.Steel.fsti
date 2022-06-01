@@ -250,6 +250,21 @@ let extract (a : Type) (pre : M.pre_t) (post : M.post_t a) (req : M.req_t pre) (
   : Type
   = M.repr_steel_t SH.KSteel a pre post req ens
 
+[@@ erasable]
+noeq
+type solve_by_wp_ghost
+       (opt : prog_M_to_Fun_opt)
+       (a : Type) (t : M.repr SH.KSteel a)
+       (pre : M.pre_t) (post : M.post_t a)
+       (req : M.req_t pre) (ens : M.ens_t pre a post)
+= {
+  s_cond   : M.prog_cond t.repr_tree pre post;
+  s_Fun    : (sl0 : M.sl_f pre) -> GTot (Fun.prog_tree #SF.sl_tys SF.({val_t = a; sel_t = ST.post_ST_of_M post}));
+  s_Fun_eq : squash (s_Fun == (fun sl0 -> prog_M_to_Fun opt t s_cond sl0));
+  s_wp     : squash (Fl.forall_flist (M.vprop_list_sels_t pre) (fun sl0 ->
+               req sl0 ==>
+               Fun.tree_wp (s_Fun sl0) (fun res -> ens sl0 res.val_v res.sel_v)))
+}
 
 [@@ __tac_helper__]
 inline_for_extraction
@@ -258,32 +273,32 @@ let __solve_by_wp
       (#a : Type) (#t : M.repr SH.KSteel a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (#req : M.req_t pre) (#ens : M.ens_t pre a post)
-      (c : Ghost.erased (M.prog_cond t.repr_tree pre post))
-      (t_Fun : (sl0 : M.sl_f pre) ->
-               GTot (Fun.prog_tree #SF.sl_tys SF.({val_t = a; sel_t = ST.post_ST_of_M post})))
-      (t_Fun_eq : squash (t_Fun == (fun sl0 -> prog_M_to_Fun opt t c sl0)))
-      (wp : squash (Fl.forall_flist (M.vprop_list_sels_t pre) (fun sl0 ->
-               req sl0 ==>
-               Fun.tree_wp (t_Fun sl0) (fun res -> ens sl0 res.val_v res.sel_v))))
+      (sol : squash (solve_by_wp_ghost opt a t pre post req ens))
   : extract a pre post req ens t
   =
-    prog_M_to_Fun_extract_wp opt t c req ens (fun sl0 -> ())
+    // We use indefinite descriptors to force the erasure of the ghost parts
+    let sol_v = FStar.IndefiniteDescription.elim_squash sol in
+    prog_M_to_Fun_extract_wp opt t sol_v.s_cond req ens (fun sl0 -> ())
+
 
 /// Solves a goal of the form [extract a pre post req ens t]
 let solve_by_wp (fr : flags_record) : Tac unit
   =
-    let opt        = fr.o_M2Fun      in
-    let u_c        = fresh_uvar None in
+    let opt   = fr.o_M2Fun      in
+    let u_sol = fresh_uvar None in
+    let u_cond     = fresh_uvar None in
     let u_t_Fun    = fresh_uvar None in
     let u_t_Fun_eq = fresh_uvar None in
     let u_wp       = fresh_uvar None in
-    apply_raw (`(__solve_by_wp (`#(quote opt)) (`#u_c) (`#u_t_Fun) (`#u_t_Fun_eq) (`#u_wp)));
+    apply_raw (`(__solve_by_wp (`#(quote opt)) (`#u_sol)));
+    unshelve u_sol;
+    squash_intro ();
+    apply_raw (`(Mksolve_by_wp_ghost (`#u_cond) (`#u_t_Fun) (`#u_t_Fun_eq) (`#u_wp)));
 
     let t = timer_start   "prog_cond " fr.f_timer in
-    (* c *)
-    unshelve u_c;
+    (* cond *)
+    unshelve u_cond;
     norm __normal_M;
-    apply (`Ghost.hide);
     CSl.build_prog_cond fr;
 
     (* t_Fun *)

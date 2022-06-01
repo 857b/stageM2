@@ -2,7 +2,7 @@ module Experiment.Steel
 
 module SF = Experiment.Steel.Repr.SF
 
-#set-options "--ide_id_info_off --ifuel 0"
+#set-options "--ide_id_info_off --ifuel 1"
 
 (**) #push-options "--ifuel 0"
 (**) private let __begin_prog_M_to_Fun = ()
@@ -10,7 +10,7 @@ module SF = Experiment.Steel.Repr.SF
 (**) private let __end_prog_M_to_Fun = ()
 
 
-#push-options "--z3rlimit 20"
+#push-options "--z3rlimit 20 --ifuel 0"
 let prog_M_to_Fun_equiv
       opt
       #ek (#a : Type) (t : M.repr ek a)
@@ -112,7 +112,6 @@ let steel_subcomp_eq
     U.cast #(SH.unit_steel a pre post req_f ens_f) (SH.unit_steel a pre post req_g ens_g) f
 
 
-#push-options "--ifuel 1"
 inline_for_extraction
 let __call_repr_steel_0
       (#a : Type)
@@ -133,7 +132,6 @@ let __call_repr_steel_0
       (fun () -> _ by (pointwise (fun () -> try exact (`M.sel_eq') with | _ -> trefl ());
                     norm [delta_only [`%norm_vpl]]; trefl ()))
       (SH.FSteel?.f r)
-#pop-options
 
 inline_for_extraction
 let call_repr_steel #a #pre #post #req #ens r = __call_repr_steel_0 r ()

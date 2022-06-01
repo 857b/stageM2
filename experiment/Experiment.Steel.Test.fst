@@ -445,10 +445,17 @@ let test3_steel' (r0 r1 : ref U32.t)
 
 (*let _ = fun r0 r1 ->
   assert (U.print_util (test3_steel' r0 r1))
-    by T.(norm [delta_only [`%test3_steel'; `%__build_to_steel; `%__solve_by_wp; `%prog_M_to_Fun_extract_wp;
-                            `%prog_M_to_Fun_extract];
+    by T.(norm [delta_only [`%test3_steel';
+                            `%__build_to_steel; `%__solve_by_wp; `%prog_M_to_Fun_extract_wp;
+                            `%prog_M_to_Fun_extract; `%to_steel; `%M.repr_steel_subcomp];
+                delta_qualifier ["unfold"];
                 iota; primops];
-          norm [delta_qualifier ["inline_for_extraction"; "unfold"];
+          norm [delta_only [`%M.Mkrepr?.repr_steel;
+                            //`%M.repr_of_steel_steel;
+                            //`%SH.steel_u; `%SH.steel_f;
+                            `%M.bind; `%M.repr_of_steel
+                           ];
+                //delta_attr [`%M.__repr_M__];
                 iota; primops];
           fail "print")*)
 
