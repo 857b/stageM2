@@ -338,8 +338,9 @@ let build_to_repr_t fr ctx : Tac unit
       // seemingly because of the normalisation of [t_of].
       norm __normal_Steel_logical_spec;
       pointwise' begin fun () ->
-        match catch (fun () -> apply_raw (`filter_rmem_apply (`#h0))) with
+        match catch (fun () -> apply_raw (`filter_rmem_apply (`#(binder_to_term h0)))) with
         | Inr () -> // For some reason, this can only be applied on the goal produced by [filter_rmem_apply]
+                   // TODO? we could check that [filter_rmem_apply] has not succeeded by instantiating an uvar
                    apply_rew ctx_req eq0
         | Inl _  -> trefl ()
       end;
@@ -354,10 +355,10 @@ let build_to_repr_t fr ctx : Tac unit
     let eq0 = intro () in let eq1 = intro () in
       norm __normal_Steel_logical_spec;
       pointwise' begin fun () ->
-        match catch (fun () -> apply_raw (`filter_rmem_apply (`#h0))) with
+        match catch (fun () -> apply_raw (`filter_rmem_apply (`#(binder_to_term h0)))) with
         | Inr () -> apply_rew ctx_ens eq0
         | Inl _ ->
-        match catch (fun () -> apply_raw (`filter_rmem_apply (`#h1))) with
+        match catch (fun () -> apply_raw (`filter_rmem_apply (`#(binder_to_term h1)))) with
         | Inr () -> apply_rew ctx_ens eq1
         | Inl _  -> trefl ()
       end;
