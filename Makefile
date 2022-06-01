@@ -206,8 +206,8 @@ dist/Makefile.basic: $(ALL_KRML_FILES) c/*
 	  -minimal \
 	  -header krml_header.txt \
 	  -add-include '<stdint.h>' \
-	  -add-include '"krml/internal/target.h"'
-	  @#-dast > _local/krml.out 2>&1
+	  -add-include '"krml/internal/target.h"' \
+	  -dast > _local/krml.out 2>&1
 
 extract:dist/Makefile.basic
 

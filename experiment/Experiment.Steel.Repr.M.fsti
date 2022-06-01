@@ -784,8 +784,8 @@ let repr_of_steel
   = {
     repr_tree  = tree_of_steel f;
     repr_steel = (fun pre' post' c ->
-                    let tr  = G.hide (TCspecS?.tr  c) in
-                    let tcs = G.hide (TCspecS?.tcs c) in
+                    let tr   : G.erased (to_repr_t a pre post req ens) = TCspecS?.tr c in
+                    let tcs  : G.erased (tree_cond_Spec a tr.r_pre tr.r_post) = TCspecS?.tcs c in
                     repr_of_steel_steel a tr.r_pre tr.r_post tr.r_req tr.r_ens
                                         tcs (repr_steel_of_steel tr f))
   }
@@ -933,9 +933,19 @@ let bind (#a #b : Type) (f : repr SH.KSteel a) (g : a -> repr SH.KSteel b)
   = {
     repr_tree  = Tbind a b f.repr_tree (fun x -> (g x).repr_tree);
     repr_steel = (fun pre0 post0 c ->
-                    let rg (x : a) = (g x).repr_steel (TCbind?.itm c x) (TCbind?.post c) (TCbind?.cg c x) in
-                    bind_steel a b f.repr_tree (fun x -> (g x).repr_tree) _ _ _ (TCbind?.cf c) (TCbind?.cg c)
-                                   (f.repr_steel _ _ (TCbind?.cf c)) rg)
+                    [@@inline_let]let tf   : prog_tree a = f.repr_tree in
+                    [@@inline_let]let tg   (x : a) : prog_tree b = (g x).repr_tree in
+                    let pre  : G.erased pre_t = TCbind?.pre c in
+                    let itm  : G.erased (post_t a) = TCbind?.itm c in
+                    let post : G.erased (post_t b) = TCbind?.post c in
+                    let cf   : G.erased (tree_cond tf pre itm) = TCbind?.cf c in
+                    let cg   : G.erased ((x : a) -> tree_cond (G.reveal tg x) (G.reveal itm x) post)
+                             = TCbind?.cg c in
+
+                    [@@inline_let] let rg (x : a) =
+                      (g x).repr_steel (G.reveal itm x) post (G.hide (U.cast _ (G.reveal cg x))) in
+                    bind_steel a b f.repr_tree (fun x -> (g x).repr_tree) _ _ _ cf cg
+                                   (f.repr_steel _ _ cf) rg)
   }
 
 [@@ __repr_M__]

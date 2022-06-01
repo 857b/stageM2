@@ -12,8 +12,3 @@ void Experiment_Steel_Test_Extract_test3(uint32_t *r0, uint32_t *r1)
   r1[0U] = x + (uint32_t)1U;
 }
 
-uint32_t Experiment_Steel_Test_Extract_test_ghost(uint32_t *r)
-{
-  return r[0U];
-}
-
