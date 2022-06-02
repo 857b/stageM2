@@ -434,7 +434,7 @@ let steel_of_repr
       _ _ req ens
       (tr.r_pre_eq ()) (fun x -> tr.r_post_eq x)
       ()
-      (SH.FSteel?.f f)
+      (SH.steel_u f)
 
 let repr_steel_of_steel_lem #a #pre #post #req #ens (tr : to_repr_t a pre post req ens)
   : Lemma (vprop_of_list tr.r_pre `equiv` pre /\
@@ -455,7 +455,7 @@ let repr_steel_of_steel
     (**) repr_steel_of_steel_lem tr;
     (**) FStar.Classical.forall_intro tr.r_req_eq;
     (**) FStar.Classical.forall_intro_3 tr.r_ens_eq;
-    SH.FSteel (unit_steel_subcomp_no_frame
+    SH.steel_f (unit_steel_subcomp_no_frame
       req ens _ _
       () (fun _ -> ())
       (intro_subcomp_no_frame_pre _ _ _ _ _ _
@@ -476,7 +476,7 @@ let steel_ghost_of_repr
       _ _ req ens
       (tr.r_pre_eq ()) (fun x -> tr.r_post_eq x)
       ()
-      (SH.FGhost?.f f)
+      (SH.ghost_u f)
 
 inline_for_extraction noextract
 let repr_steel_of_steel_ghost
@@ -489,7 +489,7 @@ let repr_steel_of_steel_ghost
     (**) repr_steel_of_steel_lem tr;
     (**) FStar.Classical.forall_intro tr.r_req_eq;
     (**) FStar.Classical.forall_intro_3 tr.r_ens_eq;
-    SH.FGhost opened (unit_steel_ghost_subcomp_no_frame
+    SH.ghost_f #opened (unit_steel_ghost_subcomp_no_frame
       req ens _ _
       () (fun _ -> ())
       (intro_subcomp_no_frame_pre _ _ _ _ _ _

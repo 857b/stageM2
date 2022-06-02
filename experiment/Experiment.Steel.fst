@@ -132,7 +132,7 @@ let __call_repr_steel_0
                     norm [delta_only [`%norm_vpl]]; trefl ()))
       (fun () -> _ by (pointwise (fun () -> try exact (`M.sel_eq') with | _ -> trefl ());
                     norm [delta_only [`%norm_vpl]]; trefl ()))
-      (SH.FSteel?.f r)
+      (SH.steel_u r)
 #pop-options
 
 inline_for_extraction

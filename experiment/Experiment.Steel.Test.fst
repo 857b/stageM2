@@ -115,8 +115,8 @@ let steel_read #a (r : ref a) () :
 
 [@@ __test__; __steel_reduce__]
 inline_for_extraction
-let r_read #a (r : ref a) : M.repr SH.KSteel a =
-  M.repr_of_steel_r (read_pre r) (read_post r) (read_req r) (read_ens r) (SH.FSteel (steel_read r))
+let r_read (#a : Type0) (r : ref a) : M.repr SH.KSteel a =
+  M.repr_of_steel_r (read_pre r) (read_post r) (read_req r) (read_ens r) (SH.steel_f (steel_read r))
 
 inline_for_extraction
 let steel_write #a (r : ref a) (x : a) ()
@@ -132,7 +132,7 @@ inline_for_extraction
 let r_write #a (r : ref a) (x : a) : M.repr SH.KSteel unit =
   M.repr_of_steel_r [vptr' r full_perm] (fun _ -> [vptr' r full_perm])
                     (fun sl0 -> True) (fun sl0 () sl1 -> x == sl1 0)
-                    (SH.FSteel (steel_write r x))
+                    (SH.steel_f (steel_write r x))
 
 [@@ __test__; __steel_reduce__]
 let test0_M (r : ref nat) : M.repr SH.KSteel nat = M.(
