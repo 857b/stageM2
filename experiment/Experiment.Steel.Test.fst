@@ -441,7 +441,7 @@ let test3_steel' (r0 r1 : ref U32.t)
   = F.(to_steel (
       x <-- call read r0;
       call (write r1) U32.(x +%^ 1ul)
-    ) (_ by (mk_steel [Timer(*; O_ST2SF; Dump Stage_ST*)])))
+    ) (_ by (mk_steel [Extract; Timer(*; O_ST2SF; Dump Stage_ST*)])))
 
 inline_for_extraction
 let test3_steel'' (r0 r1 : ref U32.t)
@@ -602,7 +602,7 @@ let rec repeat_n (n : nat) (t : M.repr SH.KSteel unit) : M.repr SH.KSteel unit
                       delta_attr [`%__tac_helper__; `%M.__repr_M__; `%__steel_reduce__; `%__reduce__];
                       delta_qualifier ["unfold"];
                       iota; zeta; primops];
-               mk_steel [Timer])))*)
+               mk_steel [Timer; Extract])))*)
 
 ////////// test ghost //////////
 
@@ -627,4 +627,4 @@ let test_ghost (r : ref U32.t)
     x <-- M.ghost_to_steel (M.bind_ghost (call_g aux_ghost r) (fun x ->
                                          M.return_ghost (Ghost.hide x)));
     call (aux_steel r) x
-  ) (_ by (mk_steel [])))
+  ) (_ by (mk_steel [Extract])))

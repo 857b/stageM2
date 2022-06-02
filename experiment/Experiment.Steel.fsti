@@ -225,6 +225,10 @@ let __normal_vprop_list : list norm_step = [
   iota; zeta; primops
 ]
 
+let __normal_extract : list norm_step = [
+  delta_qualifier ["inline_for_extraction"; "unfold"];
+  iota; zeta; primops
+]
 
 (***** Calling a [M.repr_steel_t] from a Steel program *)
 
@@ -321,11 +325,13 @@ let solve_by_wp (fr : flags_record) : Tac unit
     smt ();
 
     (* ext *)
-    // We normalize the resulting Steel program so that it can be extracted
-    let t = timer_enter t "extract   " in
     unshelve u_ext_eq;
-    norm [delta_qualifier ["inline_for_extraction"; "unfold"];
-          iota; zeta; primops];
+    let t = if fr.f_extr then begin
+      // We normalize the resulting Steel program so that it can be extracted
+      let t = timer_enter t "extract   " in
+      norm __normal_extract;
+      t
+    end else t in
     if fr.f_dump Stage_Extract then dump "at stage Extract";
     trefl ();
     timer_stop t

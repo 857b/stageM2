@@ -1,5 +1,6 @@
 module Learn.Tactics.Util
 
+module U = Learn.Util
 module L = FStar.List.Pure
 
 open FStar.Tactics
@@ -131,3 +132,19 @@ let lax_guard (f : unit -> Tac unit) : Tac unit
        mk_lax ()
        //iter (fun uv -> try unshelve uv; mk_lax () with | _ -> ()) uvs
     end else f ()
+
+
+[@@ __tac_helper__]
+private unfold
+let __hide_squash (#p : Type u#a) (_ : unit {squash p}) : squash p
+  = ()
+
+/// With this version, the proof of the squash does not appear in the term
+let squash_intro () : Tac unit =
+  apply (`__hide_squash);
+  refine_intro (); exact (`());
+  let _ : list _ = repeatn 2 FStar.Tactics.Logic.squash_intro in ()
+
+(*let long_proof : l_True = ()
+let test : squash True = _ by ((*FStar.Tactics.Logic.*)squash_intro (); exact (`long_proof))
+let _ : U.print_util test = _ by (norm [delta_only [`%test]]; fail "print")*)

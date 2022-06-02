@@ -18,6 +18,7 @@ type flag =
   | Timer
   | Dump of stage
   | Full_Msg
+  | Extract
   | O_Flatten
   | O_ST2SF
   | O_Elim_Ret
@@ -34,6 +35,7 @@ type flags_record = {
   f_timer : bool;
   f_dump  : stage -> bool;
   f_flmsg : bool;
+  f_extr  : bool;
   o_M2Fun : prog_M_to_Fun_opt;
 }
 
@@ -41,6 +43,7 @@ let default_flags : flags_record = {
   f_timer = false;
   f_dump  = (fun _ -> false);
   f_flmsg = false;
+  f_extr  = false;
   o_M2Fun = {
     o_flatten  = false;
     o_ST2SF    = false;
@@ -55,6 +58,7 @@ let rec record_flag (pos : bool) (r : flags_record) (f : flag)
   | Timer      -> {r with f_timer = pos}
   | Dump s     -> {r with f_dump  = (fun s' -> if s' = s then pos else r.f_dump s')}
   | Full_Msg   -> {r with f_flmsg = pos}
+  | Extract    -> {r with f_extr  = pos}
   | O_Flatten  -> {r with o_M2Fun = {r.o_M2Fun with o_flatten  = pos}}
   | O_ST2SF    -> {r with o_M2Fun = {r.o_M2Fun with o_flatten  = pos; o_ST2SF = pos}}
   | O_Elim_Ret -> {r with o_M2Fun = {r.o_M2Fun with o_elim_ret = pos}}
