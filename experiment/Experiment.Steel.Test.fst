@@ -11,6 +11,7 @@ module Perm = Learn.Permutation
 
 module F     = Experiment.Steel.Notations
 module M     = Experiment.Steel.Repr.M
+module MC    = Experiment.Steel.Combinators
 module ST    = Experiment.Steel.Repr.ST
 module SF    = Experiment.Steel.Repr.SF
 module SH    = Experiment.Steel.SteelHack
@@ -116,7 +117,7 @@ let steel_read #a (r : ref a) () :
 [@@ __test__; __steel_reduce__]
 inline_for_extraction
 let r_read (#a : Type0) (r : ref a) : M.repr SH.KSteel a =
-  M.repr_of_steel_r (read_pre r) (read_post r) (read_req r) (read_ens r) (SH.steel_f (steel_read r))
+  MC.repr_of_steel_r (read_pre r) (read_post r) (read_req r) (read_ens r) (SH.steel_f (steel_read r))
 
 inline_for_extraction
 let steel_write #a (r : ref a) (x : a) ()
@@ -130,12 +131,12 @@ let steel_write #a (r : ref a) (x : a) ()
 [@@ __test__; __steel_reduce__]
 inline_for_extraction
 let r_write #a (r : ref a) (x : a) : M.repr SH.KSteel unit =
-  M.repr_of_steel_r [vptr' r full_perm] (fun _ -> [vptr' r full_perm])
+  MC.repr_of_steel_r [vptr' r full_perm] (fun _ -> [vptr' r full_perm])
                     (fun sl0 -> True) (fun sl0 () sl1 -> x == sl1 0)
                     (SH.steel_f (steel_write r x))
 
 [@@ __test__; __steel_reduce__]
-let test0_M (r : ref nat) : M.repr SH.KSteel nat = M.(
+let test0_M (r : ref nat) : M.repr SH.KSteel nat = MC.(
   x <-- r_read r;
   return x)
 
@@ -386,7 +387,7 @@ let _ =
 
 [@@ __reduce__]
 inline_for_extraction
-let test3_M (r0 r1 : ref U32.t) : M.repr SH.KSteel unit = M.(
+let test3_M (r0 r1 : ref U32.t) : M.repr SH.KSteel unit = MC.(
   x <-- r_read r0;
   r_write r1 U32.(x +%^ 1ul))
 
@@ -624,7 +625,7 @@ let test_ghost (r : ref U32.t)
   : F.steel U32.t (vptr r) (fun _ -> vptr r)
             (requires fun _ -> True) (ensures fun h0 _ h1 -> frame_equalities (vptr r) h0 h1)
   = F.(to_steel (
-    x <-- M.ghost_to_steel (M.bind_ghost (call_g aux_ghost r) (fun x ->
-                                         M.return_ghost (Ghost.hide x)));
+    x <-- MC.ghost_to_steel (MC.bind_ghost (call_g aux_ghost r) (fun x ->
+                                         MC.return_ghost (Ghost.hide x)));
     call (aux_steel r) x
   ) (_ by (mk_steel [Extract])))

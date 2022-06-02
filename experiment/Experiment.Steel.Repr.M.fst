@@ -496,38 +496,3 @@ let repr_steel_of_steel_ghost
         (fun h0 -> tr.r_req_eq (focus_rmem h0 pre))
         (fun h0 x h1 -> tr.r_ens_eq (focus_rmem h0 pre) x (focus_rmem h1 (post x))))
       f)
-
-
-(***** Monad combiners *)  
-
-let elim_tree_req_bind (#a #b : Type) (f : prog_tree a) (g : a -> prog_tree b)
-      (#pre : pre_t) (#post : post_t b) (#itm : post_t a)
-      (cf  : tree_cond f pre itm) (cg : (x:a) -> tree_cond (g x) (itm x) post)
-      (sl0 : t_of (vprop_of_list pre))
-  : Lemma (requires tree_req _ (TCbind #a #b #f #g pre itm post cf cg) (vpl_sels_f pre sl0))
-          (ensures  tree_req f cf (vpl_sels_f pre sl0) /\
-                    (forall (x : a) (sl1 : t_of (vprop_of_list (itm x))) .
-                      tree_ens f cf (vpl_sels_f pre sl0) x (vpl_sels_f (itm x) sl1) ==>
-                      tree_req (g x) (cg x) (vpl_sels_f (itm x) sl1)))
-  = assert_norm (tree_req _ (TCbind #a #b #f #g pre itm post cf cg) (vpl_sels_f pre sl0) == (
-      tree_req f cf (vpl_sels_f pre sl0) /\
-      (forall (x : a) (sl1 : sl_f (itm x)) .
-         tree_ens f cf (vpl_sels_f pre sl0) x sl1 ==> tree_req (g x) (cg x) sl1)
-    ))
-
-let intro_tree_ens_bind (#a #b : Type) (f : prog_tree a) (g : a -> prog_tree b)
-      (#pre : pre_t) (#post : post_t b) (#itm : post_t a)
-      (cf  : tree_cond f pre itm) (cg : (x:a) -> tree_cond (g x) (itm x) post)
-      (sl0 : t_of (vprop_of_list pre)) (x : a) (sl1 : t_of (vprop_of_list (itm x)))
-      (y : b) (sl2 : t_of (vprop_of_list (post y)))
-  : Lemma (requires tree_req f cf (vpl_sels_f pre sl0) /\
-                    tree_ens f cf (vpl_sels_f pre sl0) x (vpl_sels_f (itm x) sl1) /\
-                    tree_ens (g x) (cg x) (vpl_sels_f (itm x) sl1) y (vpl_sels_f (post y) sl2))
-          (ensures  tree_ens _ (TCbind #a #b #f #g pre itm post cf cg)
-                             (vpl_sels_f pre sl0) y (vpl_sels_f (post y) sl2))
-  = assert_norm (tree_ens _ (TCbind #a #b #f #g pre itm post cf cg)
-                          (vpl_sels_f pre sl0) y (vpl_sels_f (post y) sl2) == (
-        (exists (x : a) (sl1 : sl_f (itm x)) .
-          tree_ens f cf (vpl_sels_f pre sl0) x sl1 /\
-          tree_ens (g x) (cg x) sl1 y (vpl_sels_f (post y) sl2))
-    ))
