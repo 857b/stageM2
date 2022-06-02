@@ -752,7 +752,8 @@ let repr_of_steel_r
   = {
     repr_tree  = tree_of_steel_r f;
     repr_steel = (fun pre' post' c ->
-                    repr_of_steel_steel a pre post req ens (TCspec?.tcs c) f)
+                    let tcs : G.erased (tree_cond_Spec a pre post) = G.hide (TCspec?.tcs c) in
+                    repr_of_steel_steel a pre post req ens tcs f)
   }
 
 [@@ __repr_M__]
@@ -764,7 +765,8 @@ let repr_of_steel_ghost_r
   = {
     repr_tree  = tree_of_steel_r f;
     repr_steel = (fun pre'0 post'0 c ->
-                    repr_of_steel_ghost_steel a opened pre post req ens (TCspec?.tcs c) f)
+                    let tcs : G.erased (tree_cond_Spec a pre post) = G.hide (TCspec?.tcs c) in
+                    repr_of_steel_ghost_steel a opened pre post req ens tcs f)
   }
 
 
@@ -784,8 +786,8 @@ let repr_of_steel
   = {
     repr_tree  = tree_of_steel f;
     repr_steel = (fun pre' post' c ->
-                    let tr   : G.erased (to_repr_t a pre post req ens) = TCspecS?.tr c in
-                    let tcs  : G.erased (tree_cond_Spec a tr.r_pre tr.r_post) = TCspecS?.tcs c in
+                    let tr  : G.erased (to_repr_t a pre post req ens) = G.hide (TCspecS?.tr c)         in
+                    let tcs : G.erased (tree_cond_Spec a tr.r_pre tr.r_post) = G.hide (TCspecS?.tcs c) in
                     repr_of_steel_steel a tr.r_pre tr.r_post tr.r_req tr.r_ens
                                         tcs (repr_steel_of_steel tr f))
   }
@@ -800,8 +802,8 @@ let repr_of_steel_ghost
   = {
     repr_tree  = TspecS a pre post req ens;
     repr_steel = (fun pre' post' c ->
-                    let tr  = G.hide (TCspecS?.tr  c) in
-                    let tcs = G.hide (TCspecS?.tcs c) in
+                    let tr  : G.erased (to_repr_t a pre post req ens) = G.hide (TCspecS?.tr c)         in
+                    let tcs : G.erased (tree_cond_Spec a tr.r_pre tr.r_post) = G.hide (TCspecS?.tcs c) in
                     repr_of_steel_ghost_steel a opened tr.r_pre tr.r_post tr.r_req tr.r_ens
                                         tcs (repr_steel_of_steel_ghost tr f))
   }
@@ -836,8 +838,9 @@ let return_hint (#a : Type) (x : a) (sl_hint : post_t a)
   : repr SH.KSteel a
   = {
     repr_tree  = Tret a x sl_hint;
-    repr_steel = (fun pre0 post0 c ->
-        return_steel a x sl_hint (TCret?.pre c) (TCret?.post c) (TCret?.p c))
+    repr_steel = (fun pre post c ->
+        let p : G.erased (vequiv pre (G.reveal post x)) = G.hide (U.cast _ (TCret?.p c)) in
+        return_steel a x sl_hint pre post p)
   }
 
 [@@ __repr_M__]
@@ -851,8 +854,9 @@ let return_ghost_hint (#a : Type) (#opened : Mem.inames) (x : a) (sl_hint : post
   : repr (SH.KGhost opened) a
   = {
     repr_tree  = Tret a x sl_hint;
-    repr_steel = (fun pre0 post0 c ->
-        return_ghost_steel a opened x sl_hint (TCret?.pre c) (TCret?.post c) (TCret?.p c))
+    repr_steel = (fun pre post c ->
+        let p : G.erased (vequiv pre (G.reveal post x)) = G.hide (U.cast _ (TCret?.p c)) in
+        return_ghost_steel a opened x sl_hint pre post p)
   }
 
 [@@ __repr_M__]
@@ -932,15 +936,13 @@ let bind (#a #b : Type) (f : repr SH.KSteel a) (g : a -> repr SH.KSteel b)
   : repr SH.KSteel b
   = {
     repr_tree  = Tbind a b f.repr_tree (fun x -> (g x).repr_tree);
-    repr_steel = (fun pre0 post0 c ->
-                    [@@inline_let]let tf   : prog_tree a = f.repr_tree in
-                    [@@inline_let]let tg   (x : a) : prog_tree b = (g x).repr_tree in
-                    let pre  : G.erased pre_t = TCbind?.pre c in
-                    let itm  : G.erased (post_t a) = TCbind?.itm c in
-                    let post : G.erased (post_t b) = TCbind?.post c in
-                    let cf   : G.erased (tree_cond tf pre itm) = TCbind?.cf c in
-                    let cg   : G.erased ((x : a) -> tree_cond (G.reveal tg x) (G.reveal itm x) post)
-                             = TCbind?.cg c in
+    repr_steel = (fun pre post c ->
+                    [@@inline_let]let tf : prog_tree a = f.repr_tree in
+                    [@@inline_let]let tg (x : a) : prog_tree b = (g x).repr_tree in
+                    let itm  : G.erased (post_t a) = G.hide (TCbind?.itm c) in
+                    let cf   : G.erased (tree_cond tf pre itm) = G.hide (TCbind?.cf c) in
+                    let cg   : G.erased ((x : a) -> tree_cond (tg x) (G.reveal itm x) post)
+                             = G.hide (TCbind?.cg c) in
 
                     [@@inline_let] let rg (x : a) =
                       (g x).repr_steel (G.reveal itm x) post (G.hide (U.cast _ (G.reveal cg x))) in
@@ -955,11 +957,19 @@ let bind_ghost (#a #b : Type) (#opened : Mem.inames)
   : repr (SH.KGhost opened) b
   = {
     repr_tree  = Tbind a b f.repr_tree (fun x -> (g x).repr_tree);
-    repr_steel = (fun pre0 post0 c ->
-                    let rg (x : a) = (g x).repr_steel (TCbind?.itm c x) (TCbind?.post c) (TCbind?.cg c x) in
-                    bind_ghost_steel a b opened
-                                   f.repr_tree (fun x -> (g x).repr_tree) _ _ _ (TCbind?.cf c) (TCbind?.cg c)
-                                   (f.repr_steel _ _ (TCbind?.cf c)) rg)
+    repr_steel = (fun pre post c ->
+                    [@@inline_let]let tf : prog_tree a = f.repr_tree in
+                    [@@inline_let]let tg (x : a) : prog_tree b = (g x).repr_tree in
+                    let itm  : G.erased (post_t a) = G.hide (TCbind?.itm c) in
+                    let cf   : G.erased (tree_cond tf pre itm) = G.hide (TCbind?.cf c) in
+                    let cg   : G.erased ((x : a) -> tree_cond (tg x) (G.reveal itm x) post)
+                             = G.hide (TCbind?.cg c) in
+
+                    [@@inline_let] let rg (x : a) =
+                      (g x).repr_steel (G.reveal itm x) post (G.hide (U.cast _ (G.reveal cg x))) in
+                    bind_ghost_steel a b opened 
+                                   f.repr_tree (fun x -> (g x).repr_tree) _ _ _ cf cg
+                                   (f.repr_steel _ _ cf) rg)
     }
 
 inline_for_extraction noextract
@@ -998,9 +1008,13 @@ let bindP (#a #b : Type) (wp : pure_wp a) ($f : unit -> PURE a wp) (g : a -> rep
   : repr SH.KSteel b
   = {
     repr_tree  = TbindP a b wp (fun x -> (g x).repr_tree);
-    repr_steel = (fun pre0 post0 c ->
-                    let rg (x : a) = (g x).repr_steel _ _ (TCbindP?.cg c x) in
-                    bindP_steel a b wp f (fun x -> (g x).repr_tree) _ _ (TCbindP?.cg c) rg)
+    repr_steel = (fun pre post c ->
+                    [@@inline_let]let tg (x : a) : prog_tree b = (g x).repr_tree in
+                    let cg   : G.erased ((x : a) -> tree_cond (G.reveal tg x) pre post)
+                             = G.hide (TCbindP?.cg c) in
+
+                    [@@inline_let]let rg (x : a) = (g x).repr_steel _ _ (G.reveal cg x) in
+                    bindP_steel a b wp f (fun x -> (g x).repr_tree) _ _ cg rg)
   }
 
 [@@ __repr_M__]
@@ -1010,9 +1024,13 @@ let bindP_ghost (#a #b : Type) (#opened : Mem.inames)
   : repr (SH.KGhost opened) b
   = {
     repr_tree  = TbindP a b wp (fun x -> (g x).repr_tree);
-    repr_steel = (fun pre0 post0 c ->
-                    let rg (x : a) = (g x).repr_steel _ _ (TCbindP?.cg c x) in
-                    bindP_ghost_steel a b opened wp f (fun x -> (g x).repr_tree) _ _ (TCbindP?.cg c) rg)
+    repr_steel = (fun pre post c ->
+                    [@@inline_let]let tg (x : a) : prog_tree b = (g x).repr_tree in
+                    let cg   : G.erased ((x : a) -> tree_cond (tg x) pre post)
+                             = G.hide (TCbindP?.cg c) in
+
+                    [@@inline_let]let rg (x : a) = (g x).repr_steel _ _ (G.reveal cg x) in
+                    bindP_ghost_steel a b opened wp f (fun x -> (g x).repr_tree) _ _ cg rg)
   }
 
 
@@ -1046,9 +1064,11 @@ let ite (#a : Type) (guard : bool) (thn els : repr SH.KSteel a)
   : repr SH.KSteel a
   = {
     repr_tree  = Tif a guard thn.repr_tree els.repr_tree;
-    repr_steel = (fun pre0 post0 c ->
+    repr_steel = (fun pre post c ->
+                    let cthn : G.erased (tree_cond thn.repr_tree pre post) = G.hide (TCif?.cthn c) in
+                    let cels : G.erased (tree_cond els.repr_tree pre post) = G.hide (TCif?.cels c) in
                     ite_steel a guard _ _ _ _ _ _
-                       (thn.repr_steel _ _ (TCif?.cthn c)) (els.repr_steel _ _ (TCif?.cels c)))
+                       (thn.repr_steel _ _ cthn) (els.repr_steel _ _ cels))
   }
 
 [@@ __repr_M__]
@@ -1057,9 +1077,11 @@ let ite_ghost (#a : Type) (#opened : Mem.inames) (guard : bool) (thn els : repr 
   : repr (SH.KGhost opened) a
   = {
     repr_tree  = Tif a guard thn.repr_tree els.repr_tree;
-    repr_steel = (fun pre0 post0 c ->
+    repr_steel = (fun pre post c ->
+                    let cthn : G.erased (tree_cond thn.repr_tree pre post) = G.hide (TCif?.cthn c) in
+                    let cels : G.erased (tree_cond els.repr_tree pre post) = G.hide (TCif?.cels c) in
                     ite_ghost_steel a opened guard _ _ _ _ _ _
-                       (thn.repr_steel _ _ (TCif?.cthn c)) (els.repr_steel _ _ (TCif?.cels c)))
+                       (thn.repr_steel _ _ cthn) (els.repr_steel _ _ cels))
   }
 
 
