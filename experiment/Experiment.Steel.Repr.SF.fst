@@ -110,11 +110,20 @@ and repr_Fun_of_SF_ens #val_t #sel_t (t : prog_tree val_t sel_t)
               == (exists (x : a) . as_ensures wp x /\ tree_ens (g x) val_v sel_v))
             by T.(trefl ());
           assert (Fun.tree_ens (repr_Fun_of_SF (TbindP a b post wp g)) ({val_v; sel_v})
-              == (exists (x : a) . as_ensures wp x /\ Fun.tree_ens (repr_Fun_of_SF (g x)) ({val_v; sel_v})))
-            by T.(trefl ());
+              <==> (exists (x : a) .
+                   (exists (nl : Fl.flist []) . as_ensures (add_sl_to_wp wp) ({val_v = x; sel_v = nl})) /\
+                   Fun.tree_ens (repr_Fun_of_SF (g x)) ({val_v; sel_v})))
+            by T.(norm [delta_only [`%Fun.tree_ens; `%repr_Fun_of_SF; `%sl_uncurrify;
+                                    `%sl_tys; `%sl_tys'; `%Fun.Mktys'?.ex; `%sl_ex;
+                                    `%Mksl_tys_t?.val_t; `%Mksl_tys_t?.sel_t];
+                        iota; zeta]; smt ());
           introduce forall (x : a) .
-                    (tree_ens (g x) val_v sel_v <==> Fun.tree_ens (repr_Fun_of_SF (g x)) ({val_v; sel_v}))
-            with repr_Fun_of_SF_ens (g x) val_v sel_v
+              ((exists (nl : Fl.flist []) . as_ensures (add_sl_to_wp wp) ({val_v = x; sel_v = nl})) <==>
+                  as_ensures wp x) /\
+              (tree_ens (g x) val_v sel_v <==> Fun.tree_ens (repr_Fun_of_SF (g x)) ({val_v; sel_v}))
+            with introduce _ /\ _
+            with FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp
+             and repr_Fun_of_SF_ens (g x) val_v sel_v
   | Tif a guard post thn els ->
           if guard
           then repr_Fun_of_SF_ens thn val_v sel_v
