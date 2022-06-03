@@ -145,7 +145,7 @@ let __normal_ST : list norm_step = [
 let __delta_ST2SF_Spec : list string = ST2SF_Spec.([
   `%repr_SF_of_ST_rall; `%repr_SF_of_ST; `%shape_SF_of_ST;
   `%shape_SF_of_ST_rall;
-  `%post_SF_of_ST; `%postl_SF_of_ST; `%post_bij;
+  `%post_SF_of_ST; `%postl_SF_of_ST; `%post_bij; `%mk_post_bij;
   `%Mkpost_bij_t'?.len_SF; `%Mkpost_bij_t'?.idx_SF; `%Mkpost_bij_t'?.idx_ST;
   `%sel_ST_of_SF; `%sell_ST_of_SF; `%post_src_of_shape;
   `%post_src_f_of_shape; `%sel_SF_of_ST; `%sell_SF_of_ST
@@ -153,6 +153,7 @@ let __delta_ST2SF_Spec : list string = ST2SF_Spec.([
 
 let __delta_ST2SF_Base : list string = ST2SF_Base.([
   `%repr_SF_of_ST; `%shape_SF_of_ST;
+  `%seq_sel_eq_eff; `%seq_sel_eq_eff_aux;
   `%L.op_At; `%L.append;
   `%Fl.apply_perm_r; `%Fl.append;
   `%ST.const_post; `%ST.frame_post
@@ -167,7 +168,13 @@ let __normal_SF : list norm_step = [
               `%Mktuple2?._1;`%Mktuple2?._2;
               `%Learn.Option.map;
               `%Perm.perm_f_swap; `%Perm.perm_f_transpose; `%Perm.perm_f_of_pair;
-              `%Perm.mk_perm_f; `%Perm.id_n; `%Perm.perm_f_of_list]));
+              `%Perm.mk_perm_f; `%Perm.id_n; `%Perm.perm_f_of_list;
+              `%ST.sequiv_of_vequiv;
+              `%M.Mkvequiv?.veq_req; `%M.Mkvequiv?.veq_ens; `%M.Mkvequiv?.veq_eq; `%M.vequiv_id; `%M.veq_of_list;
+              `%M.mk_veq_eq;
+              `%ST.Mksequiv?.seq_req; `%ST.Mksequiv?.seq_ens; `%ST.Mksequiv?.seq_eq;
+              `%ST.seq_ens1
+              ]));
   delta_qualifier ["unfold"];
   delta_attr [`%U.__util_func__];
   iota; zeta; primops

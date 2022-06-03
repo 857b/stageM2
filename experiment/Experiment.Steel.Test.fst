@@ -152,7 +152,7 @@ let normal_vp : list norm_step = [
 
 unfold
 let test0_equiv (r : ref nat) (v : vprop') : M.vequiv ([vptr' r full_perm; v]) [vptr' r full_perm; v] =
-  Perm.id_n 2
+  M.vequiv_of_perm (Perm.id_n 2)
 
 [@@ __test__]
 let test0_cond (r : ref nat) (v : vprop')
@@ -174,10 +174,13 @@ let test0_cond (r : ref nat) (v : vprop')
        (norm normal_vp; exact (`test0_equiv (`@r) (`@v))));
   qed ())
 
+unfold
+let test0_equiv_l : M.veq_eq_t_list 2 2 = [Some 0; Some 1]
+
 [@@ __test__]
 let test0_shape_M : M.shape_tree 2 2 = M.(
-  Sbind _ _ _ (M.Sspec 1 1 1 (Perm.perm_f_to_list (Perm.id_n 2)) (Perm.perm_f_to_list (Perm.id_n 2)))
-              (M.Sret 2 (Perm.perm_f_to_list (Perm.id_n 2))))
+  Sbind _ _ _ (Sspec 1 1 2 2 1 test0_equiv_l test0_equiv_l)
+              (Sret 2 2 test0_equiv_l))
 
 let normal_shape_M : list norm_step = [
     delta_only [`%M.tree_cond_has_shape; `%L.length; `%Perm.perm_f_to_list; `%Ll.list_eq; `%Ll.initi];
@@ -287,36 +290,43 @@ let test0_wp (r : ref nat) (v : vprop') (x_ini : nat) (v_ini : v.t) =
 
 ////////// test1 //////////
 
+let sequiv_of_perm (#pre #post : Fl.ty_list) (f : Perm.pequiv pre post) : ST.sequiv pre post = {
+  seq_req = (fun _ -> True);
+  seq_ens = (fun _ _ -> True);
+  seq_eq  = M.mk_veq_eq (L.length pre) (L.length post) (fun i -> Some (f i));
+  seq_typ = ()
+}
+
 [@@ __test__]
 let test1_ST : ST.prog_tree int [bool; int] (fun _ -> [bool; int])
   = ST.(
     b <-- Tframe _ _ _ [int] (
            Tspec bool [bool] (fun _ -> [bool])
              (fun _ -> True) (fun sl0 b sl1 -> sl1 0 = sl0 0 /\ b = sl0 0));
-    Tequiv [bool; int] [int; bool] (Perm.perm_f_swap #2 0);;
+    Tequiv [bool; int] [int; bool] (sequiv_of_perm (Perm.perm_f_swap #2 0));;
     x <-- Tframe _ _ _ [bool] (Tspec int [int] (fun _ -> [int])
            (fun _ -> True) (fun sl0 x sl1 -> sl1 0 = sl0 0 /\ x = sl0 0));
-    Tequiv [int; bool] [bool; int] (Perm.perm_f_swap #2 0);;
+    Tequiv [int; bool] [bool; int] (sequiv_of_perm (Perm.perm_f_swap #2 0));;
     Tret int (if b then x else 0) (fun _ -> [bool; int])
   )
 
 [@@ __test__]
 let test1_shape_tree_ST : ST.shape_tree 2 2 = ST.(
   Sbind _ _ _ (Sframe _ _ 1 (Sspec  1 1))
- (Sbind _ _ _ (Sequiv 2 (Perm.perm_f_swap #2 0))
+ (Sbind _ _ _ (Sequiv 2 2 (M.mk_veq_eq 2 2 (fun i -> Some (Perm.perm_f_swap #2 0 i))))
  (Sbind _ _ _ (Sframe _ _ 1 (Sspec  1 1))
- (Sbind _ _ _ (Sequiv 2 (Perm.perm_f_swap #2 0))
+ (Sbind _ _ _ (Sequiv 2 2 (M.mk_veq_eq 2 2 (fun i -> Some (Perm.perm_f_swap #2 0 i))))
               (Sret   true 2)))))
 
 
 let normal_shape_ST' : list norm_step = [
-    delta_only [`%ST.prog_has_shape'; `%ST.bind; `%L.length];
+    delta_only [`%ST.prog_has_shape'; `%ST.bind; `%L.length; `%sequiv_of_perm; `%ST.Mksequiv?.seq_eq];
     delta_qualifier ["unfold"];
     iota; zeta; primops; simplify
   ]
 
 let test1_ST_has_shape () : squash (ST.prog_has_shape' test1_ST test1_shape_tree_ST)
-  = _ by T.(norm_test (); norm normal_shape_ST'; smt ())
+  = _ by T.(norm_test (); norm normal_shape_ST'; trivial ())
 
 [@@ __test__]
 let test1_shape_ST : ST.prog_shape test1_ST =

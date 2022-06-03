@@ -5,6 +5,7 @@ module L   = FStar.List.Pure
 module Ll  = Learn.List
 module Fl  = Learn.FList
 module Dl  = Learn.DList
+module M   = Experiment.Steel.Repr.M
 module ST  = Experiment.Steel.Repr.ST
 module Fin = FStar.Fin
 module Opt = Learn.Option
@@ -21,8 +22,8 @@ type post_src_f (pre_n : nat) (post_n : nat) = Fin.fin post_n -> option (Fin.fin
 let rec post_src_f_of_shape (#pre_n : nat) (#post_n : nat) (s : ST.shape_tree pre_n post_n)
   : Tot (post_src_f pre_n post_n) (decreases s)
   = match s with
-  | ST.Sequiv n p ->
-           (fun i -> Some (p i))
+  | ST.Sequiv pre_n post_n e ->
+           e
   | ST.Sframe pre_n post_n frame_n f ->
            (fun i -> if i < post_n
                   then Opt.map #(Fin.fin pre_n) #(Fin.fin (pre_n + frame_n)) (fun j -> j)
@@ -107,8 +108,8 @@ let rec mk_post_bij (#pre_n : nat) (#post_n : nat) (s : post_src_f pre_n post_n)
 let rec post_bij (#post_n : nat) (#pre_n : nat) (s : ST.shape_tree pre_n post_n)
   : Tot (post_bij_t (post_src_f_of_shape s)) (decreases s)
   = match s with
-  | ST.Sequiv n p ->
-           { len_SF = 0; idx_SF = (fun _ -> false_elim ()); idx_ST = (fun _ -> false_elim ()) }
+  | ST.Sequiv pre_n post_n e ->
+           mk_post_bij (post_src_f_of_shape s)
   | ST.Sframe pre_n post_n frame_n f ->
            let bj = post_bij f in
            { len_SF = bj.len_SF;
@@ -221,8 +222,10 @@ let rec repr_SF_of_ST
       returns (s : ST.prog_shape t) -> Fl.flist pre ->
               prog_tree a (post_SF_of_ST post s.shp)
     with
-    | ST.Tequiv pre post0 p -> fun s sl0 ->
-            Tret U.unit' U.Unit' (fun _ -> []) Dl.DNil
+    | ST.Tequiv pre post0 e -> fun s sl0 ->
+            Tspec U.unit' (fun _ -> postl_SF_of_ST post0 (post_bij s.shp))
+              (e.seq_req sl0)
+              (fun _ sl1 -> e.seq_ens sl0 (sel_ST_of_SF t s sl0 U.Unit' sl1))
     | ST.Tframe a pre post frame f -> fun s sl0 ->
             (**) let ST.Sframe _ post_n _ shp_f = s.shp in
             (**) post_SF_of_ST__frame post frame (L.length pre) post_n shp_f;
@@ -284,8 +287,8 @@ let rec shape_SF_of_ST
       (#pre_n #post_n : nat) (t : ST.shape_tree pre_n post_n)
   : Tot (shape_tree (post_bij t).len_SF) (decreases t)
   = match t with
-    | ST.Sequiv _ _ ->
-            Sret true 0
+    | ST.Sequiv _ _ e ->
+            Sspec (post_bij t).len_SF
     | ST.Sframe pre_n post_n frame_n s_f ->
             shape_SF_of_ST s_f
     | ST.Sspec pre_n post_n ->

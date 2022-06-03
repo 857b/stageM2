@@ -9,11 +9,13 @@ open Steel.Effect
 open Steel.Effect.Atomic
 open Experiment.Steel.Repr.M
 
+#push-options "--ifuel 1"
 
 /// We define a "monad" (which does not satisfy the monad laws) on [M.repr]. 
 
 (****** Call *)
 
+#push-options "--z3rlimit 20"
 inline_for_extraction noextract
 let repr_of_steel_steel
       (a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
@@ -22,16 +24,11 @@ let repr_of_steel_steel
   : (let c = TCspec #a #pre #post #req #ens tcs in
      repr_steel_t SH.KSteel a tcs.tcs_pre tcs.tcs_post (tree_req _ c) (tree_ens _ c))
   = SH.steel_f (fun () ->
-    (**) steel_change_vequiv tcs.tcs_pre_eq;
+    (**) tcs.tcs_pre_eq.veq_g _;
     (**) steel_elim_vprop_of_list_append_f pre tcs.tcs_frame;
     let x = SH.steel_u f () in
     (**) steel_intro_vprop_of_list_append_f (post x) tcs.tcs_frame;
-    (**) let sl1' = gget (vprop_of_list L.(post x @ tcs.tcs_frame)) in
-    (**) steel_change_vequiv (tcs.tcs_post_eq x);
-    (**) let sl1'' = gget (vprop_of_list (tcs.tcs_post x)) in
-    (**) assert (vpl_sels_f (tcs.tcs_post x) sl1''
-    (**)      == extract_vars (tcs.tcs_post_eq x) (vpl_sels_f L.(post x @ tcs.tcs_frame) sl1'));
-    (**) extract_vars_sym_l (tcs.tcs_post_eq x) (vpl_sels_f L.(post x @ tcs.tcs_frame) sl1');
+    (**) (tcs.tcs_post_eq x).veq_g _;
     Steel.Effect.Atomic.return x)
 
 inline_for_extraction noextract
@@ -42,18 +39,14 @@ let repr_of_steel_ghost_steel
   : (let c = TCspec #a #pre #post #req #ens tcs in
      repr_steel_t (SH.KGhost opened) a tcs.tcs_pre tcs.tcs_post (tree_req _ c) (tree_ens _ c))
   = SH.ghost_f #opened (fun () ->
-    (**) steel_change_vequiv tcs.tcs_pre_eq;
+    (**) tcs.tcs_pre_eq.veq_g _;
     (**) steel_elim_vprop_of_list_append_f pre tcs.tcs_frame;
     let x = SH.ghost_u f () in
     (**) steel_intro_vprop_of_list_append_f (post x) tcs.tcs_frame;
-    (**) let sl1' = gget (vprop_of_list L.(post x @ tcs.tcs_frame)) in
-    (**) steel_change_vequiv (tcs.tcs_post_eq x);
-    (**) let sl1'' = gget (vprop_of_list (tcs.tcs_post x)) in
-    (**) assert (vpl_sels_f (tcs.tcs_post x) sl1''
-    (**)      == extract_vars (tcs.tcs_post_eq x) (vpl_sels_f L.(post x @ tcs.tcs_frame) sl1'));
-    (**) extract_vars_sym_l (tcs.tcs_post_eq x) (vpl_sels_f L.(post x @ tcs.tcs_frame) sl1');
+    (**) (tcs.tcs_post_eq x).veq_g _;
     (**) noop ();
     x)
+#pop-options
 
 
 [@@ __repr_M__]
@@ -134,22 +127,22 @@ inline_for_extraction noextract
 let return_steel
       (a : Type) (x : a) (sl_hint : post_t a)
       (pre : pre_t) (post : post_t a)
-      (p : vequiv pre (post x))
-  : (let c = TCret #a #x #sl_hint pre post p in
+      (e : vequiv pre (post x))
+  : (let c = TCret #a #x #sl_hint pre post e in
      repr_steel_t SH.KSteel a pre post (tree_req _ c) (tree_ens _ c))
   = SH.steel_f (fun () ->
-    (**) steel_change_vequiv p;
+    (**) e.veq_g _;
     Steel.Effect.Atomic.return x)
 
 inline_for_extraction noextract
 let return_ghost_steel
       (a : Type) (opened : Mem.inames) (x : a) (sl_hint : post_t a)
       (pre : pre_t) (post : post_t a)
-      (p : vequiv pre (post x))
-  : (let c = TCret #a #x #sl_hint pre post p in
+      (e : vequiv pre (post x))
+  : (let c = TCret #a #x #sl_hint pre post e in
      repr_steel_t (SH.KGhost opened) a pre post (tree_req _ c) (tree_ens _ c))
   = SH.ghost_f #opened (fun () ->
-    (**) steel_change_vequiv p;
+    (**) e.veq_g _;
     x)
 
 [@@ __repr_M__]

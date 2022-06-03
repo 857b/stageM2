@@ -86,3 +86,6 @@ let block_red : unit = ()
 
 
 let print_util (#a : Type) (x : a) : prop = True
+
+
+type eq_dec (a : Type) = (x : a) -> (y : a) -> (b : bool {b <==> x == y})

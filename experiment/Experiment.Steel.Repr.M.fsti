@@ -214,14 +214,14 @@ val sel_eq' : squash (sel_f' == sel)
 
 
 unfold
-let split_vars (vs0 vs1 : vprop_list) (xs : sl_f (vs0 @ vs1))
+let split_vars (vs0 vs1 : vprop_list) (xs : sl_f L.(vs0 @ vs1))
   : sl_f vs0 & sl_f vs1
   =
     (**) Ll.map_append Mkvprop'?.t vs0 vs1;
     Fl.splitAt_ty (vprop_list_sels_t vs0) (vprop_list_sels_t vs1) xs
 
 unfold
-let split_vars_list (vs0 vs1 : vprop_list) (xs : sl_list (vs0 @ vs1))
+let split_vars_list (vs0 vs1 : vprop_list) (xs : sl_list L.(vs0 @ vs1))
   : sl_list vs0 & sl_list vs1
   =
     (**) Ll.map_append Mkvprop'?.t vs0 vs1;
@@ -233,35 +233,107 @@ let split_vars__cons (v0 : vprop') (vs0 vs1 : vprop_list) (x0 : v0.t) (xs : sl_l
                    Dl.DCons v0.t x0 (vprop_list_sels_t vs0) xs0, xs1))
   = Ll.map_append Mkvprop'?.t vs0 vs1
 
+unfold
+let append_vars (#vs0 #vs1 : vprop_list) (xs : sl_f vs0) (ys : sl_f vs1)
+  : sl_f L.(vs0 @ vs1)
+  =
+    (**) Ll.map_append Mkvprop'?.t vs0 vs1;
+    Fl.append xs ys
+
 
 val steel_elim_vprop_of_list_append_f (#opened : Mem.inames) (vs0 vs1 : vprop_list)
   : SteelGhost unit opened
       (vprop_of_list L.(vs0@vs1)) (fun () -> vprop_of_list vs0 `star` vprop_of_list vs1)
       (requires fun _ -> True)
-      (ensures fun h0 () h1 -> split_vars vs0 vs1 (sel_f (vs0@vs1) h0)
-                        == (sel_f vs0 h1, sel_f vs1 h1))
+      (ensures fun h0 () h1 -> sel_f (vs0@vs1) h0 == append_vars (sel_f vs0 h1) (sel_f vs1 h1))
 
 val steel_intro_vprop_of_list_append_f (#opened : Mem.inames) (vs0 vs1 : vprop_list)
   : SteelGhost unit opened
       (vprop_of_list vs0 `star` vprop_of_list vs1) (fun () -> vprop_of_list L.(vs0@vs1))
       (requires fun _ -> True)
-      (ensures fun h0 () h1 -> split_vars vs0 vs1 (sel_f (vs0@vs1) h1)
-                        == (sel_f vs0 h0, sel_f vs1 h0))
+      (ensures fun h0 () h1 -> sel_f (vs0@vs1) h1 == append_vars (sel_f vs0 h0) (sel_f vs1 h0))
 
 
 (***** [vequiv] *)
 
-let vequiv : vprop_list -> vprop_list -> Type = Perm.pequiv #vprop'
+type veq_eq_t (pre_n post_n : nat) = FExt.(Fin.fin post_n ^-> option (Fin.fin pre_n))
+
+noextract
+let mk_veq_eq (pre_n post_n : nat) (f : Fin.fin post_n -> option (Fin.fin pre_n))
+  : veq_eq_t pre_n post_n
+  = FExt.on (Fin.fin post_n) f
+
+let veq_eq_t_list (pre_n post_n : nat) = L.llist (option (Fin.fin pre_n)) post_n
+
+let veq_to_list (#pre_n #post_n : nat) (f : veq_eq_t pre_n post_n) : veq_eq_t_list pre_n post_n =
+  Ll.initi 0 post_n f
+
+noextract
+let veq_of_list (#pre_n #post_n : nat) (l : veq_eq_t_list pre_n post_n) : veq_eq_t pre_n post_n =
+  FExt.on (Fin.fin post_n) (L.index l)
+
+let veq_of_to_list #pre_n #post_n (f : veq_eq_t pre_n post_n)
+  : Lemma (veq_of_list (veq_to_list f) == f)
+          [SMTPat (veq_of_list (veq_to_list f))]
+  = FExt.extensionality _ _ (veq_of_list (veq_to_list f)) f
+
+let veq_to_of_list #pre_n #post_n (l : veq_eq_t_list pre_n post_n)
+  : Lemma (veq_to_list (veq_of_list l) == l)
+          [SMTPat (veq_to_list (veq_of_list l))]
+  = Ll.list_extensionality (veq_to_list (veq_of_list l)) l (fun _ -> ())
+
+let veq_list_eq (#pre_n #post_n : nat) : U.eq_dec (veq_eq_t_list pre_n post_n)
+  = Ll.list_eq (Learn.Option.opt_eq (fun x y -> x = y))
+
+let veq_typ_eq (pre post : Fl.ty_list) (f_eq : veq_eq_t (L.length pre) (L.length post))
+  : prop
+  = forall (i : Fin.fin (L.length post) {Some? (f_eq i)}) . L.index post i == L.index pre (Some?.v (f_eq i))
+
+let veq_sel_eq (#pre #post : vprop_list) (f_eq : veq_eq_t (L.length pre) (L.length post))
+               (sl0 : sl_f pre) (sl1 : sl_f post)
+  : prop
+  = forall (i : Fin.fin (L.length post) {Some? (f_eq i)}) . sl1 i === sl0 (Some?.v (f_eq i))
+
+// Should we allow post to depend on some returned variables ? It could be useful to destruct [vdep]
+noeq
+type vequiv (pre post : vprop_list) = {
+  veq_req : sl_f pre -> Type0;
+  veq_ens : sl_f pre -> sl_f post -> Type0;
+  veq_eq  : veq_eq_t (L.length pre) (L.length post);
+  veq_typ : squash (veq_typ_eq (vprop_list_sels_t pre) (vprop_list_sels_t post) (U.cast _ veq_eq));
+  veq_g   : (opened : Mem.inames) ->
+            SteelGhost unit opened
+              (vprop_of_list pre) (fun () -> vprop_of_list post)
+              (requires fun h0 -> veq_req (sel pre h0))
+              (ensures  fun h0 () h1 -> veq_ens (sel pre h0) (sel post h1) /\
+                                     veq_sel_eq veq_eq (sel pre h0) (sel post h1))
+}
+
+let veq_ens1 (#pre #post : vprop_list) (veq : vequiv pre post) (sl0 : sl_f pre) (sl1 : sl_f post) : prop
+  = veq.veq_ens sl0 sl1 /\ veq_sel_eq veq.veq_eq sl0 sl1
+
+
+let vequiv_id (v : vprop_list) : vequiv v v = {
+  veq_req = (fun _ -> True);
+  veq_ens = (fun _ _ -> True);
+  veq_eq  = mk_veq_eq (L.length v) (L.length v) (fun i -> Some i);
+  veq_typ = ();
+  veq_g   = (fun opened -> noop ())
+}
+
+(***** [vequiv_perm] *)
+
+let vequiv_perm : vprop_list -> vprop_list -> Type = Perm.pequiv #vprop'
 
 unfold
-let vequiv_sl (#vs0 #vs1 : vprop_list) (f : vequiv vs0 vs1)
+let vequiv_sl (#vs0 #vs1 : vprop_list) (f : vequiv_perm vs0 vs1)
   : Perm.pequiv (vprop_list_sels_t vs0) (vprop_list_sels_t vs1)
   = Perm.map_apply_r f Mkvprop'?.t vs0;
     U.cast #(Perm.perm_f (L.length vs0)) (Perm.perm_f (L.length (vprop_list_sels_t vs0))) f    
 
 unfold
 let extract_vars (#src #dst : vprop_list)
-                 (p : vequiv src dst)
+                 (p : vequiv_perm src dst)
                  (xs : sl_f src)
   : sl_f dst
   =
@@ -269,24 +341,40 @@ let extract_vars (#src #dst : vprop_list)
 
 unfold
 let extract_vars_f (src dst frame : vprop_list)
-                   (p : vequiv src L.(dst@frame))
+                   (p : vequiv_perm src L.(dst@frame))
                    (xs : sl_f src)
   : sl_f dst & sl_f frame
   =
     split_vars dst frame (extract_vars p xs)
 
-let extract_vars_sym_l (#vs0 #vs1 : vprop_list) (f : vequiv vs0 vs1) (xs : sl_f vs0)
+let extract_vars_sym_l (#vs0 #vs1 : vprop_list) (f : vequiv_perm vs0 vs1) (xs : sl_f vs0)
   : Lemma (extract_vars (Perm.pequiv_sym f) (extract_vars f xs) == xs)
   =
     Fl.apply_pequiv_sym_l (vequiv_sl f) xs
 
 /// applying a permutation on the context's vprop
 
-val steel_change_vequiv (#vs0 #vs1 : vprop_list) (#opened:Mem.inames) (f : vequiv vs0 vs1)
+val steel_change_vequiv (#vs0 #vs1 : vprop_list) (#opened:Mem.inames) (f : vequiv_perm vs0 vs1)
   : SteelGhost unit opened (vprop_of_list vs0) (fun () -> vprop_of_list vs1)
       (requires fun _ -> True)
       (ensures fun h0 () h1 -> sel_f vs1 h1 == extract_vars f (sel_f vs0 h0))
 
+let vequiv_of_perm_eq (#pre #post : vprop_list) (f : vequiv_perm pre post)
+  : veq_eq_t (L.length pre) (L.length post)
+  = mk_veq_eq (L.length pre) (L.length post) (fun i -> Some (f i))
+
+val vequiv_of_perm_g (#pre #post : vprop_list) (f : vequiv_perm pre post) (opened : Mem.inames)
+  : SteelGhost unit opened (vprop_of_list pre) (fun () -> vprop_of_list post)
+      (requires fun _ -> True)
+      (ensures  fun h0 () h1 -> veq_sel_eq (vequiv_of_perm_eq f) (sel pre h0) (sel post h1))
+
+let vequiv_of_perm (#pre #post : vprop_list) (f : vequiv_perm pre post) : vequiv pre post = {
+  veq_req = (fun (_ : sl_f pre) -> True);
+  veq_ens = (fun (_ : sl_f pre) (_ : sl_f post) -> True);
+  veq_eq  = vequiv_of_perm_eq f;
+  veq_typ = ();
+  veq_g   = vequiv_of_perm_g f
+}
 
 (*** [repr_steel_t] *)
 
@@ -469,13 +557,15 @@ type tree_cond : (#a : Type u#a) -> (t : prog_tree a) -> (pre : pre_t) -> (post 
 
 (**** Shape *)
 
+noeq
 type shape_tree : (pre_n : nat) -> (post_n : nat) -> Type =
-  | Sspec  : (pre_n : nat) -> (post_n : nat) -> (frame_n : nat) ->
-             (p0 : Perm.perm_f_list (pre_n  + frame_n)) ->
-             (p1 : Perm.perm_f_list (post_n + frame_n)) ->
-             shape_tree (pre_n + frame_n) (post_n + frame_n)
-  | Sret   : (n : nat) -> (p : Perm.perm_f_list n) ->
-             shape_tree n n
+  | Sspec  : (pre_n : nat) -> (post_n : nat) -> (pre'_n : nat) -> (post'_n : nat) -> (frame_n : nat) ->
+             (e0 : veq_eq_t_list pre'_n (pre_n + frame_n)) ->
+             (e1 : veq_eq_t_list (post_n + frame_n) post'_n) ->
+             shape_tree pre'_n post'_n
+  | Sret   : (pre_n : nat) -> (post_n : nat) ->
+             (e : veq_eq_t_list pre_n post_n) ->
+             shape_tree pre_n post_n
   | Sbind  : (pre_n : nat) -> (itm_n : nat) -> (post_n : nat) ->
              (f : shape_tree pre_n itm_n) -> (g : shape_tree itm_n post_n) ->
              shape_tree pre_n post_n
@@ -492,23 +582,15 @@ let tree_cond_has_shape_Spec
       (#post_n : nat) (s : shape_tree (L.length tcs.tcs_pre) post_n)
   : prop
   = match s with
-  | Sspec pre_n post_n frame_n p0' p1' ->
-    pre_n = L.length pre /\
+  | Sspec pre_n post_n pre'_n post'_n frame_n e0' e1' ->
+    pre_n   = L.length pre /\
+    pre'_n  = L.length tcs.tcs_pre /\
     frame_n = L.length tcs.tcs_frame /\
-    Ll.list_eq
-      (Perm.perm_f_to_list
-        (U.cast #(Perm.perm_f L.(length tcs.tcs_pre)) (Perm.perm_f (pre_n + frame_n))
-          tcs.tcs_pre_eq))
-      p0' /\
+    veq_to_list tcs.tcs_pre_eq.veq_eq `veq_list_eq` e0' /\
    (forall (x : a) .
      L.length (post  x) = post_n /\
-     L.length (tcs.tcs_post x) = post_n + frame_n /\ (* already implied ? *)
-     Ll.list_eq
-       (Perm.perm_f_to_list
-         (U.cast #(Perm.perm_f L.(length (post x @ tcs.tcs_frame)))
-                  (Perm.perm_f (post_n + frame_n))
-                  (tcs.tcs_post_eq x)))
-       p1')
+     L.length (tcs.tcs_post x) = post'_n /\
+     veq_to_list (tcs.tcs_post_eq x).veq_eq `veq_list_eq` e1')
   | _ -> False
 
 [@@ strict_on_arguments [4;6]] (* strict on c;s *)
@@ -520,11 +602,12 @@ let rec tree_cond_has_shape
   = match c with
   | TCspec #a #pre #post tcs -> tree_cond_has_shape_Spec a pre post tcs s
   | TCspecS #a tr tcs -> tree_cond_has_shape_Spec a tr.r_pre tr.r_post tcs s
-  | TCret #a pre post p ->
+  | TCret #a pre post e ->
       (match s with
-      | Sret n p' ->
-        Ll.list_eq (Perm.perm_f_to_list #n p) p' /\
-       (forall (x : a) . L.length (post x) = n)
+      | Sret pre_n post_n e' ->
+        pre_n = L.length pre /\
+       (forall (x : a) . L.length (post x) = post_n) /\
+        veq_to_list e.veq_eq `veq_list_eq` e'
       | _ -> False)
   | TCbind #a #b pre itm post f g ->
       (match s with
@@ -558,29 +641,36 @@ type prog_cond (#a : Type) (t : prog_tree a) (pre : pre_t) (post : post_t a) = {
 
 (** spec *)
 
+// ALT? directly express with a bind
+
 let spec_req (#a : Type) (#pre : pre_t) (#post : post_t a) (tcs : tree_cond_Spec a pre post)
-             (req : req_t pre)
+             (req : req_t pre) (ens : ens_t pre a post)
   : req_t tcs.tcs_pre
   = fun sl0 ->
-      req (extract_vars_f tcs.tcs_pre pre tcs.tcs_frame tcs.tcs_pre_eq sl0)._1
+      tcs.tcs_pre_eq.veq_req sl0 /\
+     (forall (sl0' : sl_f pre) (sl_frame : sl_f tcs.tcs_frame) .
+      veq_ens1 tcs.tcs_pre_eq sl0 (append_vars sl0' sl_frame) ==>
+     (req sl0' /\
+     (forall (x : a) (sl1' : sl_f (post x)) . ens sl0' x sl1' ==>
+      (tcs.tcs_post_eq x).veq_req (append_vars sl1' sl_frame))))
 
 let spec_ens (#a : Type) (#pre : pre_t) (#post : post_t a) (tcs : tree_cond_Spec a pre post)
              (ens : ens_t pre a post)
   : ens_t tcs.tcs_pre a tcs.tcs_post
-  = fun sl0' x sl1' ->
-      let sl0, frame0 = extract_vars_f tcs.tcs_pre pre tcs.tcs_frame tcs.tcs_pre_eq sl0' in
-      let sl1, frame1 = extract_vars_f (tcs.tcs_post x) (post x) tcs.tcs_frame
-                                       (Perm.pequiv_sym (tcs.tcs_post_eq x)) sl1' in
-      frame1 == frame0 /\ ens sl0 x sl1
+  = fun sl0 x sl1 -> exists (sl0' : sl_f pre) (sl1' : sl_f (post x)) (sl_frame : sl_f tcs.tcs_frame) .
+      veq_ens1 tcs.tcs_pre_eq sl0 (append_vars sl0' sl_frame) /\
+      ens sl0' x sl1' /\
+      veq_ens1 (tcs.tcs_post_eq x) (append_vars sl1' sl_frame) sl1
 
 (** return *)
 
-let return_req (pre : pre_t) : req_t pre
-  = fun _ -> True
+let return_req (#pre : pre_t) (#post : vprop_list) (veq : vequiv pre post) : req_t pre
+  = veq.veq_req
 
-let return_ens (#a : Type) (x : a) (p : post_t a) : ens_t (p x) a p
+let return_ens (#a : Type) (x : a) (#pre : pre_t) (#post : post_t a) (e : vequiv pre (post x))
+  : ens_t pre a post
   = fun sl0 r sl1 ->
-      r == x /\ sl1 == sl0
+      r == x /\ veq_ens1 e sl0 sl1
 
 (** bind *)
 
@@ -641,12 +731,12 @@ let rec tree_req (#a : Type u#a) (t : prog_tree a)
                  (sl0 : sl_f pre)
   : Tot Type0 (decreases t) =
   match c with
-  | TCspec #_ #pre #_ #req #_  tcs ->
-             spec_req tcs req sl0
+  | TCspec #_ #pre #_ #req #ens  tcs ->
+             spec_req tcs req ens sl0
   | TCspecS #_ tr tcs ->
-             spec_req tcs tr.r_req sl0
-  | TCret #_ #_  pre _  _ ->
-             return_req pre sl0
+             spec_req tcs tr.r_req tr.r_ens sl0
+  | TCret #_ #_  _ _  e ->
+             return_req e sl0
   | TCbind #_ #_ #f #g  pre itm _  cf cg ->
              bind_req (tree_req f cf) (tree_ens f cf) (fun x -> tree_req (g x) (cg x)) sl0
   | TCbindP #_ #_ #wp #g  pre _  cg ->
@@ -659,14 +749,12 @@ and tree_ens (#a : Type u#a) (t : prog_tree a)
              (sl0 : sl_f pre) (res : a) (sl1 : sl_f (post res))
   : Tot Type0 (decreases t) =
   match c with
-  | TCspec #a #pre #post #req #ens  tcs ->
+  | TCspec #a #pre #post #_ #ens  tcs ->
              spec_ens tcs ens sl0 res sl1
   | TCspecS #_ tr tcs ->
              spec_ens tcs tr.r_ens sl0 res sl1
-  | TCret #a #x  pre post  p ->
-                res == x /\
-               (let sl0' = extract_vars p sl0 in
-                sl1 == sl0')
+  | TCret #a #x  _ _  e ->
+             return_ens x e sl0 res sl1
   | TCbind #_ #_ #f #g  pre itm post  cf cg ->
              bind_ens (tree_ens f cf) (fun x -> tree_ens (g x) (cg x)) sl0 res sl1
   | TCbindP #_ #_ #wp #g  pre post  cg ->

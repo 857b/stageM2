@@ -5,6 +5,7 @@ module L   = FStar.List.Pure
 module Ll  = Learn.List
 module Fl  = Learn.FList
 module Dl  = Learn.DList
+module M   = Experiment.Steel.Repr.M
 module ST  = Experiment.Steel.Repr.ST
 
 open Experiment.Steel.Repr.ST
@@ -13,14 +14,37 @@ open Experiment.Steel.Repr.SF
 
 #set-options "--fuel 1 --ifuel 1"
 
+(* ST.seq_sel_eq written with a conjunction instead of a forall *)
+let rec seq_sel_eq_eff_aux (#pre #post : Fl.ty_list) (f_eq : M.veq_eq_t (L.length pre) (L.length post))
+                           (sl0 : Fl.flist pre) (sl1 : Fl.flist post) (i : nat)
+  : Pure prop (requires M.veq_typ_eq pre post f_eq) (ensures fun _ -> True) (decreases L.length post - i)
+  = if i >= L.length post then True
+    else match f_eq i with
+    | None   -> seq_sel_eq_eff_aux f_eq sl0 sl1 (i+1)
+    | Some j -> sl1 i == U.cast _ (sl0 j) /\ seq_sel_eq_eff_aux f_eq sl0 sl1 (i+1)
+
+let seq_sel_eq_eff (#pre #post : Fl.ty_list) (f_eq : M.veq_eq_t (L.length pre) (L.length post))
+                   (sl0 : Fl.flist pre) (sl1 : Fl.flist post)
+  : Pure prop (requires M.veq_typ_eq pre post f_eq) (ensures fun _ -> True)
+  = seq_sel_eq_eff_aux f_eq sl0 sl1 0
+
+val seq_sel_eq_eff_sound
+      (#pre #post : Fl.ty_list) (f_eq : M.veq_eq_t (L.length pre) (L.length post))
+      (sl0 : Fl.flist pre) (sl1 : Fl.flist post)
+  : Lemma (requires M.veq_typ_eq pre post f_eq)
+          (ensures  seq_sel_eq_eff f_eq sl0 sl1 <==> ST.seq_sel_eq f_eq sl0 sl1)
+
+
 [@@ strict_on_arguments [3]] (* strict on t *)
 let rec repr_SF_of_ST
       (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
       (t : ST.prog_tree a pre post) (sl0 : Fl.flist pre)
   : Tot (prog_tree a post) (decreases t)
   = match t with
-  | ST.Tequiv pre post0 p ->   
-          Tret U.unit' U.Unit' (const_post post0) (Fl.dlist_of_f (Fl.apply_pequiv p sl0))
+  | ST.Tequiv pre post0 e ->
+          // TODO? specialized constructor / wp
+          Tspec U.unit' (const_post post0) (e.seq_req sl0)
+                (fun _ sl1 -> seq_sel_eq_eff e.seq_eq sl0 sl1 /\ e.seq_ens sl0 sl1)
   | ST.Tframe a pre post frame f ->
           let (sl0', sl_frame) = Fl.splitAt_ty pre frame sl0 in
           Tbind a a _ _ (repr_SF_of_ST f sl0') (fun x sl1' ->
@@ -41,8 +65,8 @@ let rec shape_SF_of_ST
       (#pre_n #post_n : nat) (t : ST.shape_tree pre_n post_n)
   : Tot (shape_tree post_n) (decreases t)
   = match t with
-  | ST.Sequiv n _ ->
-          Sret true n
+  | ST.Sequiv _ post_n _ ->
+          Sspec post_n
   | ST.Sframe pre_n post_n frame_n s_f ->
           Sbind _ _ (shape_SF_of_ST s_f) (Sret true (post_n + frame_n))
   | ST.Sspec pre_n post_n ->

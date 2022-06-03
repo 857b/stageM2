@@ -5,7 +5,6 @@ module M    = Experiment.Steel.Repr.M
 module L    = FStar.List.Pure
 module T    = FStar.Tactics
 module Fl   = Learn.FList
-module Perm = Learn.Permutation
 
 open Experiment.Steel.Repr.M
 open Steel.Effect.Common
@@ -20,10 +19,28 @@ type ens_t (pre : pre_t) (a : Type) (post : post_t a) = Fl.flist pre -> (x : a) 
 let const_post (#a : Type) (ts : Fl.ty_list) : post_t a = fun _ -> ts
 let frame_post (#a : Type) (pt : post_t a) (fr : Fl.ty_list) : post_t a = fun (x : a) -> L.(pt x @ fr)
 
+
+noeq
+type sequiv (pre post : Fl.ty_list) = {
+  seq_req : Fl.flist pre -> Type0;
+  seq_ens : Fl.flist pre -> Fl.flist post -> Type0;
+  seq_eq  : M.veq_eq_t (L.length pre) (L.length post);
+  seq_typ : squash (M.veq_typ_eq pre post seq_eq)
+}
+
+let seq_sel_eq (#pre #post : Fl.ty_list) (f_eq : M.veq_eq_t (L.length pre) (L.length post))
+               (sl0 : Fl.flist pre) (sl1 : Fl.flist post)
+  : prop
+  = forall (i : Fin.fin (L.length post) {Some? (f_eq i)}) . sl1 i === sl0 (Some?.v (f_eq i))
+
+let seq_ens1 (#pre #post : Fl.ty_list) (eqv : sequiv pre post) (sl0 : Fl.flist pre) (sl1 : Fl.flist post) : prop
+  = eqv.seq_ens sl0 sl1 /\ seq_sel_eq eqv.seq_eq sl0 sl1
+
+
 noeq
 type prog_tree : (a : Type u#a) -> (pre : pre_t u#b) -> (post : post_t u#a u#b a) -> Type u#(1 + max a b) =
   | Tequiv : (pre : Fl.ty_list) -> (post : Fl.ty_list) ->
-             (p : Perm.pequiv pre post) ->
+             (e : sequiv pre post) ->
              prog_tree U.unit' pre (const_post post)
   | Tframe : (a : Type u#a) -> (pre : Fl.ty_list) -> (post : post_t a) -> (frame : Fl.ty_list) ->
              (f : prog_tree a pre post) ->
@@ -55,10 +72,10 @@ let match_prog_tree
       (r : (a : Type u#a) -> (pre : pre_t u#b) -> (post : post_t u#a u#b a) ->
            (t : prog_tree a pre post) -> Type u#c)
       (c_Tequiv : (pre : Fl.ty_list) -> (post : Fl.ty_list) ->
-                  (p : Perm.pequiv pre post) ->
-                  Pure (r _ _ _ (Tequiv pre post p))
+                  (e : sequiv pre post) ->
+                  Pure (r _ _ _ (Tequiv pre post e))
                        (requires a0 == U.unit' /\ pre0 == pre /\ post0 == const_post post /\
-                                 t0 == Tequiv pre post p)
+                                 t0 == Tequiv pre post e)
                        (ensures fun _ -> True))
       (c_Tframe : (a : Type) -> (pre : pre_t) -> (post : post_t a) -> (frame : Fl.ty_list) ->
                   (f : prog_tree a pre post {f << t0}) ->
@@ -105,7 +122,7 @@ let match_prog_tree
 
   : r _ _ _ t0
   = match t0 as t returns r _ _ _ t with
-    | Tequiv pre post p               -> c_Tequiv pre post p
+    | Tequiv pre post e               -> c_Tequiv pre post e
     | Tframe a pre post frame f       -> c_Tframe a pre post frame f
     | Tspec  a pre post req ens       -> c_Tspec  a pre post req ens
     | Tret   a x post                 -> c_Tret   a x post
@@ -123,8 +140,8 @@ let bind (#a : Type) (#b : Type) (#pre : pre_t) (#itm : post_t a) (#post : post_
 let rec tree_req (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree a pre post)
   : Tot (req_t pre) (decreases t)
   = match t with
-  | Tequiv _ _ _ ->
-             (fun sl0 -> True)
+  | Tequiv _ _ e ->
+             e.seq_req
   | Tframe _ pre _ frame f ->
              (fun sl0 -> tree_req f (Fl.splitAt_ty pre frame sl0)._1)
   | Tspec _  _ _  req _ ->
@@ -142,14 +159,14 @@ let rec tree_req (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree a 
 and tree_ens (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree a pre post)
   : Tot (ens_t pre a post) (decreases t)
   = match t with
-  | Tequiv _ post p ->
-             (fun sl0 _ sl1 ->
-               eq2 #(Fl.flist post) sl1 (Fl.apply_pequiv p sl0))
+  | Tequiv _ post e ->
+             (fun sl0 _ sl1 -> seq_ens1 e sl0 sl1)
   | Tframe a  pre post frame f ->
              (fun sl0 x sl1 ->
-               let sl0', frame0 = Fl.splitAt_ty pre      frame sl0 in
-               let sl1', frame1 = Fl.splitAt_ty (post x) frame sl1 in
-               frame1 == frame0 /\ tree_ens f sl0' x sl1')
+               let sl0', sl_frame = Fl.splitAt_ty pre frame sl0 in
+              (exists (sl1' : Fl.flist (post x)) .
+               tree_ens f sl0' x sl1' /\
+               eq2 #(Fl.flist L.(post x @ frame)) sl1 (Fl.append sl1' sl_frame)))
   | Tspec _  _ _  _ ens ->
              ens
   | Tret _ x post ->
@@ -220,8 +237,8 @@ val equiv_Tbind_assoc_Tbind
 
 noeq
 type shape_tree : (pre_n : nat) -> (post_n : nat) -> Type =
-  | Sequiv : (n : nat) -> (p : Perm.perm_f n) ->
-             shape_tree n n
+  | Sequiv : (pre_n : nat) -> (post_n : nat) -> (e : M.veq_eq_t pre_n post_n) ->
+             shape_tree pre_n post_n
   | Sframe : (pre_n : nat) -> (post_n : nat) -> (frame_n : nat) ->
              (f : shape_tree pre_n post_n) ->
              shape_tree (pre_n + frame_n) (post_n + frame_n)
@@ -251,7 +268,7 @@ let rec prog_has_shape (#a : Type u#a) (#pre : pre_t u#b) (#post : post_t u#a u#
   =
     post_has_len post post_n /\
     (match t returns prop with
-    | Tequiv pre post p           -> post_n = L.length pre /\ s == Sequiv _ p
+    | Tequiv pre post e           -> post_n = L.length post /\ s == Sequiv _ _ e.seq_eq
     | Tframe _ pre post frame f   -> exists (post'_n : nat)
                                       (s_f : shape_tree (L.length pre) post'_n) .
                                     post_n = post'_n + L.length frame /\
@@ -282,8 +299,10 @@ let rec prog_has_shape' (#a : Type u#a) (#pre : pre_t u#b) (#post : post_t u#a u
                         (#post_n : nat) (s : shape_tree (L.length pre) post_n)
   : Pure prop (requires True) (ensures fun p -> p <==> prog_has_shape t s) (decreases t)
   = match t returns prop with
-  | Tequiv pre post p           -> (match s with
-                                  | Sequiv _ p' -> p' == p
+  | Tequiv pre post e           -> (match s with
+                                  | Sequiv _ post_n e' ->
+                                      post_n = L.length post /\
+                                      e' == e.seq_eq
                                   | _ -> False)
   | Tframe _ pre post frame f   -> (match s with
                                   | Sframe pre_n post_n frame_n s_f ->
@@ -335,6 +354,15 @@ let mk_prog_shape (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree a
 let post_ST_of_M (#a : Type) (post : M.post_t a) : post_t a
   = fun (x : a) -> vprop_list_sels_t (post x)
 
+let sequiv_of_vequiv (#pre #post : vprop_list) (e : M.vequiv pre post)
+  : sequiv (vprop_list_sels_t pre) (vprop_list_sels_t post)
+  = {
+  seq_req = e.veq_req;
+  seq_ens = e.veq_ens;
+  seq_eq  = U.cast _ e.veq_eq;
+  seq_typ = e.veq_typ
+}
+
 let repr_ST_of_M_Spec
       (a : Type) (pre : M.pre_t) (post : M.post_t a) (req : M.req_t pre) (ens : M.ens_t pre a post)
       (tcs : tree_cond_Spec a pre post)
@@ -342,14 +370,14 @@ let repr_ST_of_M_Spec
   =
     Tequiv (vprop_list_sels_t tcs.tcs_pre)
            (vprop_list_sels_t L.(pre @ tcs.tcs_frame))
-           (vequiv_sl tcs.tcs_pre_eq);;
+           (sequiv_of_vequiv tcs.tcs_pre_eq);;
     (**) L.map_append Mkvprop'?.t pre tcs.tcs_frame;
     x <-- Tframe a (vprop_list_sels_t pre) (post_ST_of_M post) (vprop_list_sels_t tcs.tcs_frame)
         (Tspec a (vprop_list_sels_t pre) (post_ST_of_M post) req ens);
     (**) L.map_append Mkvprop'?.t (post x) tcs.tcs_frame;
     Tequiv (vprop_list_sels_t L.(post x @ tcs.tcs_frame))
            (vprop_list_sels_t (tcs.tcs_post x))
-           (vequiv_sl (tcs.tcs_post_eq x));;
+           (sequiv_of_vequiv (tcs.tcs_post_eq x));;
     Tret _ x (post_ST_of_M tcs.tcs_post)
 
 [@@ strict_on_arguments [4]] (* strict on c *)
@@ -362,8 +390,8 @@ let rec repr_ST_of_M (#a : Type) (t : M.prog_tree u#a a)
              repr_ST_of_M_Spec a pre post req ens tcs
   | TCspecS #a tr tcs ->
              repr_ST_of_M_Spec a tr.r_pre tr.r_post tr.r_req tr.r_ens tcs
-  | TCret #a #x #_  pre post  p ->
-             Tequiv (vprop_list_sels_t pre) (vprop_list_sels_t (post x)) (vequiv_sl p);;
+  | TCret #a #x #_  pre post  e ->
+             Tequiv (vprop_list_sels_t pre) (vprop_list_sels_t (post x)) (sequiv_of_vequiv e);;
              Tret _ x (post_ST_of_M post)
   | TCbind #a #b #f #g  pre itm post  cf cg ->
              x <-- repr_ST_of_M f cf;
@@ -377,13 +405,13 @@ let rec repr_ST_of_M (#a : Type) (t : M.prog_tree u#a a)
 let rec shape_ST_of_M (#pre_n : nat) (#post_n : nat) (s : M.shape_tree pre_n post_n)
   : Tot (shape_tree pre_n post_n) (decreases s)
   = match s with
-  | M.Sspec pre_n post_n frame_n p0 p1 ->
-        Sbind _ _ _ (Sequiv (pre_n  + frame_n) (Perm.perm_f_of_list p0)) (
+  | M.Sspec pre_n post_n pre'_n post'_n frame_n p0 p1 ->
+        Sbind _ _ _ (Sequiv pre'_n (pre_n  + frame_n) (M.veq_of_list p0)) (
         Sbind _ _ _ (Sframe pre_n post_n frame_n (Sspec  pre_n post_n)) (
-        Sbind _ _ _ (Sequiv (post_n + frame_n) (Perm.perm_f_of_list p1))
-                    (Sret   true (post_n + frame_n))))
-  | M.Sret n p ->
-        Sbind _ _ _ (Sequiv n (Perm.perm_f_of_list p)) (Sret false n)
+        Sbind _ _ _ (Sequiv (post_n + frame_n) post'_n (M.veq_of_list p1))
+                    (Sret   true post'_n)))
+  | M.Sret pre_n post_n p ->
+        Sbind _ _ _ (Sequiv pre_n post_n (M.veq_of_list p)) (Sret false post_n)
   | M.Sbind _ _ _ f g -> Sbind  _ _ _ (shape_ST_of_M f) (shape_ST_of_M g)
   | M.SbindP _ _ g    -> SbindP _ _ (shape_ST_of_M g)
   | M.Sif _ _ thn els -> Sif _ _ (shape_ST_of_M thn) (shape_ST_of_M els)
@@ -456,7 +484,7 @@ and flatten_shape_aux
       #post1_n (k : ((#pre'_n : nat) -> (t' : shape_tree pre'_n post_n) -> shape_tree pre'_n post1_n))
   : Tot (shape_tree pre_n post1_n) (decreases %[t; 0])
   = match t with
-  | Sequiv _ _ | Sspec _ _ | Sret _ _ -> k t
+  | Sequiv _ _ _ | Sspec _ _ | Sret _ _ -> k t
   | Sframe _ _ frame_n f ->
              k (Sframe _ _ frame_n (flatten_shape f))
   | Sbind  pre_n itm_n post_n f g ->

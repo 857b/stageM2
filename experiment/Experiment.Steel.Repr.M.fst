@@ -298,8 +298,7 @@ let steel_elim_vprop_of_list_append_f #opened (vs0 vs1 : vprop_list)
   : SteelGhost unit opened
       (vprop_of_list L.(vs0@vs1)) (fun () -> vprop_of_list vs0 `star` vprop_of_list vs1)
       (requires fun _ -> True)
-      (ensures fun h0 () h1 -> split_vars vs0 vs1 (sel_f (vs0@vs1) h0)
-                        == (sel_f vs0 h1, sel_f vs1 h1))
+      (ensures fun h0 () h1 -> sel_f (vs0@vs1) h0 == append_vars (sel_f vs0 h1) (sel_f vs1 h1))
   =
     let sl = gget (vprop_of_list L.(vs0@vs1)) in
     Ll.map_append Mkvprop'?.t vs0 vs1;
@@ -307,7 +306,8 @@ let steel_elim_vprop_of_list_append_f #opened (vs0 vs1 : vprop_list)
     assert (vprop_list_sels_t L.(vs0 @ vs1) == L.(vprop_list_sels_t vs0 @ vprop_list_sels_t vs1))
         by T.(norm [delta_only [`%vprop_list_sels_t]]; smt ());
     Fl.splitAt_ty_of_d (vprop_list_sels_t vs0) (vprop_list_sels_t vs1) (vpl_sels L.(vs0 @ vs1) sl);
-    steel_elim_vprop_of_list_append vs0 vs1
+    steel_elim_vprop_of_list_append vs0 vs1;
+    Fl.splitAt_ty_append (vprop_list_sels_t vs0) (vprop_list_sels_t vs1) (vpl_sels_f L.(vs0 @ vs1) sl)
 
 
 let rec steel_intro_vprop_of_list_append #opened (vs0 vs1 : vprop_list)
@@ -332,15 +332,15 @@ let steel_intro_vprop_of_list_append_f #opened (vs0 vs1 : vprop_list)
   : SteelGhost unit opened
       (vprop_of_list vs0 `star` vprop_of_list vs1) (fun () -> vprop_of_list L.(vs0@vs1))
       (requires fun _ -> True)
-      (ensures fun h0 () h1 -> split_vars vs0 vs1 (sel_f (vs0@vs1) h1)
-                        == (sel_f vs0 h0, sel_f vs1 h0))
+      (ensures fun h0 () h1 -> sel_f (vs0@vs1) h1 == append_vars (sel_f vs0 h0) (sel_f vs1 h0))
   =
     steel_intro_vprop_of_list_append vs0 vs1;
     let sl = gget (vprop_of_list L.(vs0@vs1)) in
     Ll.map_append Mkvprop'?.t vs0 vs1;
     assert (vprop_list_sels_t L.(vs0 @ vs1) == L.(vprop_list_sels_t vs0 @ vprop_list_sels_t vs1))
         by T.(norm [delta_only [`%vprop_list_sels_t]]; smt ());
-    Fl.splitAt_ty_of_d (vprop_list_sels_t vs0) (vprop_list_sels_t vs1) (vpl_sels L.(vs0 @ vs1) sl)
+    Fl.splitAt_ty_of_d (vprop_list_sels_t vs0) (vprop_list_sels_t vs1) (vpl_sels L.(vs0 @ vs1) sl);
+    Fl.splitAt_ty_append (vprop_list_sels_t vs0) (vprop_list_sels_t vs1) (vpl_sels_f L.(vs0 @ vs1) sl)
 
 
 (***** applying a permutation on the context's vprop *)
@@ -397,7 +397,7 @@ let rec steel_change_vequiv_aux (#opened:Mem.inames)
                Dl.apply_swap_as_rec n f0 sl1';
                Dl.apply_r_comp (Perm.perm_f_swap #n f0) pfs (vpl_sels vs0 sl0)
 
-let steel_change_vequiv (#vs0 #vs1 : vprop_list) (#opened:Mem.inames) (f : vequiv vs0 vs1)
+let steel_change_vequiv (#vs0 #vs1 : vprop_list) (#opened:Mem.inames) (f : vequiv_perm vs0 vs1)
   : SteelGhost unit opened (vprop_of_list vs0) (fun () -> vprop_of_list vs1)
       (requires fun _ -> True)
       (ensures fun h0 () h1 -> sel_f vs1 h1 == extract_vars f (sel_f vs0 h0))
@@ -405,6 +405,8 @@ let steel_change_vequiv (#vs0 #vs1 : vprop_list) (#opened:Mem.inames) (f : vequi
     let sl0 = gget (vprop_of_list vs0) in
     Fl.apply_perm_r_of_d f (vpl_sels vs0 sl0);
     steel_change_vequiv_aux (L.length vs0) vs0 vs1 (Perm.perm_f_to_swap f) ()
+
+let vequiv_of_perm_g #pre #post f opened = steel_change_vequiv f
 
 
 (*** [repr_steel_t] *)

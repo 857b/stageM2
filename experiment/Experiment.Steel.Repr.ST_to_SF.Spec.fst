@@ -13,7 +13,9 @@ let rec post_src_of_shape_ty
   : Lemma (ensures  L.index (post0 x) i == L.index pre0 (Some?.v (post_src_f_of_shape s.shp i)))
           (decreases t)
   = match t with
-    | ST.Tequiv _ _ _ -> ()
+    | ST.Tequiv pre post0 e ->
+             let ST.Sequiv pre_n post_n e' = s.shp in
+             e.seq_typ
     | ST.Tframe a pre post frame f ->
              let ST.Sframe _ post_n _ s_f = s.shp in
              Ll.append_index (post x) frame i;
@@ -115,11 +117,32 @@ let post_eq_src_ST_SF_ST
 let normal_equiv : list norm_step = [
   delta_only [`%req_equiv; `%ens_equiv; `%repr_SF_of_ST; `%return_SF_post_of_ST;
               `%ST.tree_req; `%ST.tree_ens; `%tree_req; `%tree_ens;
-              `%ST.Mkprog_shape?.shp; `%ST.mk_prog_shape];
+              `%ST.Mkprog_shape?.shp; `%ST.Mkprog_shape?.post_len; `%ST.mk_prog_shape];
   iota; zeta
 ]
 
-#push-options "--z3rlimit 10"
+
+let repr_SF_of_ST_ens__Tequiv pre post e sl0 sl1
+  : Lemma (ens_equiv (ST.Tequiv pre post e)
+                      (ST.mk_prog_shape _ (ST.Sequiv _ (L.length post) e.seq_eq)) sl0 U.Unit' sl1)
+  =
+    let t = ST.Tequiv pre post e                                      in
+    let s = ST.mk_prog_shape _ (ST.Sequiv _ (L.length post) e.seq_eq) in
+    e.seq_typ;
+    let bij = post_bij s.shp               in
+    let src : post_src pre post = e.seq_eq in
+
+    FStar.Classical.move_requires (post_eq_src_ST_SF_ST src bij sl0) sl1;
+    assert (ens_equiv t s sl0 U.Unit' sl1 <==> (
+      seq_ens1 e sl0 sl1 <==> (post_eq_src src sl0 sl1 /\ e.seq_ens sl0 sl1)
+    )) by T.(norm normal_equiv;
+             norm [delta_only [`%sel_ST_of_SF; `%sel_SF_of_ST; `%post_src_of_shape; `%post_src_f_of_shape;
+                               `%ST.Mkprog_shape?.shp; `%const_post];
+                   iota; zeta];
+             smt ())
+
+
+#push-options "--z3rlimit 20"
 let repr_SF_of_ST_ens__Tframe a pre post frame f
       (post_n : nat {ST.post_has_len post post_n})
       (shp_f : ST.shape_tree _ post_n {ST.prog_has_shape f shp_f})
@@ -137,59 +160,75 @@ let repr_SF_of_ST_ens__Tframe a pre post frame f
     let post_SF  = sel_SF_of_ST (ST.frame_post post frame) s.shp x sl1                  in
     let post_src_t = post_src_of_shape t s x                                            in
 
+    let sl0', sl_frame0 = Fl.splitAt_ty pre frame sl0    in
+    let sl1', sl_frame1 = Fl.splitAt_ty (post x) frame sl1 in
+    let rew_split_sl0 () : Lemma (Fl.splitAt_ty pre frame sl0 == (sl0', sl_frame0)) = () in
+
     assert (ens_equiv t s sl0 x sl1 == (
-     (let sl0', frame0 = Fl.splitAt_ty pre      frame sl0 in
-      let sl1', frame1 = Fl.splitAt_ty (post x) frame sl1 in
-      frame1 == frame0 /\ ST.tree_ens f sl0' x sl1')
+     (exists (sl1' : Fl.flist (post x)) .
+      ST.tree_ens f sl0' x sl1' /\ sl1 == Fl.append sl1' sl_frame0)
     <==>
       (post_eq_src post_src_t sl0 sl1 /\
-       tree_ens (repr_SF_of_ST t s sl0) x post_SF)
-    )) by T.(trefl ());
+       tree_ens #_ #(post_SF_of_ST (frame_post post frame) s.shp)
+                (repr_SF_of_ST f s_f (Fl.splitAt_ty pre frame sl0)._1) x post_SF)
+    )) by T.(norm normal_equiv;
+             l_to_r [(``@rew_split_sl0)];
+             norm [delta_only [`%Mktuple2?._1]; iota];
+             trefl ());
 
-    assert (repr_SF_of_ST t s sl0 == (
-      repr_SF_of_ST f s_f (Fl.splitAt_ty pre frame sl0)._1
-    )) by T.(trefl ());
-    
-    let sl0', frame0 = Fl.splitAt_ty pre      frame sl0 in
-    let sl1', frame1 = Fl.splitAt_ty (post x) frame sl1 in
-    let post_SF' = sel_SF_of_ST post shp_f x sl1'       in
-    let post_src_f = post_src_of_shape f s_f x          in
-    let bij = post_bij shp_f                            in
+    let post_SF' = sel_SF_of_ST post shp_f x sl1' in
+    let post_src_f = post_src_of_shape f s_f x    in
+    let bij = post_bij shp_f                      in
+  
+    U.assert_by ((exists (sl1' : Fl.flist (post x)) . ST.tree_ens f sl0' x sl1' /\ sl1 == Fl.append sl1' sl_frame0)
+         <==> (ST.tree_ens f sl0' x sl1' /\ sl_frame1 == sl_frame0))
+      (fun () -> Fl.splitAt_ty_append (post x) frame sl1;
+              FStar.Classical.forall_intro_2 (Fl.append_splitAt_ty (post x) frame));
+    U.assert_by (tree_ens #_ #(post_SF_of_ST (frame_post post frame) s.shp)
+                (repr_SF_of_ST f s_f (Fl.splitAt_ty pre frame sl0)._1) x post_SF
+         <==> tree_ens (repr_SF_of_ST f s_f (Fl.splitAt_ty pre frame sl0)._1) x post_SF')
+      (fun () -> Fl.flist_extensionality post_SF post_SF' (fun i -> ()));
+
+    assert (ens_equiv t s sl0 x sl1 <==> (
+      (ST.tree_ens f sl0' x sl1' /\ sl_frame1 == sl_frame0)
+    <==>
+      (post_eq_src post_src_t sl0 sl1 /\
+       tree_ens (repr_SF_of_ST f s_f (Fl.splitAt_ty pre frame sl0)._1) x post_SF')
+    ));
 
     ens_eq_f sl0' sl1';
-    Fl.flist_extensionality post_SF post_SF' (fun i -> ());
 
-    let eq0 : prop = frame1 == frame0 /\ post_eq_src post_src_f sl0' sl1' in
+    let eq0 : prop = sl_frame1 == sl_frame0 /\ post_eq_src post_src_f sl0' sl1' in
     let eq1 : prop = post_eq_src post_src_t sl0 sl1                       in
     introduce (eq0 ==> eq1) /\ (eq1 ==> eq0)
     with introduce eq0 ==> eq1 with _ .
       introduce forall (i : Fin.fin (post_n + L.length frame) {Some? (post_src_t i)}) .
                   sl1 i === sl0 (Some?.v (post_src_t i))
       with begin
-        Fl.append_index sl1' frame1 i;
+        Fl.append_index sl1' sl_frame1 i;
         if i < post_n
         then begin
           post_eq_srcD post_src_f sl0' sl1' i;
-          Fl.append_index sl0' frame0 (Some?.v (post_src_f i))
+          Fl.append_index sl0' sl_frame1 (Some?.v (post_src_f i))
         end else begin
-          assert (sl1 i === frame1 (i - post_n));
-          Fl.append_index sl0' frame0 (i - post_n + L.length pre);
-          assert (sl0 (Some?.v (post_src_t i)) === frame0 (i - post_n))
+          assert (sl1 i === sl_frame1 (i - post_n));
+          Fl.append_index sl0' sl_frame0 (i - post_n + L.length pre);
+          assert (sl0 (Some?.v (post_src_t i)) === sl_frame0 (i - post_n))
         end
       end
     and introduce eq1 ==> eq0 with _ .
-      introduce frame1 == frame0 /\ post_eq_src post_src_f sl0' sl1'
-      with Fl.flist_extensionality frame1 frame0 begin fun i ->
+      introduce sl_frame1 == sl_frame0 /\ post_eq_src post_src_f sl0' sl1'
+      with Fl.flist_extensionality sl_frame1 sl_frame0 begin fun i ->
         post_eq_srcD post_src_t sl0 sl1 (i + post_n);
-        Fl.append_index sl1' frame1 (i + post_n);
-        Fl.append_index sl0' frame0 (i + L.length pre)
+        Fl.append_index sl1' sl_frame1 (i + post_n);
+        Fl.append_index sl0' sl_frame0 (i + L.length pre)
       end and
       introduce forall (i : Fin.fin post_n {Some? (post_src_f i)}) .
                   sl1' i === sl0' (Some?.v (post_src_f i))
       with begin
         post_eq_srcD post_src_t sl0 sl1 i;
-        Fl.append_index sl1' frame1 i;
-        Fl.append_index sl0' frame0 (Some?.v (post_src_f i))
+        Fl.append_index sl1' sl_frame1 i;
+        Fl.append_index sl0' sl_frame0 (Some?.v (post_src_f i))
       end
 #pop-options
 
@@ -563,7 +602,7 @@ let rec repr_SF_of_ST_req
   = ST.match_prog_tree t
     (fun a pre post t -> (s : ST.prog_shape t) -> (sl0 : Fl.flist pre) ->
        squash (ST.tree_req t sl0 <==> tree_req (repr_SF_of_ST t s sl0)))
-    (fun (*ST.Tequiv*) pre post0 p -> fun s sl0 -> ())
+    (fun (*ST.Tequiv*) pre post0 e -> fun s sl0 -> ())
     begin fun (*ST.Tframe*) a pre post frame f -> fun s sl0 ->
       let ST.Sframe pre_n post_n frame_n shp_f = s.shp           in 
       let sl0' : Fl.flist pre = (Fl.splitAt_ty pre frame sl0)._1 in
@@ -623,12 +662,8 @@ and repr_SF_of_ST_ens
     (fun a pre post t -> (s : ST.prog_shape t) ->
        (sl0 : Fl.flist pre) -> (res : a) -> (sl1 : Fl.flist (post res)) ->
        squash (ens_equiv t s sl0 res sl1))
-    begin fun (*ST.Tequiv*) pre post0 p -> fun s sl0 U.Unit' sl1 ->
-      introduce (forall (i : Fin.fin (L.length post0)) . sl1 i === sl0 (p i)) ==>
-                sl1 == Fl.apply_perm_r p sl0
-        with _ . Fl.flist_extensionality sl1 (Fl.apply_perm_r p sl0) (fun _ -> ());
-      Fl.nil_uniq (sel_SF_of_ST (const_post post0) s.shp U.Unit' sl1);
-      Fl.nil_uniq (Fl.flist_of_d Dl.DNil)
+    begin fun (*ST.Tequiv*) pre post0 e -> fun s sl0 U.Unit' sl1 ->
+      repr_SF_of_ST_ens__Tequiv pre post0 e sl0 sl1
     end
     begin fun (*ST.Tframe*) a pre post frame f -> fun s sl0 x sl1 ->
       let ST.Sframe pre_n post_n frame_n shp_f = s.shp in 
@@ -712,7 +747,7 @@ let repr_SF_of_ST_rall_equiv
 
 
 // The high rlimit is needed for batch mode
-#push-options "--fuel 3 --z3rlimit 200"
+#push-options "--fuel 3 --z3rlimit 400 --z3refresh"
 let rec repr_SF_of_ST_shape
   (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
   (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
@@ -722,7 +757,7 @@ let rec repr_SF_of_ST_shape
   = ST.match_prog_tree t
     (fun a pre post t -> (s : ST.prog_shape t) -> (sl0 : Fl.flist pre) ->
        squash (prog_has_shape (repr_SF_of_ST t s sl0) (shape_SF_of_ST s.shp)))
-    (fun (*ST.Tequiv*) pre post0 p -> fun s sl0 -> ())
+    (fun (*ST.Tequiv*) pre post0 e -> fun s sl0 -> ())
     begin fun (*ST.Tframe*) a pre post frame f -> fun s sl0 ->
       let ST.Sframe _ post_n _ shp_f = s.shp                     in
       let sl0' : Fl.flist pre = (Fl.splitAt_ty pre frame sl0)._1 in

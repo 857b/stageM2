@@ -747,13 +747,19 @@ let serialize_perm_id (#n : nat) (f : Perm.perm_f n)
   : Lemma (serialize_perm f == f) [SMTPat (serialize_perm f)]
   = Perm.perm_f_extensionality (serialize_perm f) f (fun i -> ())
 
+unfold
+let serialize_vequiv_perm (#pre #post : M.vprop_list) (f : M.vequiv_perm pre post)
+  : M.vequiv pre post
+  = M.vequiv_of_perm (serialize_perm f)
 
 let normal_cond_solver : list norm_step = [
     delta_only [`%len; `%None?; `%op_Negation; `%Some?.v;
                 `%L.append; `%L.flatten; `%L.hd; `%L.index; `%L.length; `%L.map; `%L.mem; `%L.op_At; `%L.splitAt;
                 `%L.tail; `%L.tl;
                 `%Ll.initi; `%Ll.set;
-                `%Perm.mk_perm_f; `%Perm.perm_f_to_list];
+                `%Perm.mk_perm_f; `%Perm.perm_f_to_list;
+                `%M.mk_veq_eq; `%M.vequiv_of_perm; `%M.vequiv_of_perm_eq;
+                `%Opt.map];
     delta_attr [`%__tac_helper__; `%__cond_solver__];
     delta_qualifier ["unfold"];
     iota; zeta; primops
@@ -783,19 +789,25 @@ let tc_extract_nat () : Tac nat =
 
 [@@ __tac_helper__]
 private
-let __extract_perm (#n : nat) (f : Perm.perm_f n) : Type
-  = extract_term #(list int) (Ll.initi 0 n f)
+let __extract_veq_eq (#pre_n #post_n : nat) (f : Fin.fin post_n -> option (Fin.fin pre_n)) : Type
+  = extract_term #(list (option int)) (Ll.initi 0 post_n
+                  (fun i -> Opt.map (fun (i : Fin.fin pre_n) -> i <: int) (f i)))
 
-let tc_extract_perm (n : nat) : Tac (list int) =
+[@@ __tac_helper__]
+private
+let __extract_perm (#n : nat) (f : Perm.perm_f n) : Type
+  = __extract_veq_eq (M.mk_veq_eq n n (fun i -> Some (f i)))
+
+let tc_extract_veq_eq (n : nat) : Tac (list (option int)) =
   norm_cond_sol ();
-  extract_term_tac (unquote #(list int))
+  extract_term_tac (unquote #(list (option int)))
 
 type pre_shape_tree : (pre_n : int) -> (post_n : int) -> Type =
-  | PSspec  : (pre_n : int) -> (post_n : int) -> (frame_n : int) ->
-              (p0 : list int) -> (p1 : list int) ->
-              pre_shape_tree (pre_n + frame_n) (post_n + frame_n)
-  | PSret   : (n : int) -> (p : list int) ->
-              pre_shape_tree n n
+  | PSspec  : (pre_n : int) -> (post_n : int) -> (pre'_n : int) -> (post'_n : int) -> (frame_n : int) ->
+              (e_pre : list (option int)) -> (e_post : list (option int)) ->
+              pre_shape_tree pre'_n post'_n
+  | PSret   : (pre_n : int) -> (post_n : int) -> (e : list (option int)) ->
+              pre_shape_tree pre_n post_n
   | PSbind  : (pre_n : int) -> (itm_n : int) -> (post_n : int) ->
               (f : pre_shape_tree pre_n itm_n) -> (g : pre_shape_tree itm_n post_n) ->
               pre_shape_tree pre_n post_n
@@ -809,18 +821,36 @@ type pre_shape_tree : (pre_n : int) -> (post_n : int) -> Type =
 
 type shape_tree_t = (pre_n : nat & post_n : nat & pre_shape_tree pre_n post_n)
 
+let rec veq_eq_list_checked_aux (pre_n : nat) (l : list (option int))
+  : Tot (option (list (option (Fin.fin pre_n)))) (decreases l)
+  = match l with
+  | [] -> Some []
+  | Some x :: xs -> if 0 <= x && x < pre_n
+                  then Opt.map (Cons (Some (x <: Fin.fin pre_n))) (veq_eq_list_checked_aux pre_n xs)
+                  else None
+  | None   :: xs -> Opt.map (Cons None) (veq_eq_list_checked_aux pre_n xs)
+
+let veq_eq_list_checked (pre_n : nat) (post_n : nat) (l : list (option int))
+  : option (M.veq_eq_t_list pre_n post_n) =
+  match veq_eq_list_checked_aux pre_n l with
+  | Some r -> if L.length r = post_n then Some r else None
+  | None   -> None
+  
+
 let rec shape_tree_of_pre (#pre_n : nat) (#post_n : nat) (ps : pre_shape_tree pre_n post_n)
   : Tot (option (M.shape_tree pre_n post_n)) (decreases ps)
   = match ps with
-  | PSspec pre_n post_n frame_n p0 p1 ->
+  | PSspec pre_n post_n pre'_n post'_n frame_n e_pre e_post ->
            if pre_n >= 0 && post_n >= 0 && frame_n >= 0
-           then match Perm.perm_f_list_checked p0, Perm.perm_f_list_checked p1 with
-           | Some p0, Some p1 -> Some (M.Sspec pre_n post_n frame_n p0 p1)
+           then match veq_eq_list_checked pre'_n (pre_n + frame_n) e_pre,
+                      veq_eq_list_checked (post_n + frame_n) post'_n e_post
+           with
+           | Some e0, Some e1 -> Some (M.Sspec pre_n post_n pre'_n post'_n frame_n e0 e1)
            | _ -> None
            else None
-  | PSret n p ->
-          (match Perm.perm_f_list_checked p with
-          | Some p -> Some (M.Sret n p)
+  | PSret pre_n post_n e ->
+          (match veq_eq_list_checked pre_n post_n e with
+          | Some e -> Some (M.Sret pre_n post_n e)
           | _ -> None)
   | PSbind pre_n itm_n post_n f g ->
           if itm_n >= 0
@@ -863,8 +893,8 @@ let __build_TCspec_u
       tcs_pre     = pre';
       tcs_post    = (fun x -> L.(post x @ frame));
       tcs_frame   = frame;
-      tcs_pre_eq  = serialize_perm (cond_sol_to_equiv cs0);
-      tcs_post_eq = (fun x -> Perm.id_n (len L.(post x @ frame)))
+      tcs_pre_eq  = serialize_vequiv_perm (cond_sol_to_equiv cs0);
+      tcs_post_eq = (fun x -> M.vequiv_id L.(post x @ frame))
     })
 
 [@@ __tac_helper__]
@@ -886,8 +916,8 @@ let __build_TCspec_p
       tcs_pre     = pre';
       tcs_post    = post';
       tcs_frame   = cond_sol_unmatched_v cs0;
-      tcs_pre_eq  = serialize_perm (cond_sol_to_equiv cs0);
-      tcs_post_eq = (fun x -> serialize_perm (cond_sol_all_to_equiv (cs1 x)))
+      tcs_pre_eq  = serialize_vequiv_perm (cond_sol_to_equiv cs0);
+      tcs_post_eq = (fun x -> serialize_vequiv_perm (cond_sol_all_to_equiv (cs1 x)))
     })
 
 // TODO? currently, one cannot factorize the tree_cond_spec part of TCspec & TCspecS
@@ -911,8 +941,8 @@ let __build_TCspecS_u
       tcs_pre     = pre';
       tcs_post    = (fun x -> L.(tr.r_post x @ frame));
       tcs_frame   = frame;
-      tcs_pre_eq  = serialize_perm (cond_sol_to_equiv cs0);
-      tcs_post_eq = (fun x -> Perm.id_n (len L.(tr.r_post x @ frame)))
+      tcs_pre_eq  = serialize_vequiv_perm (cond_sol_to_equiv cs0);
+      tcs_post_eq = (fun x -> M.vequiv_id L.(tr.r_post x @ frame))
     })
 
 [@@ __tac_helper__]
@@ -935,8 +965,8 @@ let __build_TCspecS_p
       tcs_pre     = pre';
       tcs_post    = post';
       tcs_frame   = cond_sol_unmatched_v cs0;
-      tcs_pre_eq  = serialize_perm (cond_sol_to_equiv cs0);
-      tcs_post_eq = (fun x -> serialize_perm (cond_sol_all_to_equiv (cs1 x)))
+      tcs_pre_eq  = serialize_vequiv_perm (cond_sol_to_equiv cs0);
+      tcs_post_eq = (fun x -> serialize_vequiv_perm (cond_sol_all_to_equiv (cs1 x)))
     })
 
 
@@ -960,7 +990,7 @@ let __build_TCret_u
   : M.tree_cond (M.Tret a x sl_hint) pre (fun x -> L.(sl_hint x @ cond_sol_unmatched_v cs))
   =
     M.TCret pre (fun x -> L.(sl_hint x @ cond_sol_unmatched_v cs))
-            (serialize_perm (cond_sol_to_equiv cs))
+            (serialize_vequiv_perm (cond_sol_to_equiv cs))
 
 [@@ __tac_helper__]
 let __build_TCret_p
@@ -973,7 +1003,7 @@ let __build_TCret_p
 
   : M.tree_cond (M.Tret a x sl_hint) pre post
   =
-    M.TCret #a #x pre post (serialize_perm (cond_sol_all_to_equiv cs))
+    M.TCret #a #x pre post (serialize_vequiv_perm (cond_sol_all_to_equiv cs))
 
 
 let build_TCspec fr (is_Steel : bool) (post : bool) : Tac shape_tree_t
@@ -1006,15 +1036,17 @@ let build_TCspec fr (is_Steel : bool) (post : bool) : Tac shape_tree_t
       build_cond_sol fr (fun () -> [Info_location "before the spec statement"]) false
     end;
 
-    let pre_n   = tc_extract_nat () in
+    let pre_n   = tc_extract_nat ()                     in
     let post_n  = let _ = intro () in tc_extract_nat () in
-    let frame_n = tc_extract_nat () in
-    let p0 = tc_extract_perm (pre_n + frame_n)
-    in let p1 : list int =
-      if post then let _ = intro () in tc_extract_perm (post_n + frame_n)
-      else Ll.initi 0 (post_n + frame_n) id
+    let frame_n = tc_extract_nat ()                     in
+    let pre'_n  = pre_n + frame_n                       in
+    let post'_n = post_n + frame_n                      in
+    let e_pre = tc_extract_veq_eq pre'_n
+    in let e_post : list (option int) =
+      if post then let _ = intro () in tc_extract_veq_eq post'_n
+      else Ll.initi 0 post'_n (fun i -> Some (i <: int))
     in
-    (|pre_n + frame_n, post_n + frame_n, PSspec pre_n post_n frame_n p0 p1|)
+    (|pre'_n, post'_n, PSspec pre_n post_n pre'_n post'_n frame_n e_pre e_post|)
 
 let build_TCret fr (post : bool) : Tac shape_tree_t
   = if post then begin
@@ -1028,8 +1060,8 @@ let build_TCret fr (post : bool) : Tac shape_tree_t
     end;
 
     let n = tc_extract_nat () in
-    let p = tc_extract_perm n in
-    (|n, n, PSret n p|)
+    let e = tc_extract_veq_eq n in
+    (|n, n, PSret n n e|)
 
 let rec build_TCbind fr (post : bool) : Tac shape_tree_t
   = apply (`M.TCbind);
@@ -1149,15 +1181,17 @@ let build_prog_cond fr : Tac unit
     exact (`intro_squash_l_True);
     // [shape_tree_of_pre]
     norm [delta_only [`%shape_tree_of_pre;
-                      `%Perm.perm_f_list_checked; `%Perm.check_list_injective;
                       `%L.length; `%L.hd; `%L.tl; `%L.tail; `%Ll.initi; `%L.index; `%L.list_ref; `%Ll.set
                      ];
           iota; zeta; primops];
     trefl ();
     // [M.tree_cond_has_shape tc shp]
     norm [delta_only [`%M.tree_cond_has_shape; `%Perm.perm_f_to_list; `%Perm.mk_perm_f; `%Perm.mk_perm_f;
+                      `%M.Mkvequiv?.veq_eq; `%M.veq_to_list; `%M.vequiv_id; `%M.mk_veq_eq; `%M.veq_list_eq;
                       `%Perm.perm_f_eq; `%Perm.perm_f_of_list; `%Perm.id_n;
-                      `%L.length; `%L.hd; `%L.tl; `%L.tail; `%L.index; `%Ll.initi; `%Ll.list_eq;
+                      `%L.length; `%L.hd; `%L.tl; `%L.tail; `%L.index; `%L.op_At; `%L.append;
+                      `%Ll.initi; `%Ll.list_eq;
+                      `%Opt.opt_eq;
                       `%U.cast];
           delta_qualifier ["unfold"];
           delta_attr [`%__tac_helper__];
