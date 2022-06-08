@@ -1,16 +1,6 @@
-#############################
-# This is the main Makefile #
-#############################
+# Derived from
+#  https://fstarlang.github.io/lowstar/html/Setup.html#reference-makefile
 
-# This tutorial assumes you have a degree of familiarity with GNU make,
-# including automatic variables such as $@, $< and $^. Some mandatory reading if
-# you are not fluent in GNU make:
-# - https://www.gnu.org/software/make/manual/html_node/Automatic-Variables.html#Automatic-Variables
-# - https://www.gnu.org/software/make/manual/html_node/Pattern-Intro.html#Pattern-Intro
-# - https://www.gnu.org/software/make/manual/html_node/Pattern_002dspecific.html#Pattern_002dspecific
-
-# I usually prefer to rule out OSX make on the basis that it doesn't have the
-# shortest stem rule, which is incredibly useful.
 ifeq (3.81,$(MAKE_VERSION))
   $(error You seem to be using the OSX antiquated Make version. Hint: brew \
     install make, then invoke gmake instead of make)
@@ -51,19 +41,9 @@ FSTAR_NO_FLAGS = $(FSTAR_HOME)/bin/fstar.exe $(FSTAR_HINTS) \
 # Initial dependency analysis
 # ---------------------------
 
-# Important to wildcard both fst and fsti since there are fstis without fsts,
-# etc. Note that I'm using wildcard rather than assume $(SHELL) is bash and has
-# fancy globbing rules -- particularly true on Windows.
 FSTAR_ROOTS = $(wildcard $(addsuffix /*.fsti,$(SOURCE_DIRS))) \
               $(wildcard $(addsuffix /*.fst, $(SOURCE_DIRS))) \
 
-
-# This is the only bulletproof way that I know of forcing a regeneration of the
-# .depend file every single time. Why, you may ask? Well, it's frequent enough
-# to add a new file that you don't want to decipher a cryptic error only to
-# remember you should run `make depend`. Also, if you move files around, it's
-# good to force regeneration even though .depend may be more recent than the
-# mtime of the moved files.
 ifndef MAKE_RESTARTS
 .versions: .FORCE
 	@echo -n "F*   : " > .versions
