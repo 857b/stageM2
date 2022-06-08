@@ -367,7 +367,7 @@ let rec steel_change_swap (#opened:Mem.inames)
                           (vprop_of_list (Perm.list_swap i vs0))
     end
 
-let rec steel_change_vequiv_aux (#opened:Mem.inames)
+let rec steel_change_perm_aux (#opened:Mem.inames)
           (n : nat) (vs0 vs1 : (l:vprop_list{L.length l == n}))
           (fs : list (i:nat{i <= n-2}))
           (eqv : squash (vs1 == Perm.apply_perm_r (Perm.comp_list (L.map (Perm.perm_f_swap #n) fs)) vs0))
@@ -382,7 +382,7 @@ let rec steel_change_vequiv_aux (#opened:Mem.inames)
   | []       -> change_equal_slprop (vprop_of_list vs0) (vprop_of_list vs1)
   | f0 :: fs' -> let pfs = Perm.comp_list (L.map (Perm.perm_f_swap #n) fs') in
                let vs' = Perm.apply_perm_r pfs vs0 in
-               steel_change_vequiv_aux n vs0 vs' fs' ();
+               steel_change_perm_aux n vs0 vs' fs' ();
                let sl1' : sl_list vs' =
                  Dl.apply_pequiv #(vprop_list_sels_t vs0) #(vprop_list_sels_t vs')
                                   (vequiv_sl (U.cast (Perm.perm_f (L.length vs0)) pfs))
@@ -397,16 +397,16 @@ let rec steel_change_vequiv_aux (#opened:Mem.inames)
                Dl.apply_swap_as_rec n f0 sl1';
                Dl.apply_r_comp (Perm.perm_f_swap #n f0) pfs (vpl_sels vs0 sl0)
 
-let steel_change_vequiv (#vs0 #vs1 : vprop_list) (#opened:Mem.inames) (f : vequiv_perm vs0 vs1)
+let steel_change_perm (#vs0 #vs1 : vprop_list) (#opened:Mem.inames) (f : vequiv_perm vs0 vs1)
   : SteelGhost unit opened (vprop_of_list vs0) (fun () -> vprop_of_list vs1)
       (requires fun _ -> True)
       (ensures fun h0 () h1 -> sel_f vs1 h1 == extract_vars f (sel_f vs0 h0))
   =
     let sl0 = gget (vprop_of_list vs0) in
     Fl.apply_perm_r_of_d f (vpl_sels vs0 sl0);
-    steel_change_vequiv_aux (L.length vs0) vs0 vs1 (Perm.perm_f_to_swap f) ()
+    steel_change_perm_aux (L.length vs0) vs0 vs1 (Perm.perm_f_to_swap f) ()
 
-let vequiv_of_perm_g #pre #post f opened = steel_change_vequiv f
+let vequiv_of_perm_g #pre #post f opened = steel_change_perm f
 
 
 (*** [repr_steel_t] *)

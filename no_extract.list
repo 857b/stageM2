@@ -11,5 +11,6 @@ Learn.Permutation,
 Learn.DList,
 Learn.FList,
 Learn.ListFun,
+Learn.List.Mask,
 Learn.Logic,
 Experiment.*

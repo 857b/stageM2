@@ -5,6 +5,7 @@ module U    = Learn.Util
 module L    = FStar.List.Pure
 module Ll   = Learn.List
 module SE   = Steel.Effect
+module Msk  = Learn.List.Mask
 module Fin  = FStar.Fin
 module Opt  = Learn.Option
 module Perm = Learn.Permutation
@@ -28,7 +29,7 @@ let ctx_app_loc (c : cs_context) (m : string) : cs_context
   = fun () -> Info_location m :: c ()
 
 // The following utilities are hacked to raise a failure at the location where they are called
-// FIXME? raise a CSFailure exception with a meaningful location
+// FIXME? raise a Failure exception with a meaningful location
 private unfold
 let cs_try (#a : Type) (f : unit -> Tac a)
            (fr : flags_record) (ctx : cs_context)
@@ -371,10 +372,9 @@ let build_to_repr_t fr ctx : Tac unit
 (*** Building an injection *)
 
 let len (#a : Type) : list a -> nat = L.length #a
-type vec (n : nat) (a : Type) = l : list a {len l = n}
 
 /// Graph over-approximation
-type ograph (src_n : nat) (trg_n : nat) = vec src_n (vec trg_n bool)
+type ograph (src_n : nat) (trg_n : nat) = Ll.vec src_n (Ll.vec trg_n bool)
 
 let injective_on_dom (#a #b : Type) (f : a -> option b) : prop =
   forall (x x' : a) . Some? (f x) /\ f x == f x' ==> x == x'
@@ -386,7 +386,7 @@ let injective_on_domI (#a #b : Type) (f : a -> option b)
 
 
 [@@ __cond_solver__]
-let rec build_injection_find (#trg_n : nat) (g mask : vec trg_n bool) (i : nat)
+let rec build_injection_find (#trg_n : nat) (g mask : Ll.vec trg_n bool) (i : nat)
   : Tot (option (Fin.fin (i + trg_n))) (decreases trg_n)
   = match g, mask with
   |   [],       []    -> None
@@ -394,8 +394,8 @@ let rec build_injection_find (#trg_n : nat) (g mask : vec trg_n bool) (i : nat)
   | _ :: g,    _ :: mask -> build_injection_find #(trg_n-1) g mask (i+1)
 
 [@@ __cond_solver__]
-let rec build_injection_iter (#src_n #trg_n : nat) (g : ograph src_n trg_n) (mask : vec trg_n bool)
-  : Tot (vec src_n (option (Fin.fin trg_n))) (decreases src_n)
+let rec build_injection_iter (#src_n #trg_n : nat) (g : ograph src_n trg_n) (mask : Ll.vec trg_n bool)
+  : Tot (Ll.vec src_n (option (Fin.fin trg_n))) (decreases src_n)
   = match g with
   | [] -> []
   | g0 :: g -> let y = build_injection_find g0 mask 0 in
@@ -406,16 +406,16 @@ let rec build_injection_iter (#src_n #trg_n : nat) (g : ograph src_n trg_n) (mas
 
 [@@ __cond_solver__]
 let build_injection (#src_n #trg_n : nat) (g : ograph src_n trg_n)
-  : Tot (vec src_n (option (Fin.fin trg_n)))
+  : Tot (Ll.vec src_n (option (Fin.fin trg_n)))
   = build_injection_iter g (Ll.initi 0 trg_n (fun _ -> true))
 
 
-val build_injection_find_spec (#trg_n : nat) (g mask : vec trg_n bool) (i : nat)
+val build_injection_find_spec (#trg_n : nat) (g mask : Ll.vec trg_n bool) (i : nat)
   : Lemma (requires Some? (build_injection_find g mask i))
           (ensures (let j = Some?.v (build_injection_find g mask i) - i in
                     j >= 0 /\ L.index g j /\ L.index mask j))
 
-val build_injection_iter_spec (#src_n #trg_n : nat) (g : ograph src_n trg_n) (mask : vec trg_n bool)
+val build_injection_iter_spec (#src_n #trg_n : nat) (g : ograph src_n trg_n) (mask : Ll.vec trg_n bool)
   : Lemma (ensures (let res = build_injection_iter g mask in
                    (forall (i : Fin.fin src_n) . {:pattern (L.index res i)}
                       Some? (L.index res i) ==> (L.index (L.index g i) (Some?.v (L.index res i))
@@ -433,7 +433,7 @@ let build_injection_spec (#src_n #trg_n : nat) (g : ograph src_n trg_n)
 /// The type of partial injection between equal elements of two lists.
 /// In practice [a] is [vprop']
 type partial_injection (#a : Type) (src trg : list a) =
-  f : vec (len src) (option (Fin.fin (len trg))) {
+  f : Ll.vec (len src) (option (Fin.fin (len trg))) {
     (forall (i : Fin.fin (len src)) . Some? (L.index f i) ==>
          L.index trg (Some?.v (L.index f i)) == L.index src i) /\
     injective_on_dom #(Fin.fin (len src)) (L.index f)
@@ -454,14 +454,14 @@ val list_of_equalities_index (#a : Type) (src trg : list a) (i : Fin.fin (len sr
 
 
 [@@ __cond_solver__]
-let rec list_to_matrix (#a : Type) (n0 n1 : nat) (l : vec (n0 * n1) a)
-  : Tot (vec n0 (vec n1 a)) (decreases n0)
+let rec list_to_matrix (#a : Type) (n0 n1 : nat) (l : Ll.vec (n0 * n1) a)
+  : Tot (Ll.vec n0 (Ll.vec n1 a)) (decreases n0)
   = if n0 = 0 then []
     else let l0, ls = L.splitAt n1 l in
          (**) L.splitAt_length n1 l;
          l0 :: list_to_matrix(n0 - 1) n1 ls
 
-val list_to_matrix_index (#a : Type) (n0 n1 : nat) (l : vec (n0 * n1) a) (i : Fin.fin n0) (j : Fin.fin n1)
+val list_to_matrix_index (#a : Type) (n0 n1 : nat) (l : Ll.vec (n0 * n1) a) (i : Fin.fin n0) (j : Fin.fin n1)
   : Lemma (i * n1 + j < n0 * n1 /\
            L.index (L.index (list_to_matrix n0 n1 l) i) j == L.index l (i * n1 + j))
           [SMTPat (L.index (L.index (list_to_matrix n0 n1 l) i) j)]
@@ -527,205 +527,236 @@ let _ = assert (U.print_util test_inj)
         exact inj)*)
 
 
-(*** Unification condition solution *)
+(*** Building a [M.vequiv] *)
 
-(** mask *)
-
-let mask_len (mask : list bool) : nat =
-  L.count true mask
+/// [vequiv_sol all src trg] represents the building of a [M.vequiv trg src].
+/// The order of the arguments is reversed since we build an injection ([M.veq_eq]) from [src] to [trg].
+/// If [all] is not set, we allow some elements of [trg] to be left unmatched. In that case [src] needs to be
+/// completed with [src_add] in order to obtain a [M.vequiv].
+// TODO? represent veq.veq_eq with a list
+[@@ __cond_solver__]
+noeq
+type vequiv_sol : (all : bool) -> (src : M.vprop_list) -> (trg : M.vprop_list) -> Type =
+  | VeqAll : (src : M.vprop_list) -> (trg : M.vprop_list) ->
+             (veq : M.vequiv trg src) ->
+             vequiv_sol true src trg
+  | VeqPrt : (src : M.vprop_list) -> (unmatched : M.vprop_list) -> (trg : M.vprop_list) ->
+             (veq : M.vequiv trg L.(src@unmatched)) ->
+             vequiv_sol false src trg
 
 [@@ __cond_solver__]
-let rec filter_mask (#a : Type) (#len : nat) (mask : vec len bool) (l : vec len a)
-  : Tot (vec (mask_len mask) a) (decreases l)
-  = match mask, l with
-  | [], [] -> []
-  | true  :: mask, x :: xs -> x :: filter_mask #a #(len-1) mask xs
-  | false :: mask, _ :: xs -> filter_mask #a #(len-1) mask xs
+let vequiv_sol_all (#src #trg : M.vprop_list) (e : vequiv_sol true src trg)
+  : M.vequiv trg src
+  = VeqAll?.veq e
 
 [@@ __cond_solver__]
-let rec mask_push (#len : nat) (mask : vec len bool) (i : Fin.fin len {L.index mask i})
-  : Tot (Fin.fin (mask_len mask))
-  =
-    if i = 0 then 0
-    else let b :: mask = mask in
-         if b then 1 + mask_push #(len-1) mask (i-1)
-         else mask_push #(len-1) mask (i - 1)
+let vequiv_sol_prt (#src #trg : M.vprop_list) (e : vequiv_sol false src trg)
+  : M.vequiv trg L.(src @ VeqPrt?.unmatched e)
+  = VeqPrt?.veq e
+
 
 [@@ __cond_solver__]
-let rec mask_pull (#len : nat) (mask : vec len bool) (j : Fin.fin (mask_len mask))
-  : Tot (i : Fin.fin len {L.index mask i}) (decreases mask)
-  = match mask with
-  | true  :: mask -> if j = 0 then 0 else 1 + mask_pull #(len - 1) mask (j - 1)
-  | false :: mask -> 1 + mask_pull #(len - 1) mask j
+let vequiv_sol_end (all : bool) (vs : M.vprop_list) : vequiv_sol all vs vs
+  = if all then VeqAll vs vs (M.vequiv_refl vs) else VeqPrt vs [] vs (M.vequiv_refl vs)
 
-(* TODO? optimize *)
 [@@ __cond_solver__]
-let rec merge_fun_on_mask (#src_n : nat) (mask : vec src_n bool) (#b : Type)
-      (f : (i : Fin.fin src_n {L.index mask i}) -> (j : Fin.fin (mask_len mask)) -> b)
-      (g : (i : Fin.fin src_n {not (L.index mask i)}) -> b)
-  : Tot (vec src_n b) (decreases mask)
-  = match mask with
-  | [] -> []
-  | true  :: mask -> f 0 0 :: merge_fun_on_mask #(src_n-1) mask (fun i j -> f (i+1) (j+1)) (fun i -> g (i+1))
-  | false :: mask -> g 0   :: merge_fun_on_mask #(src_n-1) mask (fun i j -> f (i+1)   j  ) (fun i -> g (i+1))
+let vequiv_sol_end_prt (trg : M.vprop_list) : vequiv_sol false [] trg
+  = VeqPrt [] trg trg (M.vequiv_refl trg)
 
 
-val merge_fun_on_mask_index (#src_n : nat) (mask : vec src_n bool) (#b : Type)
-      (f : (i : Fin.fin src_n {L.index mask i}) -> (j : Fin.fin (mask_len mask)) -> b)
-      (g : (i : Fin.fin src_n {not (L.index mask i)}) -> b) (i : nat)
-  : Lemma (requires i < src_n)
-          (ensures  L.index (merge_fun_on_mask #src_n mask #b f g) i ==
-                   (if L.index mask i then f i (mask_push #src_n mask i) else g i))
-          [SMTPat (L.index (merge_fun_on_mask #src_n mask #b f g) i)]
-
-val mask_push_pull (#len : nat) (mask : vec len bool) (j : Fin.fin (mask_len mask))
-  : Lemma (mask_push mask (mask_pull mask j) = j)
-          [SMTPat (mask_push mask (mask_pull mask j))]
-
-val mask_pull_push (#len : nat) (mask : vec len bool) (i : Fin.fin len {L.index mask i})
-  : Lemma (mask_pull mask (mask_push mask i) = i)
-          [SMTPat (mask_pull mask (mask_push mask i))]
-
-val filter_mask_push (#len : nat) (mask : vec len bool) (i : Fin.fin len {L.index mask i})
-                     (#a : Type) (l : vec len a)
-  : Lemma (L.index (filter_mask mask l) (mask_push mask i) == L.index l i)
-
+(**** [vequiv_sol_inj] *)
 
 /// Masks to select the elements that have *not* been matched
 
 [@@ __cond_solver__]
-let ij_src_mask (#src_n : nat) (#b : Type) (ij : vec src_n (option b)) : vec src_n bool
+let ij_src_mask (#src_n : nat) (#b : Type) (ij : Ll.vec src_n (option b)) : Ll.vec src_n bool
   = L.map None? ij
 
 [@@ __cond_solver__]
-let ij_trg_mask (#src_n #trg_n : nat) (ij : vec src_n (option (Fin.fin trg_n))) : vec trg_n bool
+let ij_trg_mask (#src_n #trg_n : nat) (ij : Ll.vec src_n (option (Fin.fin trg_n))) : Ll.vec trg_n bool
   = Ll.initi 0 trg_n (fun j -> not (L.mem (Some j) ij))
 
+/// Number of matched elements i.e. number of [Some]
+let ij_matched_n (#a : Type) (#src #trg : list a) (ij : partial_injection src trg) : nat
+  = Msk.mask_len (Msk.mask_not (ij_src_mask ij))
 
-/// [cond_sol all src trg] represents the building of an injection from [src] to [trg].
-/// In practice [trg] is the list of [vprop'] in the state before [src].
-/// If [all] is set, the injection must be surjective, otherwise [src] needs to be completed with [cond_sol_unmatched]
-/// in order to obtain a permutation.
-noeq
-type cond_sol (#a : Type) : (all : bool) -> list a -> list a -> Type =
-  | CSeq  : (all : bool) -> (l : list a) -> cond_sol all l l
-  | CSnil : (trg : list a) -> cond_sol false [] trg
-  | CSinj : (all : bool) -> (src : list a) -> (trg : list a) -> (ij : partial_injection src trg) ->
-            cond_sol all (filter_mask (ij_src_mask ij) src) (filter_mask (ij_trg_mask ij) trg) ->
-            cond_sol all src trg
+let ij_matched_perm_f (#a : Type) (#src #trg : list a) (ij : partial_injection src trg)
+                    (i : Fin.fin (Msk.mask_len (Msk.mask_not (ij_src_mask ij))))
+  : Fin.fin (Msk.mask_len (Msk.mask_not (ij_trg_mask ij)))
+  =
+    let i0 = Msk.mask_pull (Msk.mask_not (ij_src_mask ij)) i in
+    let j0 = Some?.v (L.index ij i0) in
+    (**) L.lemma_index_memP ij i0;
+    Msk.mask_push (Msk.mask_not (ij_trg_mask ij)) j0
 
-// ALT? define with cond_sol_inj
-/// [cond_sol_unmatched sl] is the subset of indices of the target that have not been matched.
-[@@ __cond_solver__]
-let rec cond_sol_unmatched (#a : Type) (#all : bool) (#src #trg : list a) (sl : cond_sol all src trg)
-  : Tot (list (Fin.fin (len trg))) (decreases sl)
-  = match sl with
-  | CSeq  _ _ -> []
-  | CSnil trg -> Ll.initi 0 (len trg) id
-  | CSinj _ src trg ij sl ->
-                let um = cond_sol_unmatched sl in
-                let mask = ij_trg_mask ij      in
-                L.map #_ #(Fin.fin (len trg)) (mask_pull mask) um
+val ij_matched_perm_f_injective
+      (#a : Type) (#src #trg : list a) (ij : partial_injection src trg)
+  : Lemma (Perm.injective (ij_matched_perm_f ij))
 
-[@@ __cond_solver__]
-let cond_sol_unmatched_v (#a : Type) (#all : bool) (#src #trg : list a) (sl : cond_sol all src trg)
-  : list a
-  = L.map (L.index trg) (cond_sol_unmatched sl)
+val ij_matched_perm_f_surjective
+      (#a : Type) (#src #trg : list a) (ij : partial_injection src trg)
+  : Lemma (Perm.surjective (ij_matched_perm_f ij))
 
-[@@ __cond_solver__]
-let rec cond_sol_inj (#a : Type) (#all : bool) (#src #trg : list a) (sl : cond_sol all src trg)
-  : Tot (vec (len src) (Fin.fin (len trg))) (decreases sl)
-  = match sl with
-  | CSeq  _ l -> Ll.initi 0 (len l) id
-  | CSnil _   -> []
-  | CSinj all src trg ij sl ->
-                let inj' = cond_sol_inj sl    in
-                let mask_src = ij_src_mask ij in
-                let mask_trg = ij_trg_mask ij in
-                merge_fun_on_mask mask_src #(Fin.fin (len trg))
-                  (fun _ j -> mask_pull mask_trg (L.index inj' j))
-                  (fun i   -> Some?.v (L.index ij i))
+val ij_matched_len (#a : Type) (#src #trg : list a) (ij : partial_injection src trg)
+  : Lemma (Msk.mask_len (Msk.mask_not (ij_trg_mask ij)) = Msk.mask_len (Msk.mask_not (ij_src_mask ij)))
 
-[@@ __cond_solver__]
-let cond_sol_bij (#a : Type) (#all : bool) (#src #trg : list a) (sl : cond_sol all src trg)
-  : Fin.fin (len src + len (cond_sol_unmatched sl)) -> Fin.fin (len trg)
+let ij_matched_perm (#a : Type) (#src #trg : list a) (ij : partial_injection src trg)
+  : Perm.perm_f (ij_matched_n ij)
   = 
-    let src_l = len src               in
-    let ij    = cond_sol_inj sl       in
-    let um    = cond_sol_unmatched sl in
-    fun i -> if i < src_l then L.index ij i else L.index um (i - src_l)
+    (**) ij_matched_perm_f_injective ij;
+    (**) ij_matched_len ij;
+    Perm.mk_perm_f _ (ij_matched_perm_f ij)
 
+val ij_matched_perm_eq (#a : Type) (#src #trg : list a) (ij : partial_injection src trg)
+  : Lemma (ij_matched_len ij;
+           Msk.filter_mask (Msk.mask_not (ij_src_mask ij)) src ==
+           Perm.apply_perm_r (ij_matched_perm ij) (Msk.filter_mask (Msk.mask_not (ij_trg_mask ij)) trg))
 
-val cond_sol_all_unmatched (#a : Type) (#src #trg : list a) (sl : cond_sol true src trg)
-  : Lemma (cond_sol_unmatched sl == [])
-
-val cond_sol_unmatched_injective (#a : Type) (#all : bool) (#src #trg : list a) (sl : cond_sol all src trg)
-  : Lemma (Perm.injective (L.index (cond_sol_unmatched sl)))
-
-val cond_sol_inj_unmatched
-      (#a : Type) (#all : bool) (#src #trg : list a) (sl : cond_sol all src trg) (j : Fin.fin (len trg))
-  : Lemma (L.mem j (cond_sol_inj sl) <==> not (L.mem j (cond_sol_unmatched sl)))
-
-val cond_sol_inj_injective (#a : Type) (#all : bool) (#src #trg : list a) (sl : cond_sol all src trg)
-      (i i' : Fin.fin (len src))
-  : Lemma (requires L.index (cond_sol_inj sl) i = L.index (cond_sol_inj sl) i')
-          (ensures i = i')
-
-val cond_sol_inj_eq (#a : Type) (#all : bool) (#src #trg : list a) (sl : cond_sol all src trg)
-      (i : Fin.fin (len src))
-  : Lemma (L.index trg (L.index (cond_sol_inj sl) i) == L.index src i)
-
-val cond_sol_bij_spec (#a : Type) (#all : bool) (#src #trg : list a) (sl : cond_sol all src trg)
-  : Lemma (len src + len (cond_sol_unmatched sl) = len trg /\
-           Perm.injective (cond_sol_bij sl) /\
-           L.(src @ cond_sol_unmatched_v sl) == Perm.apply_perm_r (Perm.mk_perm_f (len trg) (cond_sol_bij sl)) trg)
+let ij_matched_equiv (#a : Type) (#src #trg : list a) (ij : partial_injection src trg)
+  : Perm.pequiv (Msk.filter_mask (Msk.mask_not (ij_trg_mask ij)) trg)
+                (Msk.filter_mask (Msk.mask_not (ij_src_mask ij)) src)
+  =
+    (**) let l_trg = Msk.filter_mask (Msk.mask_not (ij_trg_mask ij)) trg in
+    (**) ij_matched_len ij;
+    (**) ij_matched_perm_eq ij;
+    U.cast (Perm.perm_f (L.length l_trg)) (ij_matched_perm ij)
 
 
 [@@ __cond_solver__]
-let cond_sol_to_equiv (#a : Type) (#all : bool) (#src #trg : list a) (sl : cond_sol all src trg)
-  : Tot (Perm.pequiv trg L.(src @ cond_sol_unmatched_v sl))
+let vequiv_inj_eq
+      (#src #trg : M.vprop_list)
+      (ij : partial_injection src trg)
+      (e' : M.vequiv (Msk.filter_mask (ij_trg_mask ij) trg) (Msk.filter_mask (ij_src_mask ij) src))
+  : M.veq_eq_t (len trg) (len src)
   =
-    (**) cond_sol_bij_spec sl;
-    Perm.mk_perm_f (len trg) (cond_sol_bij sl)
+    let mask_src = ij_src_mask ij in
+    let mask_trg = ij_trg_mask ij in
+    M.mk_veq_eq (len trg) (len src) (L.index
+        (Msk.merge_fun_on_mask mask_src #(option (Fin.fin (len trg)))
+        (fun _ j -> Opt.map (Msk.mask_pull mask_trg) (e'.veq_eq j))
+        (fun i   -> L.index ij i)))
+
+val vequiv_inj_typ
+      (#src #trg : M.vprop_list)
+      (ij : partial_injection src trg)
+      (e' : M.vequiv (Msk.filter_mask (ij_trg_mask ij) trg) (Msk.filter_mask (ij_src_mask ij) src))
+  : squash (M.veq_typ_eq (M.vprop_list_sels_t trg) (M.vprop_list_sels_t src)
+                         (U.cast _ (vequiv_inj_eq ij e')))
+
+val vequiv_inj_g
+      (#src #trg : M.vprop_list)
+      (ij : partial_injection src trg)
+      (e' : M.vequiv (Msk.filter_mask (ij_trg_mask ij) trg) (Msk.filter_mask (ij_src_mask ij) src))
+      (opened : Steel.Memory.inames)
+  : Steel.Effect.Atomic.SteelGhost unit opened (M.vprop_of_list trg) (fun () -> M.vprop_of_list src)
+      (requires fun h0 ->
+                 e'.veq_req (Msk.filter_mask_fl (ij_trg_mask ij) _ (M.sel trg h0)))
+      (ensures  fun h0 () h1 ->
+                 e'.veq_ens (Msk.filter_mask_fl (ij_trg_mask ij) _ (M.sel trg h0))
+                            (Msk.filter_mask_fl (ij_src_mask ij) _ (M.sel src h1)) /\
+                 M.veq_sel_eq (vequiv_inj_eq ij e') (M.sel trg h0) (M.sel src h1))
 
 [@@ __cond_solver__]
-let cond_sol_all_to_equiv (#a : Type) (#src #trg : list a) (sl : cond_sol true src trg)
-  : Tot (Perm.pequiv trg src)
+let vequiv_inj
+      (src : M.vprop_list) (trg : M.vprop_list)
+      (ij : partial_injection src trg)
+      (e' : M.vequiv (Msk.filter_mask (ij_trg_mask ij) trg) (Msk.filter_mask (ij_src_mask ij) src))
+  : M.vequiv trg src
   =
-    (**) cond_sol_all_unmatched sl;
-    cond_sol_to_equiv sl
+    let mask_src = ij_src_mask ij in
+    let mask_trg = ij_trg_mask ij in
+  {
+    veq_req = (fun (sl0 : M.sl_f trg) ->
+                 e'.veq_req (Msk.filter_mask_fl mask_trg _ sl0));
+    veq_ens = (fun (sl0 : M.sl_f trg) (sl1 : M.sl_f src) ->
+                 e'.veq_ens (Msk.filter_mask_fl mask_trg _ sl0) (Msk.filter_mask_fl mask_src _ sl1));
+    veq_eq  = vequiv_inj_eq  ij e';
+    veq_typ = vequiv_inj_typ ij e';
+    veq_g   = vequiv_inj_g   ij e';
+  }
 
+[@@__cond_solver__]
+let extend_partial_injection #a (#src #trg : list a) (ij : partial_injection src trg) (src_add : list a)
+  : partial_injection L.(src@src_add) trg
+  =
+    let f_add = L.map (fun _ -> None) src_add in
+    let f = L.(ij @ f_add) in
+    let src' = L.(src@src_add) in
+    introduce forall (i : Fin.fin (len L.(src@src_add)) {Some? (L.index f i)}).
+                  i < len src /\ L.index f i == L.index ij i
+      with Ll.append_index ij f_add i;
+    introduce (forall (i : Fin.fin (len src')) . Some? (L.index f i) ==>
+                L.index trg (Some?.v (L.index f i)) == L.index src' i) /\
+              injective_on_dom #(Fin.fin (len src')) (L.index f)
+      with introduce forall i . _
+           with introduce Some? (L.index f i) ==> L.index trg (Some?.v (L.index f i)) == L.index src' i
+           with _ . Ll.append_index src src_add i
+      and ();
+    f
+
+val extend_partial_injection_src (#a : Type) (#src #trg : list a)
+                                 (ij : partial_injection src trg) (src_add : list a)
+  : Lemma (Msk.filter_mask (ij_src_mask (extend_partial_injection ij src_add)) L.(src@src_add)
+        == L.append (Msk.filter_mask (ij_src_mask ij) src) src_add)
+
+val extend_partial_injection_trg (#a : Type) (#src #trg : list a)
+                                 (ij : partial_injection src trg) (src_add : list a)
+  : Lemma (Msk.filter_mask (ij_trg_mask (extend_partial_injection ij src_add)) trg
+        == Msk.filter_mask (ij_trg_mask ij) trg)
+
+[@@ __cond_solver__]
+let vequiv_sol_inj
+      (all : bool) (src : M.vprop_list) (trg : M.vprop_list)
+      (ij : partial_injection src trg)
+      (e' : vequiv_sol all (Msk.filter_mask (ij_src_mask ij) src) (Msk.filter_mask (ij_trg_mask ij) trg))
+  : vequiv_sol all src trg
+  = match e' with
+  | VeqAll src' trg' e' -> VeqAll src trg (vequiv_inj src trg ij e')
+  | VeqPrt src' src_add trg' e' ->
+           extend_partial_injection_src ij src_add;
+           extend_partial_injection_trg ij src_add;
+           VeqPrt src src_add trg (vequiv_inj L.(src@src_add) trg (extend_partial_injection ij src_add) e')
+
+
+(**** Tac *)
 
 let normal_ij_mask : list norm_step = [
-  delta_only [`%filter_mask; `%ij_src_mask; `%ij_trg_mask; `%L.map;
+  delta_only [`%Msk.filter_mask; `%ij_src_mask; `%ij_trg_mask; `%L.map;
               `%None?; `%Ll.initi; `%op_Negation; `%L.mem];
   iota; zeta; primops]
 
-/// This tactics solves a goal of the form [cond_sol all src trg]
-let build_cond_sol fr ctx (all : bool) : Tac unit
-  = try if all then apply (`CSeq) else apply (`CSnil)
+/// This tactics solves a goal of the form [vequiv_sol all src trg]
+let build_vequiv_sol fr ctx (all : bool) : Tac unit
+  = try apply (`vequiv_sol_end)     with | _ ->
+    try apply (`vequiv_sol_end_prt)
     with | _ ->
-      apply_raw (`CSinj);
+      apply_raw (`vequiv_sol_inj);
       build_partial_injection fr ctx;
       norm normal_build_partial_injection;
       norm normal_ij_mask;
-    try if all then apply (`CSeq) else apply (`CSnil)
-    with | _ -> cs_raise fr ctx (fun m -> fail (m Fail_cond_sol []))
+    try apply (`vequiv_sol_end)     with | _ ->
+    try apply (`vequiv_sol_end_prt) with | _ ->
+      cs_raise fr ctx (fun m -> fail (m Fail_cond_sol []))
 
-
+(*
 let normal_cond_sol_to_equiv : list norm_step = [
-    delta_only [`%cond_sol_to_equiv; `%cond_sol_bij; `%len; `%L.length; `%L.index];
+    delta_only [`%len; `%L.length; `%L.index; `%L.op_At; `%L.append];
+    delta_attr [`%__cond_solver__];
     iota; zeta; primops
   ]
 
-(*let test_cond_sol : cond_sol false ['a';'b';'c';'a'] ['a';'c';'b';'d';'e';'a'] =
-  _ by (build_cond_sol false)    
+let test_vequiv_sol (v : Char.char -> SE.vprop') :
+   (let to_v (s : string) = L.map v (String.list_of_string s) in
+    vequiv_sol false (to_v "abca") (to_v "acbdea"))
+  = _ by (norm [delta_only [`%L.map]; iota; zeta; primops];
+          build_vequiv_sol default_flags dummy_ctx false)    
 
-let _ = assert (U.print_util (cond_sol_to_equiv (test_cond_sol)))
-            by (norm [delta_only [`%test_cond_sol]];
+let _ = assert (U.print_util (fun v -> vequiv_sol_prt (test_vequiv_sol v)))
+            by (norm [delta_only [`%test_vequiv_sol]];
                 norm normal_build_partial_injection;
                 norm normal_cond_sol_to_equiv;
-                fail "print")*)
+                fail "print")
+*)
 
 (*** Building [M.prog_cond] *)
 
@@ -737,20 +768,18 @@ let _ = assert (U.print_util (cond_sol_to_equiv (test_cond_sol)))
 /// - returns the shape of the program as a [pre_shape_tree]
 
 
+let delayed_veq_of_list (#pre_n #post_n : nat) (l : M.veq_eq_t_list pre_n post_n) : M.veq_eq_t pre_n post_n =
+  M.veq_of_list l
+
 [@@ __cond_solver__]
-let serialize_perm (#n : nat) (f : Perm.perm_f n) : Perm.perm_f n
+let serialize_vequiv (#pre #post : M.vprop_list) (e : M.vequiv pre post) : M.vequiv pre post
   =
-    let l = Perm.perm_f_to_list f in
-    Perm.perm_f_of_list l
+    let e_eq = M.veq_to_list e.veq_eq in
+    { e with veq_eq = delayed_veq_of_list e_eq }
 
-let serialize_perm_id (#n : nat) (f : Perm.perm_f n)
-  : Lemma (serialize_perm f == f) [SMTPat (serialize_perm f)]
-  = Perm.perm_f_extensionality (serialize_perm f) f (fun i -> ())
-
-unfold
-let serialize_vequiv_perm (#pre #post : M.vprop_list) (f : M.vequiv_perm pre post)
-  : M.vequiv pre post
-  = M.vequiv_of_perm (serialize_perm f)
+let serialize_vequiv_id (pre post : M.vprop_list) (e : M.vequiv pre post)
+  : Lemma (serialize_vequiv e == e) [SMTPat (serialize_vequiv e)]
+  = ()
 
 let normal_cond_solver : list norm_step = [
     delta_only [`%len; `%None?; `%op_Negation; `%Some?.v;
@@ -758,9 +787,8 @@ let normal_cond_solver : list norm_step = [
                 `%L.tail; `%L.tl;
                 `%Ll.initi; `%Ll.set;
                 `%Perm.mk_perm_f; `%Perm.perm_f_to_list;
-                `%M.mk_veq_eq; `%M.vequiv_of_perm; `%M.vequiv_of_perm_eq;
                 `%Opt.map];
-    delta_attr [`%__tac_helper__; `%__cond_solver__];
+    delta_attr [`%__tac_helper__; `%__cond_solver__; `%Msk.__mask__; `%M.__vequiv__];
     delta_qualifier ["unfold"];
     iota; zeta; primops
   ]
@@ -795,8 +823,8 @@ let __extract_veq_eq (#pre_n #post_n : nat) (f : Fin.fin post_n -> option (Fin.f
 
 [@@ __tac_helper__]
 private
-let __extract_perm (#n : nat) (f : Perm.perm_f n) : Type
-  = __extract_veq_eq (M.mk_veq_eq n n (fun i -> Some (f i)))
+let __extract_vequiv (#pre #post : M.vprop_list) (e : M.vequiv pre post) : Type
+  = __extract_veq_eq e.veq_eq
 
 let tc_extract_veq_eq (n : nat) : Tac (list (option int)) =
   norm_cond_sol ();
@@ -879,45 +907,45 @@ let rec shape_tree_of_pre (#pre_n : nat) (#post_n : nat) (ps : pre_shape_tree pr
 let __build_TCspec_u
       (#a : Type) (#pre : M.pre_t) (#post : M.post_t a) (#req : M.req_t pre) (#ens : M.ens_t pre a post)
       (#pre' : M.pre_t)
-      (cs0 : cond_sol false pre pre')
+      (cs0 : vequiv_sol false pre pre')
 
       (pre_n   : extract_term (L.length pre))
       (post_n  : (x : a) -> extract_term (L.length (post x)))
-      (frame_n : extract_term (L.length (cond_sol_unmatched cs0)))
-      (p0 : __extract_perm (cond_sol_to_equiv cs0))
+      (frame_n : extract_term (L.length (VeqPrt?.unmatched cs0)))
+      (p0 : __extract_vequiv (vequiv_sol_prt cs0))
 
-  : M.tree_cond (M.Tspec a pre post req ens) pre' (fun (x : a) -> L.(post x @ cond_sol_unmatched_v cs0))
+  : M.tree_cond (M.Tspec a pre post req ens) pre' (fun (x : a) -> L.(post x @ VeqPrt?.unmatched cs0))
   =
-    let frame = cond_sol_unmatched_v cs0 in
+    let frame = VeqPrt?.unmatched cs0 in
     M.TCspec M.({
       tcs_pre     = pre';
       tcs_post    = (fun x -> L.(post x @ frame));
       tcs_frame   = frame;
-      tcs_pre_eq  = serialize_vequiv_perm (cond_sol_to_equiv cs0);
-      tcs_post_eq = (fun x -> M.vequiv_id L.(post x @ frame))
+      tcs_pre_eq  = serialize_vequiv (vequiv_sol_prt cs0);
+      tcs_post_eq = (fun x -> M.vequiv_refl L.(post x @ frame))
     })
 
 [@@ __tac_helper__]
 let __build_TCspec_p
       (#a : Type) (#pre : M.pre_t) (#post : M.post_t a) (#req : M.req_t pre) (#ens : M.ens_t pre a post)
       (#pre' : M.pre_t) (#post' : M.post_t a)
-      (cs0 : cond_sol false pre pre')
-      (cs1 : (x : a) -> cond_sol true (post' x) L.(post x @ cond_sol_unmatched_v cs0))
+      (cs0 : vequiv_sol false pre pre')
+      (cs1 : (x : a) -> vequiv_sol true (post' x) L.(post x @ VeqPrt?.unmatched cs0))
 
       (pre_n   : extract_term (L.length pre))
       (post_n  : (x : a) -> extract_term (L.length (post x)))
-      (frame_n : extract_term (L.length (cond_sol_unmatched cs0)))
-      (p0 : __extract_perm (cond_sol_to_equiv cs0))
-      (p1 : (x : a) -> __extract_perm (cond_sol_all_to_equiv (cs1 x)))
+      (frame_n : extract_term (L.length (VeqPrt?.unmatched cs0)))
+      (p0 : __extract_vequiv (vequiv_sol_prt cs0))
+      (p1 : (x : a) -> __extract_vequiv (vequiv_sol_all (cs1 x)))
 
   : M.tree_cond (M.Tspec a pre post req ens) pre' post'
   =
     M.TCspec M.({
       tcs_pre     = pre';
       tcs_post    = post';
-      tcs_frame   = cond_sol_unmatched_v cs0;
-      tcs_pre_eq  = serialize_vequiv_perm (cond_sol_to_equiv cs0);
-      tcs_post_eq = (fun x -> serialize_vequiv_perm (cond_sol_all_to_equiv (cs1 x)))
+      tcs_frame   = VeqPrt?.unmatched cs0;
+      tcs_pre_eq  = serialize_vequiv (vequiv_sol_prt cs0);
+      tcs_post_eq = (fun x -> serialize_vequiv (vequiv_sol_all (cs1 x)))
     })
 
 // TODO? currently, one cannot factorize the tree_cond_spec part of TCspec & TCspecS
@@ -927,22 +955,22 @@ let __build_TCspecS_u
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
       (#pre' : M.pre_t)
       (tr  : M.to_repr_t a pre post req ens)
-      (cs0 : cond_sol false tr.r_pre pre')
+      (cs0 : vequiv_sol false tr.r_pre pre')
 
       (pre_n   : extract_term (L.length tr.r_pre))
       (post_n  : (x : a) -> extract_term (L.length (tr.r_post x)))
-      (frame_n : extract_term (L.length (cond_sol_unmatched cs0)))
-      (p0 : __extract_perm (cond_sol_to_equiv cs0))
+      (frame_n : extract_term (L.length (VeqPrt?.unmatched cs0)))
+      (p0 : __extract_vequiv (vequiv_sol_prt cs0))
 
-  : M.tree_cond (M.TspecS a pre post req ens) pre' (fun (x : a) -> L.(tr.r_post x @ cond_sol_unmatched_v cs0))
+  : M.tree_cond (M.TspecS a pre post req ens) pre' (fun (x : a) -> L.(tr.r_post x @ VeqPrt?.unmatched cs0))
   =
-    let frame = cond_sol_unmatched_v cs0 in
+    let frame = VeqPrt?.unmatched cs0 in
     M.TCspecS tr M.({
       tcs_pre     = pre';
       tcs_post    = (fun x -> L.(tr.r_post x @ frame));
       tcs_frame   = frame;
-      tcs_pre_eq  = serialize_vequiv_perm (cond_sol_to_equiv cs0);
-      tcs_post_eq = (fun x -> M.vequiv_id L.(tr.r_post x @ frame))
+      tcs_pre_eq  = serialize_vequiv (vequiv_sol_prt cs0);
+      tcs_post_eq = (fun x -> M.vequiv_refl L.(tr.r_post x @ frame))
     })
 
 [@@ __tac_helper__]
@@ -950,23 +978,23 @@ let __build_TCspecS_p
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
       (#pre' : M.pre_t) (#post' : M.post_t a)
       (tr  : M.to_repr_t a pre post req ens)
-      (cs0 : cond_sol false tr.r_pre pre')
-      (cs1 : (x : a) -> cond_sol true (post' x) L.(tr.r_post x @ cond_sol_unmatched_v cs0))
+      (cs0 : vequiv_sol false tr.r_pre pre')
+      (cs1 : (x : a) -> vequiv_sol true (post' x) L.(tr.r_post x @ VeqPrt?.unmatched cs0))
 
       (pre_n   : extract_term (L.length tr.r_pre))
       (post_n  : (x : a) -> extract_term (L.length (tr.r_post x)))
-      (frame_n : extract_term (L.length (cond_sol_unmatched cs0)))
-      (p0 : __extract_perm (cond_sol_to_equiv cs0))
-      (p1 : (x : a) -> __extract_perm (cond_sol_all_to_equiv (cs1 x)))
+      (frame_n : extract_term (L.length (VeqPrt?.unmatched cs0)))
+      (p0 : __extract_vequiv (vequiv_sol_prt cs0))
+      (p1 : (x : a) -> __extract_vequiv (vequiv_sol_all (cs1 x)))
 
   : M.tree_cond (M.TspecS a pre post req ens) pre' post'
   =
     M.TCspecS tr M.({
       tcs_pre     = pre';
       tcs_post    = post';
-      tcs_frame   = cond_sol_unmatched_v cs0;
-      tcs_pre_eq  = serialize_vequiv_perm (cond_sol_to_equiv cs0);
-      tcs_post_eq = (fun x -> serialize_vequiv_perm (cond_sol_all_to_equiv (cs1 x)))
+      tcs_frame   = VeqPrt?.unmatched cs0;
+      tcs_pre_eq  = serialize_vequiv (vequiv_sol_prt cs0);
+      tcs_post_eq = (fun x -> serialize_vequiv (vequiv_sol_all (cs1 x)))
     })
 
 
@@ -982,28 +1010,28 @@ let __build_TCspecS_p
 let __build_TCret_u
       (#a : Type) (#x : a) (#sl_hint : M.post_t a)
       (#pre : M.pre_t)
-      (cs : cond_sol false (sl_hint x) pre)
+      (cs : vequiv_sol false (sl_hint x) pre)
       
       (n : extract_term (L.length pre))
-      (p : __extract_perm (cond_sol_to_equiv cs))
+      (p : __extract_vequiv (vequiv_sol_prt cs))
 
-  : M.tree_cond (M.Tret a x sl_hint) pre (fun x -> L.(sl_hint x @ cond_sol_unmatched_v cs))
+  : M.tree_cond (M.Tret a x sl_hint) pre (fun x -> L.(sl_hint x @ VeqPrt?.unmatched cs))
   =
-    M.TCret pre (fun x -> L.(sl_hint x @ cond_sol_unmatched_v cs))
-            (serialize_vequiv_perm (cond_sol_to_equiv cs))
+    M.TCret pre (fun x -> L.(sl_hint x @ VeqPrt?.unmatched cs))
+            (serialize_vequiv (vequiv_sol_prt cs))
 
 [@@ __tac_helper__]
 let __build_TCret_p
       (#a : Type) (#x : a) (#sl_hint : M.post_t a)
       (#pre : M.pre_t) (#post : M.post_t a)
-      (cs : cond_sol true (post x) pre)
+      (cs : vequiv_sol true (post x) pre)
 
       (n : extract_term (L.length pre))
-      (p : __extract_perm (cond_sol_all_to_equiv cs))
+      (p : __extract_vequiv (vequiv_sol_all cs))
 
   : M.tree_cond (M.Tret a x sl_hint) pre post
   =
-    M.TCret #a #x pre post (serialize_vequiv_perm (cond_sol_all_to_equiv cs))
+    M.TCret #a #x pre post (serialize_vequiv (vequiv_sol_all cs))
 
 
 let build_TCspec fr (is_Steel : bool) (post : bool) : Tac shape_tree_t
@@ -1015,10 +1043,10 @@ let build_TCspec fr (is_Steel : bool) (post : bool) : Tac shape_tree_t
         norm_cond_sol ()
       ) else
         apply_raw (`__build_TCspec_p);
-      build_cond_sol fr (fun () -> [Info_location "before the spec statement"]) false;
+      build_vequiv_sol fr (fun () -> [Info_location "before the spec statement"]) false;
       norm_cond_sol ();
       let x = intro () in
-      build_cond_sol fr (fun () -> [Info_location "after the spec statement"]) true
+      build_vequiv_sol fr (fun () -> [Info_location "after the spec statement"]) true
     end else begin
       // FIXME : why apply_raw shelves cs0 ?
       let cs0 = fresh_uvar None in
@@ -1033,7 +1061,7 @@ let build_TCspec fr (is_Steel : bool) (post : bool) : Tac shape_tree_t
         apply_raw (`(__build_TCspec_u (`#cs0)));
         unshelve cs0
       );
-      build_cond_sol fr (fun () -> [Info_location "before the spec statement"]) false
+      build_vequiv_sol fr (fun () -> [Info_location "before the spec statement"]) false
     end;
 
     let pre_n   = tc_extract_nat ()                     in
@@ -1041,8 +1069,8 @@ let build_TCspec fr (is_Steel : bool) (post : bool) : Tac shape_tree_t
     let frame_n = tc_extract_nat ()                     in
     let pre'_n  = pre_n + frame_n                       in
     let post'_n = post_n + frame_n                      in
-    let e_pre = tc_extract_veq_eq pre'_n
-    in let e_post : list (option int) =
+    let e_pre = tc_extract_veq_eq pre'_n                in
+    let e_post : list (option int) =
       if post then let _ = intro () in tc_extract_veq_eq post'_n
       else Ll.initi 0 post'_n (fun i -> Some (i <: int))
     in
@@ -1051,12 +1079,12 @@ let build_TCspec fr (is_Steel : bool) (post : bool) : Tac shape_tree_t
 let build_TCret fr (post : bool) : Tac shape_tree_t
   = if post then begin
       apply_raw (`__build_TCret_p);
-      build_cond_sol fr (fun () -> [Info_location "after the return statement"]) true
+      build_vequiv_sol fr (fun () -> [Info_location "after the return statement"]) true
     end else begin
       let cs = fresh_uvar None in
       apply_raw (`(__build_TCret_u (`#cs)));
       unshelve cs;
-      build_cond_sol fr (fun () -> [Info_location "after the return statement"]) false
+      build_vequiv_sol fr (fun () -> [Info_location "after the return statement"]) false
     end;
 
     let n = tc_extract_nat () in
@@ -1172,6 +1200,7 @@ let build_prog_cond fr : Tac unit
     // tc <- tc0
     unshelve tc_eq;
     norm_cond_sol ();
+    norm [delta_only [`%delayed_veq_of_list]];
     trefl ();
     // shp
     unshelve ushp;
@@ -1187,13 +1216,12 @@ let build_prog_cond fr : Tac unit
     trefl ();
     // [M.tree_cond_has_shape tc shp]
     norm [delta_only [`%M.tree_cond_has_shape; `%Perm.perm_f_to_list; `%Perm.mk_perm_f; `%Perm.mk_perm_f;
-                      `%M.Mkvequiv?.veq_eq; `%M.veq_to_list; `%M.vequiv_id; `%M.mk_veq_eq; `%M.veq_list_eq;
                       `%Perm.perm_f_eq; `%Perm.perm_f_of_list; `%Perm.id_n;
                       `%L.length; `%L.hd; `%L.tl; `%L.tail; `%L.index; `%L.op_At; `%L.append;
                       `%Ll.initi; `%Ll.list_eq;
                       `%Opt.opt_eq;
                       `%U.cast];
           delta_qualifier ["unfold"];
-          delta_attr [`%__tac_helper__];
+          delta_attr [`%__tac_helper__; `%M.__vequiv__];
           iota; zeta; primops; simplify];
     exact (`intro_l_True)

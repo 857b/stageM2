@@ -1,6 +1,11 @@
 module Experiment.Steel.CondSolver
 
-module L = FStar.List.Pure
+module L  = FStar.List.Pure
+module Fl = Learn.FList
+
+open Learn.List.Mask
+open Steel.Effect
+open Steel.Effect.Atomic
 
 #set-options "--fuel 1 --ifuel 1"
 
@@ -59,7 +64,7 @@ let __build_to_repr_t_lem
 
 (***** [build_injection] *)
 
-let rec build_injection_find_spec (#trg_n : nat) (g mask : vec trg_n bool) (i : nat)
+let rec build_injection_find_spec (#trg_n : nat) (g mask : Ll.vec trg_n bool) (i : nat)
   : Lemma (requires Some? (build_injection_find g mask i))
           (ensures (let j = Some?.v (build_injection_find g mask i) - i in
                     j >= 0 /\ L.index g j /\ L.index mask j))
@@ -68,7 +73,7 @@ let rec build_injection_find_spec (#trg_n : nat) (g mask : vec trg_n bool) (i : 
   | [], [] | true :: _, true :: _ -> ()
   | _ :: g, _ :: mask -> build_injection_find_spec #(trg_n-1) g mask (i+1)
 
-let rec build_injection_iter_spec (#src_n #trg_n : nat) (g : ograph src_n trg_n) (mask : vec trg_n bool)
+let rec build_injection_iter_spec (#src_n #trg_n : nat) (g : ograph src_n trg_n) (mask : Ll.vec trg_n bool)
   : Lemma (ensures (let res = build_injection_iter g mask in
                    (forall (i : Fin.fin src_n) . {:pattern (L.index res i)}
                       Some? (L.index res i) ==> (L.index (L.index g i) (Some?.v (L.index res i))
@@ -125,7 +130,7 @@ let rec list_of_equalities_index (#a : Type) (src trg : list a) (i : Fin.fin (le
 
 // FIXME: With a lower rlimit Z3 sometimes times out in a few seconds
 #push-options "--z3rlimit 1000 --z3refresh"
-let rec list_to_matrix_index (#a : Type) (n0 n1 : nat) (l : vec (n0 * n1) a) (i : Fin.fin n0) (j : Fin.fin n1)
+let rec list_to_matrix_index (#a : Type) (n0 n1 : nat) (l : Ll.vec (n0 * n1) a) (i : Fin.fin n0) (j : Fin.fin n1)
   : Lemma (ensures i * n1 + j < n0 * n1 /\
                    L.index (L.index (list_to_matrix n0 n1 l) i) j == L.index l (i * n1 + j))
           (decreases n0)
@@ -159,243 +164,283 @@ let ograph_of_equalities_index (#a : Type) (src trg : list a) (bs : list bool)
     }
 
 
-(***** mask *)
+(***** [vequiv_sol] *)
 
-let rec merge_fun_on_mask_index #src_n mask #b f g (i : nat)
-  : Lemma (requires i < src_n)
-          (ensures  L.index (merge_fun_on_mask #src_n mask #b f g) i ==
-                   (if L.index mask i then f i (mask_push #src_n mask i) else g i))
-          [SMTPat (L.index (merge_fun_on_mask #src_n mask #b f g) i)]
-  = match mask with
-  | true  :: mask ->
-          let f' (i : Fin.fin (src_n-1) {L.index mask i}) (j : Fin.fin (mask_len mask)) = f (i + 1) (j + 1) in
-          let g' (i : Fin.fin (src_n-1) {not (L.index mask i)}) = g (i + 1) in
-          assert (merge_fun_on_mask #src_n (true :: mask) f g ==
-                  f 0 0 :: merge_fun_on_mask #(src_n-1) mask f' g')
-              by (trefl ());
-          if i > 0 then merge_fun_on_mask_index #(src_n-1) mask f' g' (i - 1)
-  | false :: mask ->
-          let f' (i : Fin.fin (src_n-1) {L.index mask i}) (j : Fin.fin (mask_len mask)) = f (i + 1) j in
-          let g' (i : Fin.fin (src_n-1) {not (L.index mask i)}) = g (i + 1) in
-          assert (merge_fun_on_mask #src_n (false :: mask) f g ==
-                  g 0 :: merge_fun_on_mask #(src_n-1) mask f' g')
-              by (trefl ());
-          if i > 0 then merge_fun_on_mask_index #(src_n-1) mask f' g' (i - 1)
+#push-options "--ifuel 1 --fuel 0"
+let ij_matched_perm_f_injective
+      (#a : Type) (#src #trg : list a) (ij : partial_injection src trg)
+  : Lemma (Perm.injective (ij_matched_perm_f ij))
+  = Perm.injectiveI (ij_matched_perm_f ij) (fun i1 i1' ->
+      let nm_src = Msk.mask_not (ij_src_mask ij) in
+      // FIXME we cannot [nm_src] here
+      let i0  = Msk.mask_pull (Msk.mask_not (ij_src_mask ij)) i1  in
+      let i0' = Msk.mask_pull (Msk.mask_not (ij_src_mask ij)) i1' in
+      let j0  = Some?.v (L.index ij i0 ) in
+      let j0' = Some?.v (L.index ij i0') in
+      (**) L.lemma_index_memP ij i0;
+      (**) L.lemma_index_memP ij i0';
+      let nm_trg = Msk.mask_not (ij_trg_mask ij) in
+      Msk.mask_pull_push nm_trg j0;
+      Msk.mask_pull_push nm_trg j0';
+      assert (j0 == j0');
+      assert (i0 == i0');
+      Perm.inv_l_injective (Msk.mask_pull nm_src) (Msk.mask_push nm_src);
+      assert (i1 == i1')
+  )
 
-let rec mask_push_pull (#len : nat) (mask : vec len bool) (j : Fin.fin (mask_len mask))
-  : Lemma (ensures mask_push mask (mask_pull mask j) = j) (decreases mask)
-          [SMTPat (mask_push mask (mask_pull mask j))]
-  = match mask with
-  | true  :: mask -> if j = 0 then () else mask_push_pull #(len - 1) mask (j - 1)
-  | false :: mask -> mask_push_pull #(len - 1) mask j
+let ij_matched_perm_f_surjective
+      (#a : Type) (#src #trg : list a) (ij : partial_injection src trg)
+  : Lemma (Perm.surjective (ij_matched_perm_f ij))
+  = Perm.surjectiveI (ij_matched_perm_f ij) (fun (j1 : Fin.fin (Msk.mask_len (Msk.mask_not (ij_trg_mask ij)))) ->
+      let j0 = Msk.mask_pull (Msk.mask_not (ij_trg_mask ij)) j1 in
+      let i0 = Ll.mem_findi (Some j0) ij in
+      Msk.mask_push (Msk.mask_not (ij_src_mask ij)) i0
+  )
 
-let rec mask_pull_push (#len : nat) (mask : vec len bool) (i : Fin.fin len {L.index mask i})
-  : Lemma (ensures mask_pull mask (mask_push mask i) = i)
-          [SMTPat (mask_pull mask (mask_push mask i))]
-  = if i = 0 then ()
-    else let b :: mask = mask in
-         if b then mask_pull_push #(len-1) mask (i-1)
-         else mask_pull_push #(len-1) mask  (i-1)
+let ij_matched_len (#a : Type) (#src #trg : list a) (ij : partial_injection src trg)
+  : Lemma (Msk.mask_len (Msk.mask_not (ij_trg_mask ij)) = Msk.mask_len (Msk.mask_not (ij_src_mask ij)))
+  =
+    ij_matched_perm_f_injective ij;
+    Perm.fin_injective_le  _ _ (ij_matched_perm_f ij);
+    ij_matched_perm_f_surjective ij;
+    Perm.fin_surjective_ge _ _ (ij_matched_perm_f ij)
+#pop-options
 
-let rec filter_mask_push (#len : nat) (mask : vec len bool) (i : Fin.fin len {L.index mask i})
-                         (#a : Type) (l : vec len a)
-  : Lemma (ensures L.index (filter_mask mask l) (mask_push mask i) == L.index l i) (decreases l)
-  = if i <> 0
-    then let b :: mask = mask in
-         let x :: xs   = l    in
-         if b then filter_mask_push #(len-1) mask (i-1) xs
-         else filter_mask_push #(len-1) mask (i - 1) xs
+#push-options "--ifuel 1 --fuel 1 --z3rlimit 60"
+let ij_matched_perm_eq (#a : Type) (#src #trg : list a) (ij : partial_injection src trg)
+  : Lemma (ij_matched_len ij;
+           Msk.filter_mask (Msk.mask_not (ij_src_mask ij)) src ==
+           Perm.apply_perm_r (ij_matched_perm ij) (Msk.filter_mask (Msk.mask_not (ij_trg_mask ij)) trg))
+  =
+    let l_src = Msk.filter_mask (Msk.mask_not (ij_src_mask ij)) src in
+    let l_trg = Msk.filter_mask (Msk.mask_not (ij_trg_mask ij)) trg in
+    let p = ij_matched_perm ij in
+    ij_matched_len ij;
+    Ll.list_extensionality (Perm.apply_perm_r p l_trg) l_src begin fun i1 ->
+      let i0 = Msk.mask_pull (Msk.mask_not (ij_src_mask ij)) i1 in
+      let j0 = Some?.v (L.index ij i0) in
+      L.lemma_index_memP ij i0;
+      calc (==) {
+        L.index (Perm.apply_perm_r p l_trg) i1;
+      == { }
+        L.index l_trg (p i1);
+      == { }
+        L.index (Msk.filter_mask (Msk.mask_not (ij_trg_mask ij)) trg)
+                (Msk.mask_push (Msk.mask_not (ij_trg_mask ij)) j0);
+      == { }
+        L.index trg j0;
+      == { }
+        L.index src i0;
+      == { }
+        L.index l_src i1;
+      }
+    end
+#pop-options
 
 
-(***** [cond_sol] *)
-
-let rec cond_sol_all_unmatched (#a : Type) (#src #trg : list a) (sl : cond_sol true src trg)
-  : Lemma (ensures cond_sol_unmatched sl == []) (decreases sl)
-  = match sl with
-  | CSeq   _ _ -> ()
-  | CSinj  _ _ _ _ sl -> cond_sol_all_unmatched sl
-
-let rec cond_sol_unmatched_injective (#a : Type) (#all : bool) (#src #trg : list a) (sl : cond_sol all src trg)
-  : Lemma (ensures Perm.injective (L.index (cond_sol_unmatched sl))) (decreases sl)
-  = match sl with
-  | CSeq  _ _ | CSnil _ -> ()
-  | CSinj _ src trg ij sl' ->
-          let um = cond_sol_unmatched sl' in
-          let mask = ij_trg_mask ij       in
-          Perm.injectiveI (L.index (cond_sol_unmatched sl)) (fun i i' ->
-            // injectivity of mask_pull
-            mask_push_pull mask (L.index um i );
-            mask_push_pull mask (L.index um i');
-            cond_sol_unmatched_injective sl')
-
-#push-options "--z3rlimit 60"
-let rec cond_sol_inj_unmatched
-     (#a : Type) (#all : bool) (#src #trg : list a) (sl : cond_sol all src trg) (j : Fin.fin (len trg))
-  : Lemma (ensures L.mem j (cond_sol_inj sl) <==> not (L.mem j (cond_sol_unmatched sl)))
-          (decreases sl)
-  = match sl with
-  | CSeq _ l -> L.lemma_index_memP (cond_sol_inj sl) j
-  | CSnil _  -> L.lemma_index_memP (cond_sol_unmatched sl) j
-  | CSinj  _ src trg ij sl' ->
-      let inj' = cond_sol_inj sl'    in
-      let mask_src = ij_src_mask ij  in
-      let mask_trg = ij_trg_mask ij  in
-      let trg_fin = Fin.fin (len trg) in
-      let um : list (Fin.fin (mask_len mask_trg)) = cond_sol_unmatched sl' in
-      if L.mem (Some j) ij
+#push-options "--ifuel 0 --fuel 0 --z3rlimit 10"
+let vequiv_inj_typ
+      (#src #trg : M.vprop_list)
+      (ij : partial_injection src trg)
+      (e' : M.vequiv (filter_mask (ij_trg_mask ij) trg) (filter_mask (ij_src_mask ij) src))
+  : squash (M.veq_typ_eq (M.vprop_list_sels_t trg) (M.vprop_list_sels_t src)
+                         (U.cast _ (vequiv_inj_eq ij e')))
+  =
+    let mask_src = ij_src_mask ij       in
+    let mask_trg = ij_trg_mask ij       in
+    let src' = filter_mask mask_src src in
+    let trg' = filter_mask mask_trg trg in
+    let f_eq = vequiv_inj_eq ij e'      in
+    introduce forall (i : Fin.fin (len src) {Some? (f_eq i)}) . (L.index src i).t == (L.index trg (Some?.v (f_eq i))).t
+      with if L.index mask_src i
       then begin
-        let i = Ll.mem_findi (Some j) ij in
-        L.lemma_index_memP (cond_sol_inj sl) i;
-        assert (L.mem j (cond_sol_inj sl));
-        L.memP_map_elim #(Fin.fin (mask_len mask_trg)) #(Fin.fin (len trg))
-                        (mask_pull mask_trg) j um
-      end else begin
-        let j' = mask_push mask_trg j in
-        introduce L.mem j (cond_sol_inj sl) ==> L.mem j' inj'
-          with _ . begin
-            let i = Ll.mem_findi j (cond_sol_inj sl) in
-            if L.index mask_src i
-            then begin
-              assert (mask_pull mask_trg (L.index inj' (mask_push mask_src i)) == j);
-              mask_push_pull mask_trg (L.index inj' (mask_push mask_src i));
-              assert (L.index inj' (mask_push mask_src i) == j');
-              L.lemma_index_memP inj' (mask_push mask_src i)
-            end else begin
-              assert (L.index ij i = Some j);
-              L.lemma_index_memP ij i;
-              false_elim ()
-            end
-          end;
-        introduce L.mem j' inj' ==> L.mem j (cond_sol_inj sl)
-          with _ . begin
-            let i' = Ll.mem_findi j' inj' in
-            mask_push_pull mask_src i';
-            L.lemma_index_memP (cond_sol_inj sl) (mask_pull mask_src i')
-          end;
-        calc (<==>) {
-          L.memP j (cond_sol_inj sl);
-        <==> { }
-          L.memP j' inj';
-        <==> { cond_sol_inj_unmatched sl' j' }
-          ~ (L.mem j' um);
-        <==> { mask_pull_push mask_trg j;
-            L.memP_map_intro #_ #trg_fin (mask_pull mask_trg) j' um;
-            L.memP_map_elim  #_ #trg_fin (mask_pull mask_trg) j  um }
-          ~ (L.memP j (L.map #_ #trg_fin (mask_pull mask_trg) um));
-        <==> { }
-          ~ (L.mem j (cond_sol_unmatched sl));
+        calc (==) {
+          (L.index trg (Some?.v (f_eq i))).t;
+        == {}
+          (L.index trg (mask_pull mask_trg (Some?.v (e'.veq_eq (mask_push mask_src i))))).t;
+        == {}
+          (L.index trg' (Some?.v (e'.veq_eq (mask_push mask_src i)))).t;
+        == { M.elim_veq_typ_eq e'.veq_typ (mask_push mask_src i)}
+          (L.index src' (mask_push mask_src i)).t;
+        == { }
+          (L.index src i).t;
         }
       end
 #pop-options
 
-// The verification time is unstable
-#push-options "--z3rlimit 60"
-let rec cond_sol_inj_injective (#a : Type) (#all : bool) (#src #trg : list a) (sl : cond_sol all src trg)
-      (i i' : Fin.fin (len src))
-  : Lemma (requires L.index (cond_sol_inj sl) i = L.index (cond_sol_inj sl) i')
-          (ensures i = i')
-          (decreases sl)
-  = match sl with
-  | CSeq  _ _ | CSnil _ -> ()
-  | CSinj all src trg ij sl' ->
-      let inj' = cond_sol_inj sl'         in
-      let mask_src = ij_src_mask ij       in
-      let mask_trg = ij_trg_mask ij       in
-      let y = L.index (cond_sol_inj sl) i in
-      match L.index mask_src i, L.index mask_src i' with
-      | true,  true  -> // by injectivity of inj'
-          assert (y = mask_pull mask_trg (L.index inj' (mask_push mask_src i)));
-          //injectivity of [mask_pull mask_trg]
-          mask_push_pull mask_trg (L.index inj' (mask_push mask_src i));
-          mask_push_pull mask_trg (L.index inj' (mask_push mask_src i'));
-          cond_sol_inj_injective sl' (mask_push mask_src i) (mask_push mask_src i');
-          //injectivity of [mask_push mask_src]
-          mask_pull_push mask_src i;
-          mask_pull_push mask_src i'
-      | false, false -> // by injectivity of ij
-         assert (y = Some?.v (L.index ij i))
-      | true,  false -> // we have both [L.index mask_trg y] and its negation
-         U.assert_by (L.index mask_trg y) (fun () ->
-           assert (y = mask_pull mask_trg (L.index inj' (mask_push mask_src i))));
-         U.assert_by (not (L.index mask_trg y)) (fun () ->
-           assert (y = Some?.v (L.index ij i'));
-           assert (L.index ij i' = Some y);
-           L.lemma_index_memP ij i';
-           assert (L.mem (Some y) ij));
-         false_elim ()
-      | false, true  -> L.lemma_index_memP ij i
+#push-options "--ifuel 1 --z3rlimit 20"
+// ALT? use steel equiv
+let rec intro_filter_mask #opened (vs : M.vprop_list) (mask : Ll.vec (L.length vs) bool)
+  : SteelGhost unit opened
+      (M.vprop_of_list vs)
+      (fun () -> M.vprop_of_list (filter_mask mask vs) `star`
+              M.vprop_of_list (filter_mask (Msk.mask_not mask) vs))
+      (requires fun _ -> True) (ensures fun h0 () h1 ->
+          M.sel_list (filter_mask mask vs) h1 == filter_mask_dl mask _ (M.sel_list vs h0) /\
+          M.sel_list (filter_mask (Msk.mask_not mask) vs) h1 ==
+            filter_mask_dl (Msk.mask_not mask) _ (M.sel_list vs h0))
+      (decreases vs)
+  = match mask, vs with
+  | [], [] ->
+        change_equal_slprop
+           (M.vprop_of_list vs `star` emp)
+           (M.vprop_of_list (filter_mask mask vs) `star`
+            M.vprop_of_list (filter_mask (Msk.mask_not mask) vs))
+  | true  :: mask', v0 :: vs' ->
+        (**) let mask' : Ll.vec (L.length vs') bool = mask' in
+        (**) let sl0 : Ghost.erased (t_of (M.vprop_of_list vs)) = gget (M.vprop_of_list vs) in
+        (**) let l0  : M.sl_list vs = M.vpl_sels vs sl0 in
+        change_equal_slprop (M.vprop_of_list vs) (VUnit v0 `star` M.vprop_of_list vs');
+        intro_filter_mask vs' mask';
+        change_equal_slprop (VUnit v0 `star` M.vprop_of_list (filter_mask mask' vs'))
+                            (M.vprop_of_list (filter_mask mask vs));
+        change_equal_slprop (M.vprop_of_list (filter_mask (Msk.mask_not mask') vs'))
+                            (M.vprop_of_list (filter_mask (Msk.mask_not mask ) vs ));
+        (**) let sl1_t : Ghost.erased (t_of (M.vprop_of_list (filter_mask mask vs)))
+        (**)           = gget (M.vprop_of_list (filter_mask mask vs)) in
+        (**) let sl1_f : Ghost.erased (t_of (M.vprop_of_list (filter_mask (Msk.mask_not mask) vs)))
+        (**)           = gget (M.vprop_of_list (filter_mask (Msk.mask_not mask) vs)) in
+        (**) let l1_t  : M.sl_list (filter_mask mask vs) = M.vpl_sels (filter_mask mask vs) sl1_t in
+        (**) let l1_t' : M.sl_list (filter_mask mask vs) = U.cast _ (filter_mask_dl mask _ l0) in
+        (**) assert (l1_t == l1_t');
+        (**) assert (M.vpl_sels _ sl1_f === filter_mask_dl (Msk.mask_not mask) _ l0)
+  | false :: mask', v0 :: vs' ->
+        (**) let mask' : Ll.vec (L.length vs') bool = mask' in
+        (**) let sl0 = gget (M.vprop_of_list vs)            in
+        (**) let l0  : M.sl_list vs = M.vpl_sels vs sl0     in
+        change_equal_slprop (M.vprop_of_list vs) (VUnit v0 `star` M.vprop_of_list vs');
+        intro_filter_mask vs' mask';
+        change_equal_slprop (M.vprop_of_list (filter_mask mask' vs'))
+                            (M.vprop_of_list (filter_mask mask vs));
+        change_equal_slprop (VUnit v0 `star` M.vprop_of_list (filter_mask (Msk.mask_not mask') vs'))
+                            (M.vprop_of_list (filter_mask (Msk.mask_not mask) vs));
+        (**) let sl1_t = gget (M.vprop_of_list (filter_mask mask vs))                in
+        (**) let sl1_f = gget (M.vprop_of_list (filter_mask (Msk.mask_not mask) vs)) in
+        (**) assert (M.vpl_sels _ sl1_t === filter_mask_dl mask _ l0);
+        (**) assert (M.vpl_sels _ sl1_f === filter_mask_dl (Msk.mask_not mask) _ l0)
+
+let rec elim_filter_mask #opened (vs : M.vprop_list) (mask : Ll.vec (L.length vs) bool)
+  : SteelGhost unit opened
+      (M.vprop_of_list (filter_mask mask vs) `star`
+       M.vprop_of_list (filter_mask (Msk.mask_not mask) vs))
+      (fun () -> M.vprop_of_list vs)
+      (requires fun _ -> True) (ensures fun h0 () h1 ->
+          M.sel_list (filter_mask mask vs) h0 == filter_mask_dl mask _ (M.sel_list vs h1) /\
+          M.sel_list (filter_mask (Msk.mask_not mask) vs) h0 ==
+            filter_mask_dl (Msk.mask_not mask) _ (M.sel_list vs h1))
+      (decreases vs)
+  = match mask, vs with
+  | [], [] ->
+        change_equal_slprop
+           (M.vprop_of_list (filter_mask mask vs) `star`
+            M.vprop_of_list (filter_mask (Msk.mask_not mask) vs))
+           (M.vprop_of_list vs `star` emp)
+  | true  :: mask', v0 :: vs' ->
+        (**) let mask' : Ll.vec (L.length vs') bool = mask' in
+        (**) let sl1_t : Ghost.erased (t_of (M.vprop_of_list (filter_mask mask vs)))
+        (**)           = gget (M.vprop_of_list (filter_mask mask vs)) in
+        (**) let sl1_f : Ghost.erased (t_of (M.vprop_of_list (filter_mask (Msk.mask_not mask) vs)))
+        (**)           = gget (M.vprop_of_list (filter_mask (Msk.mask_not mask) vs)) in
+        change_equal_slprop (M.vprop_of_list (filter_mask mask vs))
+                            (VUnit v0 `star` M.vprop_of_list (filter_mask mask' vs'));
+        change_equal_slprop (M.vprop_of_list (filter_mask (Msk.mask_not mask ) vs ))
+                            (M.vprop_of_list (filter_mask (Msk.mask_not mask') vs'));
+        elim_filter_mask vs' mask';
+        change_equal_slprop (VUnit v0 `star` M.vprop_of_list vs') (M.vprop_of_list vs);
+        (**) let sl0 : Ghost.erased (t_of (M.vprop_of_list vs)) = gget (M.vprop_of_list vs) in
+        (**) let l0  : M.sl_list vs = M.vpl_sels vs sl0 in
+        (**) assert (M.vpl_sels (filter_mask mask vs) sl1_t === filter_mask_dl mask _ l0);
+        (**) assert (M.vpl_sels _ sl1_f === filter_mask_dl (Msk.mask_not mask) _ l0)
+  | false :: mask', v0 :: vs' ->
+        (**) let mask' : Ll.vec (L.length vs') bool = mask'           in
+        (**) let sl1_t = gget (M.vprop_of_list (filter_mask mask vs)) in
+        (**) let sl1_f = gget (M.vprop_of_list (filter_mask (Msk.mask_not mask) vs)) in
+        change_equal_slprop (M.vprop_of_list (filter_mask mask vs))
+                            (M.vprop_of_list (filter_mask mask' vs'));
+        change_equal_slprop (M.vprop_of_list (filter_mask (Msk.mask_not mask) vs))
+                            (VUnit v0 `star` M.vprop_of_list (filter_mask (Msk.mask_not mask') vs'));
+        elim_filter_mask vs' mask';
+        change_equal_slprop (VUnit v0 `star` M.vprop_of_list vs') (M.vprop_of_list vs);
+        (**) let sl0 = gget (M.vprop_of_list vs)        in
+        (**) let l0  : M.sl_list vs = M.vpl_sels vs sl0 in
+        (**) assert (M.vpl_sels _ sl1_t === filter_mask_dl mask _ l0);
+        (**) assert (M.vpl_sels _ sl1_f === filter_mask_dl (Msk.mask_not mask) _ l0)
 #pop-options
 
-#push-options "--z3rlimit 20"
-let rec cond_sol_inj_eq (#a : Type) (#all : bool) (#src #trg : list a) (sl : cond_sol all src trg)
-      (i : Fin.fin (len src))
-  : Lemma (ensures L.index trg (L.index (cond_sol_inj sl) i) == L.index src i)
-          (decreases sl)
-  = match sl with
-  | CSeq  _ _ | CSnil _ -> ()
-  | CSinj all src trg ij sl' ->
-          let inj' = cond_sol_inj sl'         in
-          let mask_src = ij_src_mask ij       in
-          let mask_trg = ij_trg_mask ij       in
-          let y = L.index (cond_sol_inj sl) i in
-          if L.index mask_src i
-          then begin
-            let i' = mask_push mask_src i in
-            assert (y = mask_pull mask_trg (L.index inj' i'));
-            calc (==) {
-              L.index trg y;
-            == { mask_push_pull mask_trg (L.index inj' i');
-                 filter_mask_push mask_trg y trg }
-              L.index (filter_mask mask_trg trg) (L.index inj' i');
-            == { cond_sol_inj_eq sl' i' }
-              L.index (filter_mask mask_src src) i';
-            == { filter_mask_push mask_src i src }
-              L.index src i;
-            }
-          end
-#pop-options
-
-
-#push-options "--z3rlimit 30"
-let cond_sol_bij_spec (#a : Type) (#all : bool) (#src #trg : list a) (sl : cond_sol all src trg)
-  : Lemma (len src + len (cond_sol_unmatched sl) = len trg /\
-           Perm.injective (cond_sol_bij sl) /\
-           L.(src @ cond_sol_unmatched_v sl) == Perm.apply_perm_r (Perm.mk_perm_f (len trg) (cond_sol_bij sl)) trg)
+#push-options "--ifuel 1 --fuel 1 --z3rlimit 100"
+let vequiv_inj_g_lemma #src #trg ij e'
+      (sl0 : M.sl_f trg) (sl1 : M.sl_f src)
+  : Lemma (requires filter_mask_fl (mask_not (ij_src_mask ij)) _ sl1
+                      == M.extract_vars (ij_matched_equiv ij) (filter_mask_fl (mask_not (ij_trg_mask ij)) _ sl0) /\
+                    M.veq_sel_eq e'.M.veq_eq (filter_mask_fl (ij_trg_mask ij) _ sl0)
+                                             (filter_mask_fl (ij_src_mask ij) _ sl1))
+          (ensures  M.veq_sel_eq (vequiv_inj_eq #src #trg ij e') sl0 sl1)
   =
-    let src_l = len src               in
-    let trg_l = len trg               in
-    let ij    = cond_sol_inj sl       in
-    let um    = cond_sol_unmatched sl in
-    let um_l  = len um                in
-    let f     = cond_sol_bij sl       in
-    
-    Perm.injectiveI #(Fin.fin (src_l + um_l)) f (fun i i' ->
-      let j = cond_sol_bij sl i in
-      match (i < src_l), (i' < src_l) with
-      | true,  true  -> cond_sol_inj_injective sl i i'
-      | false, false -> cond_sol_unmatched_injective sl
-      | true,  false -> L.lemma_index_memP ij i;
-                       L.lemma_index_memP um (i' - src_l);
-                       cond_sol_inj_unmatched sl j
-      | false, true  -> L.lemma_index_memP ij i';
-                       L.lemma_index_memP um (i - src_l);
-                       cond_sol_inj_unmatched sl j);
-    
-    Perm.surjectiveI #(Fin.fin (src_l + um_l)) #(Fin.fin trg_l) f
-      (fun j -> if L.mem j ij
-             then Ll.mem_findi j ij
-             else (
-               cond_sol_inj_unmatched sl j;
-               src_l + Ll.mem_findi j um
-             ));
-
-    Perm.fin_injective_le  (src_l + um_l) trg_l f;
-    Perm.fin_surjective_ge (src_l + um_l) trg_l f;
-    
-    Ll.list_extensionality L.(src @ cond_sol_unmatched_v sl)
-                           (Perm.apply_perm_r (Perm.mk_perm_f (len trg) (cond_sol_bij sl)) trg)
-    begin fun (i : Fin.fin (src_l + um_l)) ->
-      Ll.append_index src (cond_sol_unmatched_v sl) i;
-      if i < src_l then cond_sol_inj_eq sl i
+    let mask_src = ij_src_mask ij  in
+    let mask_trg = ij_trg_mask ij  in
+    let f_eq = vequiv_inj_eq ij e' in
+    introduce forall (i0 : Fin.fin (len src) {Some? (f_eq i0)}) . sl1 i0 === sl0 (Some?.v (f_eq i0))
+    with begin
+      if L.index mask_src i0
+      then begin
+        let i1 = mask_push mask_src i0  in
+        let j1 = Some?.v (e'.veq_eq i1) in
+        let j0 = mask_pull mask_trg j1  in
+        assert (f_eq i0 == Some (j0 <: Fin.fin (len trg)));
+        assert (sl1 i0 === filter_mask_fl (ij_src_mask ij) _ sl1 i1);
+        assert (filter_mask_fl (ij_src_mask ij) _ sl1 i1 === filter_mask_fl (ij_trg_mask ij) _ sl0 j1);
+        assert (filter_mask_fl (ij_trg_mask ij) _ sl0 j1 === sl0 j0)
+      end else begin
+        assert (f_eq i0 == L.index ij i0);
+        let sl0' = filter_mask_fl (mask_not mask_trg) _ sl0 in
+        let j0 = Some?.v (L.index ij i0) in
+        (**) L.lemma_index_memP ij i0;
+        let i1 = mask_push (mask_not mask_src) i0 in
+        let j1 = mask_push (mask_not mask_trg) j0 in
+        assert (sl1 i0 === filter_mask_fl (mask_not mask_src) _ sl1 i1);
+        assert (filter_mask_fl (mask_not mask_src) _ sl1 i1 == M.extract_vars (ij_matched_equiv ij) sl0' i1);
+        assert (M.extract_vars (ij_matched_equiv ij) sl0' i1 === sl0' (ij_matched_equiv ij i1));
+        assert (ij_matched_equiv ij i1 == j1);
+        assert (sl0' j1 === sl0 j0)
+      end
     end
 #pop-options
+
+#push-options "--ifuel 0 --fuel 1"
+let vequiv_inj_g #src #trg ij e' opened
+  =
+    (**) let sl0 = gget (M.vprop_of_list trg) in
+    intro_filter_mask trg (ij_trg_mask ij);
+    (**) Msk.filter_mask_f_dl_f (ij_trg_mask ij) _ (M.vpl_sels_f _ sl0);
+    (**) Msk.filter_mask_f_dl_f (mask_not (ij_trg_mask ij)) _ (M.vpl_sels_f _ sl0);
+    e'.veq_g opened;
+    M.steel_change_perm (ij_matched_equiv ij);
+    elim_filter_mask src (ij_src_mask ij);
+    (**) let sl1 = gget (M.vprop_of_list src) in
+    (**) Msk.filter_mask_f_dl_f (ij_src_mask ij) _ (M.vpl_sels_f _ sl1);
+    (**) Msk.filter_mask_f_dl_f (mask_not (ij_src_mask ij)) _ (M.vpl_sels_f _ sl1);
+    (**) vequiv_inj_g_lemma ij e' (M.vpl_sels_f trg sl0) (M.vpl_sels_f src sl1)
+#pop-options
+
+
+let extend_partial_injection_src #a (#src #trg : list a) (ij : partial_injection src trg) (src_add : list a)
+  : Lemma (Msk.filter_mask (ij_src_mask (extend_partial_injection ij src_add)) L.(src@src_add)
+        == L.append (Msk.filter_mask (ij_src_mask ij) src) src_add)
+  =
+    let f_add = L.map (fun _ -> None) src_add in
+    let m_add = ij_src_mask #(len src_add) f_add in
+    Ll.map_append None? ij f_add;
+    Msk.filter_mask_append (ij_src_mask ij) m_add src src_add;
+    Msk.filter_mask_true m_add src_add (fun i -> ())
+
+let extend_partial_injection_trg #a (#src #trg : list a) (ij : partial_injection src trg) (src_add : list a)
+  : Lemma (Msk.filter_mask (ij_trg_mask (extend_partial_injection ij src_add)) trg
+        == Msk.filter_mask (ij_trg_mask ij) trg)
+  = 
+    let f_add = L.map (fun _ -> None) src_add in
+    Ll.list_extensionality (ij_trg_mask (extend_partial_injection ij src_add)) (ij_trg_mask ij) (fun j ->
+      L.append_mem ij f_add (Some j);
+      if L.mem (Some j) f_add then (
+        let i = Ll.mem_findi (Some j) f_add in
+        false_elim ()
+    ))

@@ -170,13 +170,11 @@ let __normal_SF : list norm_step = [
               `%Perm.perm_f_swap; `%Perm.perm_f_transpose; `%Perm.perm_f_of_pair;
               `%Perm.mk_perm_f; `%Perm.id_n; `%Perm.perm_f_of_list;
               `%ST.sequiv_of_vequiv;
-              `%M.Mkvequiv?.veq_req; `%M.Mkvequiv?.veq_ens; `%M.Mkvequiv?.veq_eq; `%M.vequiv_id; `%M.veq_of_list;
-              `%M.mk_veq_eq;
               `%ST.Mksequiv?.seq_req; `%ST.Mksequiv?.seq_ens; `%ST.Mksequiv?.seq_eq;
               `%ST.seq_ens1
               ]));
   delta_qualifier ["unfold"];
-  delta_attr [`%U.__util_func__];
+  delta_attr [`%U.__util_func__; `%M.__vequiv__];
   iota; zeta; primops
 ]
 

@@ -12,10 +12,10 @@ type ty_list = list Type
 
 noeq
 type dlist : ty_list -> Type =
-  | DNil : dlist []
+  | DNil  : dlist []
   | DCons : (t0 : Type) -> (x0 : t0) ->
-             (ts : ty_list) -> (xs : dlist ts) ->
-             dlist (t0 :: ts)
+            (ts : ty_list) -> (xs : dlist ts) ->
+            dlist (t0 :: ts)
 
 
 let rec index (#ts : ty_list) (xs : dlist ts) (i : Fin.fin (L.length ts))

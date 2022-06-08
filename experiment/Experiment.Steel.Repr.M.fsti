@@ -7,6 +7,7 @@ module Fl   = Learn.FList
 module Ll   = Learn.List
 module SE   = Steel.Effect
 module SH   = Experiment.Steel.SteelHack
+module Opt  = Learn.Option
 module Mem  = Steel.Memory
 module Perm = Learn.Permutation
 module FExt = FStar.FunctionalExtensionality
@@ -256,8 +257,11 @@ val steel_intro_vprop_of_list_append_f (#opened : Mem.inames) (vs0 vs1 : vprop_l
 
 (***** [vequiv] *)
 
+irreducible let __vequiv__ : unit = ()
+
 type veq_eq_t (pre_n post_n : nat) = FExt.(Fin.fin post_n ^-> option (Fin.fin pre_n))
 
+[@@__vequiv__]
 noextract
 let mk_veq_eq (pre_n post_n : nat) (f : Fin.fin post_n -> option (Fin.fin pre_n))
   : veq_eq_t pre_n post_n
@@ -265,9 +269,11 @@ let mk_veq_eq (pre_n post_n : nat) (f : Fin.fin post_n -> option (Fin.fin pre_n)
 
 let veq_eq_t_list (pre_n post_n : nat) = L.llist (option (Fin.fin pre_n)) post_n
 
+[@@__vequiv__]
 let veq_to_list (#pre_n #post_n : nat) (f : veq_eq_t pre_n post_n) : veq_eq_t_list pre_n post_n =
   Ll.initi 0 post_n f
 
+[@@__vequiv__]
 noextract
 let veq_of_list (#pre_n #post_n : nat) (l : veq_eq_t_list pre_n post_n) : veq_eq_t pre_n post_n =
   FExt.on (Fin.fin post_n) (L.index l)
@@ -282,12 +288,20 @@ let veq_to_of_list #pre_n #post_n (l : veq_eq_t_list pre_n post_n)
           [SMTPat (veq_to_list (veq_of_list l))]
   = Ll.list_extensionality (veq_to_list (veq_of_list l)) l (fun _ -> ())
 
+[@@__vequiv__]
 let veq_list_eq (#pre_n #post_n : nat) : U.eq_dec (veq_eq_t_list pre_n post_n)
   = Ll.list_eq (Learn.Option.opt_eq (fun x y -> x = y))
 
+// We only requires the equality of the types, we could require the equality of the vprop' ?
 let veq_typ_eq (pre post : Fl.ty_list) (f_eq : veq_eq_t (L.length pre) (L.length post))
   : prop
   = forall (i : Fin.fin (L.length post) {Some? (f_eq i)}) . L.index post i == L.index pre (Some?.v (f_eq i))
+
+let elim_veq_typ_eq (#pre #post : Fl.ty_list) (#f_eq : veq_eq_t (L.length pre) (L.length post))
+                    ($h : squash (veq_typ_eq pre post f_eq)) (i : Fin.fin (L.length post))
+  : Lemma (requires Some? (f_eq i))
+          (ensures  L.index post i == L.index pre (Some?.v (f_eq i)))
+  = ()
 
 let veq_sel_eq (#pre #post : vprop_list) (f_eq : veq_eq_t (L.length pre) (L.length post))
                (sl0 : sl_f pre) (sl1 : sl_f post)
@@ -295,6 +309,7 @@ let veq_sel_eq (#pre #post : vprop_list) (f_eq : veq_eq_t (L.length pre) (L.leng
   = forall (i : Fin.fin (L.length post) {Some? (f_eq i)}) . sl1 i === sl0 (Some?.v (f_eq i))
 
 // Should we allow post to depend on some returned variables ? It could be useful to destruct [vdep]
+[@@__vequiv__]
 noeq
 type vequiv (pre post : vprop_list) = {
   veq_req : sl_f pre -> Type0;
@@ -309,16 +324,28 @@ type vequiv (pre post : vprop_list) = {
                                      veq_sel_eq veq_eq (sel pre h0) (sel post h1))
 }
 
+[@@__vequiv__]
 let veq_ens1 (#pre #post : vprop_list) (veq : vequiv pre post) (sl0 : sl_f pre) (sl1 : sl_f post) : prop
   = veq.veq_ens sl0 sl1 /\ veq_sel_eq veq.veq_eq sl0 sl1
 
 
-let vequiv_id (v : vprop_list) : vequiv v v = {
+[@@__vequiv__]
+let vequiv_refl (v : vprop_list) : vequiv v v = {
   veq_req = (fun _ -> True);
   veq_ens = (fun _ _ -> True);
   veq_eq  = mk_veq_eq (L.length v) (L.length v) (fun i -> Some i);
   veq_typ = ();
   veq_g   = (fun opened -> noop ())
+}
+
+// TODO: quantify only on the selectors without [veq_eq], remove useless [veq_sel_eq]
+[@@__vequiv__]
+let vequiv_trans (#v0 #v1 #v2 : vprop_list) (e0 : vequiv v0 v1) (e1 : vequiv v1 v2) : vequiv v0 v2 = {
+  veq_req = (fun sl0 -> e0.veq_req sl0 /\ (forall (sl1 : sl_f v1) . veq_ens1 e0 sl0 sl1 ==> e1.veq_req sl1));
+  veq_ens = (fun sl0 sl2 -> exists (sl1 : sl_f v1) . veq_ens1 e0 sl0 sl1 /\ veq_ens1 e1 sl1 sl2);
+  veq_eq  = mk_veq_eq (L.length v0) (L.length v2) (fun i2 -> Opt.bind (e1.veq_eq i2) e0.veq_eq);
+  veq_typ = ();
+  veq_g   = (fun opened -> e0.veq_g opened; e1.veq_g opened)
 }
 
 (***** [vequiv_perm] *)
@@ -354,11 +381,12 @@ let extract_vars_sym_l (#vs0 #vs1 : vprop_list) (f : vequiv_perm vs0 vs1) (xs : 
 
 /// applying a permutation on the context's vprop
 
-val steel_change_vequiv (#vs0 #vs1 : vprop_list) (#opened:Mem.inames) (f : vequiv_perm vs0 vs1)
+val steel_change_perm (#vs0 #vs1 : vprop_list) (#opened:Mem.inames) (f : vequiv_perm vs0 vs1)
   : SteelGhost unit opened (vprop_of_list vs0) (fun () -> vprop_of_list vs1)
       (requires fun _ -> True)
       (ensures fun h0 () h1 -> sel_f vs1 h1 == extract_vars f (sel_f vs0 h0))
 
+[@@__vequiv__]
 let vequiv_of_perm_eq (#pre #post : vprop_list) (f : vequiv_perm pre post)
   : veq_eq_t (L.length pre) (L.length post)
   = mk_veq_eq (L.length pre) (L.length post) (fun i -> Some (f i))
@@ -368,6 +396,7 @@ val vequiv_of_perm_g (#pre #post : vprop_list) (f : vequiv_perm pre post) (opene
       (requires fun _ -> True)
       (ensures  fun h0 () h1 -> veq_sel_eq (vequiv_of_perm_eq f) (sel pre h0) (sel post h1))
 
+[@@__vequiv__]
 let vequiv_of_perm (#pre #post : vprop_list) (f : vequiv_perm pre post) : vequiv pre post = {
   veq_req = (fun (_ : sl_f pre) -> True);
   veq_ens = (fun (_ : sl_f pre) (_ : sl_f post) -> True);

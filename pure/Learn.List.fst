@@ -10,6 +10,8 @@ module Tuq = Learn.Tactics.Unsquash
 module Fin = FStar.Fin
 
 
+type vec (n : nat) (a : Type) = llist a n
+
 let list_extensionality (#a : Type)
       (l0 : list a) (l1 : list a {length l1 = length l0})
       (pf : (i : nat {i < length l0}) -> squash (index l0 i == index l1 i))
