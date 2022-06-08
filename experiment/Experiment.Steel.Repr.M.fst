@@ -342,6 +342,93 @@ let steel_intro_vprop_of_list_append_f #opened (vs0 vs1 : vprop_list)
     Fl.splitAt_ty_of_d (vprop_list_sels_t vs0) (vprop_list_sels_t vs1) (vpl_sels L.(vs0 @ vs1) sl);
     Fl.splitAt_ty_append (vprop_list_sels_t vs0) (vprop_list_sels_t vs1) (vpl_sels_f L.(vs0 @ vs1) sl)
 
+(**** [vequiv] *)
+
+let rec veq_sel_eq_eff_aux_sound
+      (#pre #post : Fl.ty_list) (f_eq : veq_eq_t (L.length pre) (L.length post))
+      (sl0 : Fl.flist pre) (sl1 : Fl.flist post) (i : nat)
+  : Lemma (requires veq_typ_eq pre post f_eq)
+          (ensures  veq_sel_eq_eff_aux f_eq sl0 sl1 i <==>
+                   (forall (j : Fin.fin (L.length post) {Some? (f_eq j)}) . i <= j ==> sl1 j === sl0 (Some?.v (f_eq j))))
+          (decreases L.length post - i)
+  = if i < L.length post then veq_sel_eq_eff_aux_sound f_eq sl0 sl1 (i+1)
+
+let veq_sel_eq_eff_sound
+      (#pre #post : Fl.ty_list) (f_eq : veq_eq_t (L.length pre) (L.length post))
+      (sl0 : Fl.flist pre) (sl1 : Fl.flist post)
+  : Lemma (requires veq_typ_eq pre post f_eq)
+          (ensures  veq_sel_eq_eff f_eq sl0 sl1 <==> veq_sel_eq f_eq sl0 sl1)
+  = veq_sel_eq_eff_aux_sound f_eq sl0 sl1 0
+
+#push-options "--z3rlimit 10"
+let veq_sel_eq_iff_partial_eq
+      (#pre #post : Fl.ty_list) (l_eq : veq_eq_t_list (L.length pre) (L.length post))
+      (sl0 : Fl.flist pre) (sl1 : Fl.flist post)
+  = ()
+#pop-options
+
+let vequiv_trans_eq1_restr_typ (#v0 #v1 #v2 : vprop_list) (e0 : vequiv v0 v1) (e1 : vequiv v1 v2)
+  : Lemma (requires veq_typ_eq (vprop_list_sels_t v1) (vprop_list_sels_t v2) (veq_eq_sl (veq_f e1)))
+          (ensures  veq_typ_eq (vprop_list_sels_t v1) (vprop_list_sels_t v2)
+                          (veq_eq_sl (veq_of_list (vequiv_trans_eq1_restr e0 e1))))
+  =
+    let f_eq = veq_eq_sl (veq_of_list (vequiv_trans_eq1_restr e0 e1)) in
+    introduce forall (i : Fin.fin (L.length v2) {Some? (f_eq i)}) .
+                  (L.index v2 i).t == (L.index v1 (Some?.v (f_eq i))).t
+      with assert (f_eq i == vequiv_trans_eq1_restr_f e0 (L.index e1.veq_eq i))
+
+let vequiv_trans_req_iff (#v0 #v1 #v2 : vprop_list) (e0 : vequiv v0 v1) (e1 : vequiv v1 v2)
+                         (sl0 : sl_f v0)
+  : Lemma (vequiv_trans_req e0 e1 sl0 <==>
+            (e0.veq_req sl0 /\ (forall (sl1 : sl_f v1) . veq_ens1 e0 sl0 sl1 ==> e1.veq_req sl1)))
+  =
+    let p_eq = veq_partial_eq e0.veq_eq sl0 in
+    let p (sl1 : sl_f v1) = e0.veq_ens sl0 sl1 ==> e1.veq_req sl1 in
+    calc (<==>) {
+      vequiv_trans_req e0 e1 sl0;
+    <==> { assert (vequiv_trans_req e0 e1 sl0 == (e0.veq_req sl0 /\ Fl.forall_flist_part _ p_eq p))
+             by (T.trefl ()) }
+      e0.veq_req sl0 /\ Fl.forall_flist_part _ p_eq p;
+    <==> { Fl.forall_flist_part_iff _ p_eq p }
+      e0.veq_req sl0 /\ (forall (sl1 : sl_f v1 {Fl.partial_eq sl1 p_eq}) . p sl1);
+    <==> { FStar.Classical.forall_intro (FStar.Classical.move_requires
+           (veq_sel_eq_iff_partial_eq #(vprop_list_sels_t v0) #(vprop_list_sels_t v1) e0.veq_eq sl0)) }
+      e0.veq_req sl0 /\ (forall (sl1 : sl_f v1 {veq_sel_eq (veq_eq_sl (veq_of_list e0.veq_eq)) sl0 sl1}) . p sl1);
+    <==> { }
+      e0.veq_req sl0 /\ (forall (sl1 : sl_f v1) . veq_ens1 e0 sl0 sl1 ==> e1.veq_req sl1);
+    }
+
+let vequiv_trans_ens_imp (#v0 #v1 #v2 : vprop_list) (e0 : vequiv v0 v1) (e1 : vequiv v1 v2)
+                         (sl0 : sl_f v0) (sl2 : sl_f v2)
+  : Lemma ((exists (sl1 : sl_f v1) . veq_ens1 e0 sl0 sl1 /\ veq_ens1 e1 sl1 sl2)
+            ==> vequiv_trans_ens e0 e1 sl0 sl2)
+  =
+    e1.veq_typ;
+    vequiv_trans_eq1_restr_typ e0 e1;
+    let f_eq = veq_eq_sl (veq_of_list (vequiv_trans_eq1_restr e0 e1)) in
+    let p_eq = veq_partial_eq e0.veq_eq sl0                           in
+    let p1 (sl1 : sl_f v1) = e1.veq_ens sl1 sl2                       in
+    let p2 (sl1 : sl_f v1) = veq_sel_eq_eff f_eq sl1 sl2              in
+    let p  (sl1 : sl_f v1) = e0.veq_ens sl0 sl1 /\ p1 sl1 /\ p2 sl1    in
+    calc (<==>) {
+      vequiv_trans_ens e0 e1 sl0 sl2;
+    <==> { assert (vequiv_trans_ens e0 e1 sl0 sl2 == Fl.exists_flist_part _ p_eq p)
+             by (T.trefl ()) }
+      Fl.exists_flist_part _ p_eq p;
+    <==> { Fl.exists_flist_part_iff _ p_eq p }
+      exists (sl1 : sl_f v1 {Fl.partial_eq sl1 p_eq}) . p sl1;
+    <==> { FStar.Classical.forall_intro (FStar.Classical.move_requires
+           (veq_sel_eq_iff_partial_eq #(vprop_list_sels_t v0) #(vprop_list_sels_t v1) e0.veq_eq sl0)) }
+      exists (sl1 : sl_f v1) . (veq_sel_eq (veq_eq_sl (veq_of_list e0.veq_eq)) sl0 sl1 /\ p sl1);
+    <==> { }
+      exists (sl1 : sl_f v1) . veq_ens1 e0 sl0 sl1 /\ p1 sl1 /\ p2 sl1;
+    <==> { FStar.Classical.forall_intro_2 (FStar.Classical.move_requires_2 (veq_sel_eq_eff_sound f_eq)) }
+      exists (sl1 : sl_f v1) . veq_ens1 e0 sl0 sl1 /\ e1.veq_ens sl1 sl2 /\ veq_sel_eq f_eq sl1 sl2;
+    };
+    introduce forall (sl1 : sl_f v1 { veq_ens1 e1 sl1 sl2 }) . veq_sel_eq f_eq sl1 sl2
+      with introduce forall (i : Fin.fin (L.length v2) {Some? (f_eq i)}) . sl2 i === sl1 (Some?.v (f_eq i))
+      with assert (f_eq i == vequiv_trans_eq1_restr_f e0 (L.index e1.veq_eq i))
+
 
 (***** applying a permutation on the context's vprop *)
 

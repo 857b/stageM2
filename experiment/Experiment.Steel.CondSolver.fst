@@ -244,22 +244,22 @@ let vequiv_inj_typ
       (ij : partial_injection src trg)
       (e' : M.vequiv (filter_mask (ij_trg_mask ij) trg) (filter_mask (ij_src_mask ij) src))
   : squash (M.veq_typ_eq (M.vprop_list_sels_t trg) (M.vprop_list_sels_t src)
-                         (U.cast _ (vequiv_inj_eq ij e')))
+                         (U.cast _ (M.veq_of_list (vequiv_inj_eq ij e'))))
   =
-    let mask_src = ij_src_mask ij       in
-    let mask_trg = ij_trg_mask ij       in
-    let src' = filter_mask mask_src src in
-    let trg' = filter_mask mask_trg trg in
-    let f_eq = vequiv_inj_eq ij e'      in
+    let mask_src = ij_src_mask ij                  in
+    let mask_trg = ij_trg_mask ij                  in
+    let src' = filter_mask mask_src src            in
+    let trg' = filter_mask mask_trg trg            in
+    let f_eq = M.veq_of_list (vequiv_inj_eq ij e') in
     introduce forall (i : Fin.fin (len src) {Some? (f_eq i)}) . (L.index src i).t == (L.index trg (Some?.v (f_eq i))).t
       with if L.index mask_src i
       then begin
         calc (==) {
           (L.index trg (Some?.v (f_eq i))).t;
         == {}
-          (L.index trg (mask_pull mask_trg (Some?.v (e'.veq_eq (mask_push mask_src i))))).t;
-        == {}
-          (L.index trg' (Some?.v (e'.veq_eq (mask_push mask_src i)))).t;
+          (L.index trg (mask_pull mask_trg (Some?.v (M.veq_f e' (mask_push mask_src i))))).t;
+        == { }
+          (L.index trg' (Some?.v (M.veq_f e' (mask_push mask_src i)))).t;
         == { M.elim_veq_typ_eq e'.veq_typ (mask_push mask_src i)}
           (L.index src' (mask_push mask_src i)).t;
         == { }
@@ -367,24 +367,24 @@ let rec elim_filter_mask #opened (vs : M.vprop_list) (mask : Ll.vec (L.length vs
         (**) assert (M.vpl_sels _ sl1_f === filter_mask_dl (Msk.mask_not mask) _ l0)
 #pop-options
 
-#push-options "--ifuel 1 --fuel 1 --z3rlimit 100"
+#push-options "--ifuel 1 --fuel 1 --z3rlimit 200"
 let vequiv_inj_g_lemma #src #trg ij e'
       (sl0 : M.sl_f trg) (sl1 : M.sl_f src)
   : Lemma (requires filter_mask_fl (mask_not (ij_src_mask ij)) _ sl1
                       == M.extract_vars (ij_matched_equiv ij) (filter_mask_fl (mask_not (ij_trg_mask ij)) _ sl0) /\
-                    M.veq_sel_eq e'.M.veq_eq (filter_mask_fl (ij_trg_mask ij) _ sl0)
-                                             (filter_mask_fl (ij_src_mask ij) _ sl1))
-          (ensures  M.veq_sel_eq (vequiv_inj_eq #src #trg ij e') sl0 sl1)
+                    M.veq_sel_eq (M.veq_eq_sl (M.veq_f e')) (filter_mask_fl (ij_trg_mask ij) _ sl0)
+                                                            (filter_mask_fl (ij_src_mask ij) _ sl1))
+          (ensures  M.veq_sel_eq (M.veq_eq_sl (M.veq_of_list (vequiv_inj_eq #src #trg ij e'))) sl0 sl1)
   =
-    let mask_src = ij_src_mask ij  in
-    let mask_trg = ij_trg_mask ij  in
-    let f_eq = vequiv_inj_eq ij e' in
+    let mask_src = ij_src_mask ij                  in
+    let mask_trg = ij_trg_mask ij                  in
+    let f_eq = M.veq_of_list (vequiv_inj_eq ij e') in
     introduce forall (i0 : Fin.fin (len src) {Some? (f_eq i0)}) . sl1 i0 === sl0 (Some?.v (f_eq i0))
     with begin
       if L.index mask_src i0
       then begin
         let i1 = mask_push mask_src i0  in
-        let j1 = Some?.v (e'.veq_eq i1) in
+        let j1 = Some?.v (M.veq_f e' i1) in
         let j0 = mask_pull mask_trg j1  in
         assert (f_eq i0 == Some (j0 <: Fin.fin (len trg)));
         assert (sl1 i0 === filter_mask_fl (ij_src_mask ij) _ sl1 i1);

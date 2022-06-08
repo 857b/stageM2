@@ -533,7 +533,6 @@ let _ = assert (U.print_util test_inj)
 /// The order of the arguments is reversed since we build an injection ([M.veq_eq]) from [src] to [trg].
 /// If [all] is not set, we allow some elements of [trg] to be left unmatched. In that case [src] needs to be
 /// completed with [src_add] in order to obtain a [M.vequiv].
-// TODO? represent veq.veq_eq with a list
 [@@ __cond_solver__]
 noeq
 type vequiv_sol : (all : bool) -> (src : M.vprop_list) -> (trg : M.vprop_list) -> Type =
@@ -627,21 +626,20 @@ let vequiv_inj_eq
       (#src #trg : M.vprop_list)
       (ij : partial_injection src trg)
       (e' : M.vequiv (Msk.filter_mask (ij_trg_mask ij) trg) (Msk.filter_mask (ij_src_mask ij) src))
-  : M.veq_eq_t (len trg) (len src)
+  : M.veq_eq_t_list (len trg) (len src)
   =
     let mask_src = ij_src_mask ij in
     let mask_trg = ij_trg_mask ij in
-    M.mk_veq_eq (len trg) (len src) (L.index
-        (Msk.merge_fun_on_mask mask_src #(option (Fin.fin (len trg)))
-        (fun _ j -> Opt.map (Msk.mask_pull mask_trg) (e'.veq_eq j))
-        (fun i   -> L.index ij i)))
+    Msk.merge_fun_on_mask mask_src #(option (Fin.fin (len trg)))
+        (fun _ j -> Opt.map (Msk.mask_pull mask_trg) (M.veq_f e' j))
+        (fun i   -> L.index ij i)
 
 val vequiv_inj_typ
       (#src #trg : M.vprop_list)
       (ij : partial_injection src trg)
       (e' : M.vequiv (Msk.filter_mask (ij_trg_mask ij) trg) (Msk.filter_mask (ij_src_mask ij) src))
   : squash (M.veq_typ_eq (M.vprop_list_sels_t trg) (M.vprop_list_sels_t src)
-                         (U.cast _ (vequiv_inj_eq ij e')))
+                         (U.cast _ (M.veq_of_list (vequiv_inj_eq ij e'))))
 
 val vequiv_inj_g
       (#src #trg : M.vprop_list)
@@ -654,7 +652,7 @@ val vequiv_inj_g
       (ensures  fun h0 () h1 ->
                  e'.veq_ens (Msk.filter_mask_fl (ij_trg_mask ij) _ (M.sel trg h0))
                             (Msk.filter_mask_fl (ij_src_mask ij) _ (M.sel src h1)) /\
-                 M.veq_sel_eq (vequiv_inj_eq ij e') (M.sel trg h0) (M.sel src h1))
+                 M.veq_sel_eq (M.veq_eq_sl (M.veq_of_list (vequiv_inj_eq ij e'))) (M.sel trg h0) (M.sel src h1))
 
 [@@ __cond_solver__]
 let vequiv_inj
@@ -671,7 +669,7 @@ let vequiv_inj
     veq_ens = (fun (sl0 : M.sl_f trg) (sl1 : M.sl_f src) ->
                  e'.veq_ens (Msk.filter_mask_fl mask_trg _ sl0) (Msk.filter_mask_fl mask_src _ sl1));
     veq_eq  = vequiv_inj_eq  ij e';
-    veq_typ = vequiv_inj_typ ij e';
+    veq_typ = (let _ = vequiv_inj_typ ij e' in ());
     veq_g   = vequiv_inj_g   ij e';
   }
 
@@ -767,20 +765,6 @@ let _ = assert (U.print_util (fun v -> vequiv_sol_prt (test_vequiv_sol v)))
 ///   [post] can be an uvar
 /// - returns the shape of the program as a [pre_shape_tree]
 
-
-let delayed_veq_of_list (#pre_n #post_n : nat) (l : M.veq_eq_t_list pre_n post_n) : M.veq_eq_t pre_n post_n =
-  M.veq_of_list l
-
-[@@ __cond_solver__]
-let serialize_vequiv (#pre #post : M.vprop_list) (e : M.vequiv pre post) : M.vequiv pre post
-  =
-    let e_eq = M.veq_to_list e.veq_eq in
-    { e with veq_eq = delayed_veq_of_list e_eq }
-
-let serialize_vequiv_id (pre post : M.vprop_list) (e : M.vequiv pre post)
-  : Lemma (serialize_vequiv e == e) [SMTPat (serialize_vequiv e)]
-  = ()
-
 let normal_cond_solver : list norm_step = [
     delta_only [`%len; `%None?; `%op_Negation; `%Some?.v;
                 `%L.append; `%L.flatten; `%L.hd; `%L.index; `%L.length; `%L.map; `%L.mem; `%L.op_At; `%L.splitAt;
@@ -817,9 +801,8 @@ let tc_extract_nat () : Tac nat =
 
 [@@ __tac_helper__]
 private
-let __extract_veq_eq (#pre_n #post_n : nat) (f : Fin.fin post_n -> option (Fin.fin pre_n)) : Type
-  = extract_term #(list (option int)) (Ll.initi 0 post_n
-                  (fun i -> Opt.map (fun (i : Fin.fin pre_n) -> i <: int) (f i)))
+let __extract_veq_eq (#pre_n : nat) (l : list (option (Fin.fin pre_n))) : Type
+  = extract_term #(list (option int)) (L.map (Opt.map (fun (i : Fin.fin pre_n) -> i <: int)) l)
 
 [@@ __tac_helper__]
 private
@@ -921,7 +904,7 @@ let __build_TCspec_u
       tcs_pre     = pre';
       tcs_post    = (fun x -> L.(post x @ frame));
       tcs_frame   = frame;
-      tcs_pre_eq  = serialize_vequiv (vequiv_sol_prt cs0);
+      tcs_pre_eq  = vequiv_sol_prt cs0;
       tcs_post_eq = (fun x -> M.vequiv_refl L.(post x @ frame))
     })
 
@@ -944,8 +927,8 @@ let __build_TCspec_p
       tcs_pre     = pre';
       tcs_post    = post';
       tcs_frame   = VeqPrt?.unmatched cs0;
-      tcs_pre_eq  = serialize_vequiv (vequiv_sol_prt cs0);
-      tcs_post_eq = (fun x -> serialize_vequiv (vequiv_sol_all (cs1 x)))
+      tcs_pre_eq  = vequiv_sol_prt cs0;
+      tcs_post_eq = (fun x -> vequiv_sol_all (cs1 x))
     })
 
 // TODO? currently, one cannot factorize the tree_cond_spec part of TCspec & TCspecS
@@ -969,7 +952,7 @@ let __build_TCspecS_u
       tcs_pre     = pre';
       tcs_post    = (fun x -> L.(tr.r_post x @ frame));
       tcs_frame   = frame;
-      tcs_pre_eq  = serialize_vequiv (vequiv_sol_prt cs0);
+      tcs_pre_eq  = vequiv_sol_prt cs0;
       tcs_post_eq = (fun x -> M.vequiv_refl L.(tr.r_post x @ frame))
     })
 
@@ -993,8 +976,8 @@ let __build_TCspecS_p
       tcs_pre     = pre';
       tcs_post    = post';
       tcs_frame   = VeqPrt?.unmatched cs0;
-      tcs_pre_eq  = serialize_vequiv (vequiv_sol_prt cs0);
-      tcs_post_eq = (fun x -> serialize_vequiv (vequiv_sol_all (cs1 x)))
+      tcs_pre_eq  = vequiv_sol_prt cs0;
+      tcs_post_eq = (fun x -> vequiv_sol_all (cs1 x))
     })
 
 
@@ -1017,8 +1000,7 @@ let __build_TCret_u
 
   : M.tree_cond (M.Tret a x sl_hint) pre (fun x -> L.(sl_hint x @ VeqPrt?.unmatched cs))
   =
-    M.TCret pre (fun x -> L.(sl_hint x @ VeqPrt?.unmatched cs))
-            (serialize_vequiv (vequiv_sol_prt cs))
+    M.TCret pre (fun x -> L.(sl_hint x @ VeqPrt?.unmatched cs)) (vequiv_sol_prt cs)
 
 [@@ __tac_helper__]
 let __build_TCret_p
@@ -1031,7 +1013,7 @@ let __build_TCret_p
 
   : M.tree_cond (M.Tret a x sl_hint) pre post
   =
-    M.TCret #a #x pre post (serialize_vequiv (vequiv_sol_all cs))
+    M.TCret #a #x pre post (vequiv_sol_all cs)
 
 
 let build_TCspec fr (is_Steel : bool) (post : bool) : Tac shape_tree_t
@@ -1200,7 +1182,6 @@ let build_prog_cond fr : Tac unit
     // tc <- tc0
     unshelve tc_eq;
     norm_cond_sol ();
-    norm [delta_only [`%delayed_veq_of_list]];
     trefl ();
     // shp
     unshelve ushp;

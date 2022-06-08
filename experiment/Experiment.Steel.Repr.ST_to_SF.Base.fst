@@ -6,23 +6,6 @@ open FStar.Classical.Sugar
 open FStar.Calc
 
 
-let rec seq_sel_eq_eff_aux_sound
-      (#pre #post : Fl.ty_list) (f_eq : M.veq_eq_t (L.length pre) (L.length post))
-      (sl0 : Fl.flist pre) (sl1 : Fl.flist post) (i : nat)
-  : Lemma (requires M.veq_typ_eq pre post f_eq)
-          (ensures  seq_sel_eq_eff_aux f_eq sl0 sl1 i <==>
-                   (forall (j : Fin.fin (L.length post) {Some? (f_eq j)}) . i <= j ==> sl1 j === sl0 (Some?.v (f_eq j))))
-          (decreases L.length post - i)
-  = if i < L.length post then seq_sel_eq_eff_aux_sound f_eq sl0 sl1 (i+1)
-
-let seq_sel_eq_eff_sound
-      (#pre #post : Fl.ty_list) (f_eq : M.veq_eq_t (L.length pre) (L.length post))
-      (sl0 : Fl.flist pre) (sl1 : Fl.flist post)
-  : Lemma (requires M.veq_typ_eq pre post f_eq)
-          (ensures  seq_sel_eq_eff f_eq sl0 sl1 <==> ST.seq_sel_eq f_eq sl0 sl1)
-  = seq_sel_eq_eff_aux_sound f_eq sl0 sl1 0
-
-
 #push-options "--fuel 2 --z3rlimit 30"
 let rec repr_SF_of_ST_req
       (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
@@ -78,7 +61,7 @@ and repr_SF_of_ST_ens
   = ST.match_prog_tree t
     (fun a pre post t -> (sl0 : Fl.flist pre) -> (res : a) -> (sl1 : Fl.flist (post res)) ->
        squash (ST.tree_ens t sl0 res sl1 <==> tree_ens (repr_SF_of_ST t sl0) res sl1))
-    (fun (*ST.Tequiv*) pre post0 e -> fun sl0 res sl1 -> seq_sel_eq_eff_sound e.seq_eq sl0 sl1)
+    (fun (*ST.Tequiv*) pre post0 e -> fun sl0 res sl1 -> M.veq_sel_eq_eff_sound e.seq_eq sl0 sl1)
     begin fun (*ST.Tframe*) a pre post frame f -> fun sl0 x sl1 ->
       let sl0', sl_frame = Fl.splitAt_ty pre frame sl0 in
       calc (<==>) {

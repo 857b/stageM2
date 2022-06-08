@@ -261,13 +261,18 @@ irreducible let __vequiv__ : unit = ()
 
 type veq_eq_t (pre_n post_n : nat) = FExt.(Fin.fin post_n ^-> option (Fin.fin pre_n))
 
+unfold
+let veq_eq_sl (#pre #post : vprop_list) (e : veq_eq_t (L.length pre) (L.length post))
+  : veq_eq_t (L.length (vprop_list_sels_t pre)) (L.length (vprop_list_sels_t post))
+  = U.cast _ e
+
 [@@__vequiv__]
 noextract
 let mk_veq_eq (pre_n post_n : nat) (f : Fin.fin post_n -> option (Fin.fin pre_n))
   : veq_eq_t pre_n post_n
   = FExt.on (Fin.fin post_n) f
 
-let veq_eq_t_list (pre_n post_n : nat) = L.llist (option (Fin.fin pre_n)) post_n
+let veq_eq_t_list (pre_n post_n : nat) = Ll.vec post_n (option (Fin.fin pre_n))
 
 [@@__vequiv__]
 let veq_to_list (#pre_n #post_n : nat) (f : veq_eq_t pre_n post_n) : veq_eq_t_list pre_n post_n =
@@ -303,10 +308,48 @@ let elim_veq_typ_eq (#pre #post : Fl.ty_list) (#f_eq : veq_eq_t (L.length pre) (
           (ensures  L.index post i == L.index pre (Some?.v (f_eq i)))
   = ()
 
-let veq_sel_eq (#pre #post : vprop_list) (f_eq : veq_eq_t (L.length pre) (L.length post))
-               (sl0 : sl_f pre) (sl1 : sl_f post)
+let veq_sel_eq (#pre #post : Fl.ty_list) (f_eq : veq_eq_t (L.length pre) (L.length post))
+               (sl0 : Fl.flist pre) (sl1 : Fl.flist post)
   : prop
   = forall (i : Fin.fin (L.length post) {Some? (f_eq i)}) . sl1 i === sl0 (Some?.v (f_eq i))
+
+/// [veq_sel_eq] written with a conjunction instead of a forall
+// TODO take a [veq_eq_t_list] as argument
+let rec veq_sel_eq_eff_aux (#pre #post : Fl.ty_list) (f_eq : veq_eq_t (L.length pre) (L.length post))
+                           (sl0 : Fl.flist pre) (sl1 : Fl.flist post) (i : nat)
+  : Pure prop (requires veq_typ_eq pre post f_eq) (ensures fun _ -> True) (decreases L.length post - i)
+  = if i >= L.length post then True
+    else match f_eq i with
+    | None   -> veq_sel_eq_eff_aux f_eq sl0 sl1 (i+1)
+    | Some j -> sl1 i == U.cast _ (sl0 j) /\ veq_sel_eq_eff_aux f_eq sl0 sl1 (i+1)
+
+let veq_sel_eq_eff (#pre #post : Fl.ty_list) (f_eq : veq_eq_t (L.length pre) (L.length post))
+                   (sl0 : Fl.flist pre) (sl1 : Fl.flist post)
+  : Pure prop (requires veq_typ_eq pre post f_eq) (ensures fun _ -> True)
+  = veq_sel_eq_eff_aux f_eq sl0 sl1 0
+
+val veq_sel_eq_eff_sound
+      (#pre #post : Fl.ty_list) (f_eq : veq_eq_t (L.length pre) (L.length post))
+      (sl0 : Fl.flist pre) (sl1 : Fl.flist post)
+  : Lemma (requires veq_typ_eq pre post f_eq)
+          (ensures  veq_sel_eq_eff f_eq sl0 sl1 <==> veq_sel_eq f_eq sl0 sl1)
+
+
+let veq_partial_eq (#pre #post : Fl.ty_list) (l_eq : veq_eq_t_list (L.length pre) (L.length post))
+                   (sl0 : Fl.flist pre)
+  : Pure (Fl.partial_eq_t post)
+         (requires veq_typ_eq pre post (veq_of_list l_eq))
+         (ensures  fun _ -> True)
+  = Dl.initi_ty (L.map option post) (fun i ->
+       match L.index l_eq i returns option (L.index post i) with
+       | None   -> None
+       | Some j -> Some (U.cast _ (sl0 j)))
+
+val veq_sel_eq_iff_partial_eq
+      (#pre #post : Fl.ty_list) (l_eq : veq_eq_t_list (L.length pre) (L.length post))
+      (sl0 : Fl.flist pre) (sl1 : Fl.flist post)
+  : Lemma (requires veq_typ_eq pre post (veq_of_list l_eq))
+          (ensures  veq_sel_eq (veq_of_list l_eq) sl0 sl1 <==> Fl.partial_eq sl1 (veq_partial_eq l_eq sl0))
 
 // Should we allow post to depend on some returned variables ? It could be useful to destruct [vdep]
 [@@__vequiv__]
@@ -314,39 +357,90 @@ noeq
 type vequiv (pre post : vprop_list) = {
   veq_req : sl_f pre -> Type0;
   veq_ens : sl_f pre -> sl_f post -> Type0;
-  veq_eq  : veq_eq_t (L.length pre) (L.length post);
-  veq_typ : squash (veq_typ_eq (vprop_list_sels_t pre) (vprop_list_sels_t post) (U.cast _ veq_eq));
+  veq_eq  : veq_eq_t_list (L.length pre) (L.length post);
+  veq_typ : squash (veq_typ_eq (vprop_list_sels_t pre) (vprop_list_sels_t post) (veq_eq_sl (veq_of_list veq_eq)));
   veq_g   : (opened : Mem.inames) ->
             SteelGhost unit opened
               (vprop_of_list pre) (fun () -> vprop_of_list post)
               (requires fun h0 -> veq_req (sel pre h0))
               (ensures  fun h0 () h1 -> veq_ens (sel pre h0) (sel post h1) /\
-                                     veq_sel_eq veq_eq (sel pre h0) (sel post h1))
+                                     veq_sel_eq (veq_eq_sl (veq_of_list veq_eq)) (sel pre h0) (sel post h1))
 }
 
 [@@__vequiv__]
 let veq_ens1 (#pre #post : vprop_list) (veq : vequiv pre post) (sl0 : sl_f pre) (sl1 : sl_f post) : prop
-  = veq.veq_ens sl0 sl1 /\ veq_sel_eq veq.veq_eq sl0 sl1
+  = veq.veq_ens sl0 sl1 /\ veq_sel_eq (veq_eq_sl (veq_of_list veq.veq_eq)) sl0 sl1
 
+[@@__vequiv__]
+let veq_f (#pre #post : vprop_list) (veq : vequiv pre post) : veq_eq_t (L.length pre) (L.length post)
+  = veq_of_list veq.veq_eq
 
 [@@__vequiv__]
 let vequiv_refl (v : vprop_list) : vequiv v v = {
   veq_req = (fun _ -> True);
   veq_ens = (fun _ _ -> True);
-  veq_eq  = mk_veq_eq (L.length v) (L.length v) (fun i -> Some i);
+  veq_eq  = Ll.initi 0 (L.length v) (fun i -> Some (i <: Fin.fin (L.length v)));
   veq_typ = ();
   veq_g   = (fun opened -> noop ())
 }
 
-// TODO: quantify only on the selectors without [veq_eq], remove useless [veq_sel_eq]
+(****** [vequiv_trans] *)
+
+[@@__vequiv__]
+let vequiv_trans_req (#v0 #v1 #v2 : vprop_list) (e0 : vequiv v0 v1) (e1 : vequiv v1 v2)
+                     (sl0 : sl_f v0) : Type0
+  = e0.veq_req sl0 /\
+    Fl.forall_flist_part (vprop_list_sels_t v1) (veq_partial_eq e0.veq_eq sl0) (fun (sl1 : sl_f v1) ->
+      e0.veq_ens sl0 sl1 ==> e1.veq_req sl1)
+
+/// We need to enforce in [veq_ens] the equalities of [e1] that are not propagated by [e0].
+[@@__vequiv__]
+let vequiv_trans_eq1_restr_f (#v0 #v1 : vprop_list) (e0 : vequiv v0 v1)
+      (o : option (Fin.fin (L.length v1))) : option (Fin.fin (L.length v1))
+  = match o with
+  | Some j -> if None? (L.index e0.veq_eq j) then Some j else None
+  | None -> None
+
+[@@__vequiv__]
+let vequiv_trans_eq1_restr (#v0 #v1 #v2 : vprop_list) (e0 : vequiv v0 v1) (e1 : vequiv v1 v2)
+  : veq_eq_t_list (L.length v1) (L.length v2)
+  = L.map (vequiv_trans_eq1_restr_f e0) e1.veq_eq
+
+val vequiv_trans_eq1_restr_typ (#v0 #v1 #v2 : vprop_list) (e0 : vequiv v0 v1) (e1 : vequiv v1 v2)
+  : Lemma (requires veq_typ_eq (vprop_list_sels_t v1) (vprop_list_sels_t v2) (veq_eq_sl (veq_f e1)))
+          (ensures  veq_typ_eq (vprop_list_sels_t v1) (vprop_list_sels_t v2)
+                          (veq_eq_sl (veq_of_list (vequiv_trans_eq1_restr e0 e1))))
+
+[@@__vequiv__]
+let vequiv_trans_ens (#v0 #v1 #v2 : vprop_list) (e0 : vequiv v0 v1) (e1 : vequiv v1 v2)
+                     (sl0 : sl_f v0) (sl2 : sl_f v2) : Type0
+  = Fl.exists_flist_part (vprop_list_sels_t v1) (veq_partial_eq e0.veq_eq sl0) (fun (sl1 : sl_f v1) ->
+      e0.veq_ens sl0 sl1 /\ e1.veq_ens sl1 sl2 /\
+      (e1.veq_typ; vequiv_trans_eq1_restr_typ e0 e1;
+       veq_sel_eq_eff (veq_eq_sl (veq_of_list (vequiv_trans_eq1_restr e0 e1))) sl1 sl2))
+
+val vequiv_trans_req_iff (#v0 #v1 #v2 : vprop_list) (e0 : vequiv v0 v1) (e1 : vequiv v1 v2)
+                         (sl0 : sl_f v0)
+  : Lemma (vequiv_trans_req e0 e1 sl0 <==>
+            (e0.veq_req sl0 /\ (forall (sl1 : sl_f v1) . veq_ens1 e0 sl0 sl1 ==> e1.veq_req sl1)))
+
+val vequiv_trans_ens_imp (#v0 #v1 #v2 : vprop_list) (e0 : vequiv v0 v1) (e1 : vequiv v1 v2)
+                         (sl0 : sl_f v0) (sl2 : sl_f v2)
+  : Lemma ((exists (sl1 : sl_f v1) . veq_ens1 e0 sl0 sl1 /\ veq_ens1 e1 sl1 sl2)
+            ==> vequiv_trans_ens e0 e1 sl0 sl2)
+
 [@@__vequiv__]
 let vequiv_trans (#v0 #v1 #v2 : vprop_list) (e0 : vequiv v0 v1) (e1 : vequiv v1 v2) : vequiv v0 v2 = {
-  veq_req = (fun sl0 -> e0.veq_req sl0 /\ (forall (sl1 : sl_f v1) . veq_ens1 e0 sl0 sl1 ==> e1.veq_req sl1));
-  veq_ens = (fun sl0 sl2 -> exists (sl1 : sl_f v1) . veq_ens1 e0 sl0 sl1 /\ veq_ens1 e1 sl1 sl2);
-  veq_eq  = mk_veq_eq (L.length v0) (L.length v2) (fun i2 -> Opt.bind (e1.veq_eq i2) e0.veq_eq);
+  veq_req = vequiv_trans_req e0 e1;
+  veq_ens = vequiv_trans_ens e0 e1;
+  veq_eq  = veq_to_list (mk_veq_eq (L.length v0) (L.length v2)
+                      (fun i2 -> Opt.bind (veq_of_list e1.veq_eq i2) (veq_of_list e0.veq_eq)));
   veq_typ = ();
-  veq_g   = (fun opened -> e0.veq_g opened; e1.veq_g opened)
+  veq_g   = (FStar.Classical.forall_intro   (vequiv_trans_req_iff e0 e1);
+             FStar.Classical.forall_intro_2 (vequiv_trans_ens_imp e0 e1);
+            (fun opened -> e0.veq_g opened; e1.veq_g opened))
 }
+
 
 (***** [vequiv_perm] *)
 
@@ -394,13 +488,13 @@ let vequiv_of_perm_eq (#pre #post : vprop_list) (f : vequiv_perm pre post)
 val vequiv_of_perm_g (#pre #post : vprop_list) (f : vequiv_perm pre post) (opened : Mem.inames)
   : SteelGhost unit opened (vprop_of_list pre) (fun () -> vprop_of_list post)
       (requires fun _ -> True)
-      (ensures  fun h0 () h1 -> veq_sel_eq (vequiv_of_perm_eq f) (sel pre h0) (sel post h1))
+      (ensures  fun h0 () h1 -> veq_sel_eq (veq_eq_sl (vequiv_of_perm_eq f)) (sel pre h0) (sel post h1))
 
 [@@__vequiv__]
 let vequiv_of_perm (#pre #post : vprop_list) (f : vequiv_perm pre post) : vequiv pre post = {
   veq_req = (fun (_ : sl_f pre) -> True);
   veq_ens = (fun (_ : sl_f pre) (_ : sl_f post) -> True);
-  veq_eq  = vequiv_of_perm_eq f;
+  veq_eq  = veq_to_list (vequiv_of_perm_eq f);
   veq_typ = ();
   veq_g   = vequiv_of_perm_g f
 }
@@ -615,11 +709,11 @@ let tree_cond_has_shape_Spec
     pre_n   = L.length pre /\
     pre'_n  = L.length tcs.tcs_pre /\
     frame_n = L.length tcs.tcs_frame /\
-    veq_to_list tcs.tcs_pre_eq.veq_eq `veq_list_eq` e0' /\
+    tcs.tcs_pre_eq.veq_eq `veq_list_eq` e0' /\
    (forall (x : a) .
      L.length (post  x) = post_n /\
      L.length (tcs.tcs_post x) = post'_n /\
-     veq_to_list (tcs.tcs_post_eq x).veq_eq `veq_list_eq` e1')
+     (tcs.tcs_post_eq x).veq_eq `veq_list_eq` e1')
   | _ -> False
 
 [@@ strict_on_arguments [4;6]] (* strict on c;s *)
@@ -636,7 +730,7 @@ let rec tree_cond_has_shape
       | Sret pre_n post_n e' ->
         pre_n = L.length pre /\
        (forall (x : a) . L.length (post x) = post_n) /\
-        veq_to_list e.veq_eq `veq_list_eq` e'
+        e.veq_eq `veq_list_eq` e'
       | _ -> False)
   | TCbind #a #b pre itm post f g ->
       (match s with

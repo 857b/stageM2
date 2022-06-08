@@ -28,13 +28,8 @@ type sequiv (pre post : Fl.ty_list) = {
   seq_typ : squash (M.veq_typ_eq pre post seq_eq)
 }
 
-let seq_sel_eq (#pre #post : Fl.ty_list) (f_eq : M.veq_eq_t (L.length pre) (L.length post))
-               (sl0 : Fl.flist pre) (sl1 : Fl.flist post)
-  : prop
-  = forall (i : Fin.fin (L.length post) {Some? (f_eq i)}) . sl1 i === sl0 (Some?.v (f_eq i))
-
 let seq_ens1 (#pre #post : Fl.ty_list) (eqv : sequiv pre post) (sl0 : Fl.flist pre) (sl1 : Fl.flist post) : prop
-  = eqv.seq_ens sl0 sl1 /\ seq_sel_eq eqv.seq_eq sl0 sl1
+  = eqv.seq_ens sl0 sl1 /\ M.veq_sel_eq eqv.seq_eq sl0 sl1
 
 
 noeq
@@ -359,7 +354,7 @@ let sequiv_of_vequiv (#pre #post : vprop_list) (e : M.vequiv pre post)
   = {
   seq_req = e.veq_req;
   seq_ens = e.veq_ens;
-  seq_eq  = U.cast _ e.veq_eq;
+  seq_eq  = M.veq_eq_sl (M.veq_of_list e.veq_eq);
   seq_typ = e.veq_typ
 }
 

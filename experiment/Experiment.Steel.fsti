@@ -153,7 +153,7 @@ let __delta_ST2SF_Spec : list string = ST2SF_Spec.([
 
 let __delta_ST2SF_Base : list string = ST2SF_Base.([
   `%repr_SF_of_ST; `%shape_SF_of_ST;
-  `%seq_sel_eq_eff; `%seq_sel_eq_eff_aux;
+  `%M.veq_sel_eq_eff; `%M.veq_sel_eq_eff_aux;
   `%L.op_At; `%L.append;
   `%Fl.apply_perm_r; `%Fl.append;
   `%ST.const_post; `%ST.frame_post

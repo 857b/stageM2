@@ -326,3 +326,119 @@ let rec app_lam_flist (src : ty_list u#s) (dst : Type u#d) (f : flist src -> dst
   | []      -> nil_uniq x
   | t0 :: ts -> as_cons #t0 #ts x;
               app_lam_flist ts dst (partial_app_flist t0 ts dst f (head #t0 #ts x)) (tail #t0 #ts x)
+
+
+(****** Quantifying on a part of a list *)
+
+// ALT? Mask
+
+type partial_eq_t (ty : ty_list) =
+  Dl.dlist (L.map option ty)
+
+let partial_eq (#ty : ty_list) (f : flist ty) (e : partial_eq_t ty) : prop =
+  forall (i : Fin.fin (L.length ty) {Some? #(L.index ty i) (Dl.index e i)}) . f i == Some?.v (Dl.index e i)
+
+let partial_app_flist_eq_Some
+      (src0 : Type u#s) (src : ty_list u#s) (dst : Type u#d) (x : src0) (e : partial_eq_t src)
+      (f : (l : flist (src0 :: src) {partial_eq l (Dl.DCons _ (Some x) _ e)}) -> dst)
+      (xs : flist src {partial_eq xs e} ) : dst
+  = f (cons #src0 x #src xs)
+
+let partial_app_flist_eq_None
+      (src0 : Type u#s) (src : ty_list u#s) (dst : Type u#d) (x : src0) (e : partial_eq_t src)
+      (f : (l : flist (src0 :: src) {partial_eq l (Dl.DCons _ None _ e)}) -> dst)
+      (xs : flist src {partial_eq xs e} ) : dst
+  = f (cons #src0 x #src xs)
+
+
+let rec forall_flist_part (ty : ty_list) (e : partial_eq_t ty) (p : (f : flist ty {partial_eq f e}) -> Type0)
+  : Tot Type0 (decreases ty)
+  = match (|ty, e|) <: ty : ty_list & partial_eq_t ty with
+  | (|[], Dl.DNil|)  -> p nil
+  | (|t0 :: ts, Dl.DCons _ ox _ es|) ->
+       let ox : option t0 = ox in
+       match ox with
+       | Some x -> forall_flist_part ts es (partial_app_flist_eq_Some t0 ts Type0 x es p)
+       | None   -> (forall (x : t0) . forall_flist_part ts es (partial_app_flist_eq_None t0 ts Type0 x es p))
+
+let rec exists_flist_part (ty : ty_list) (e : partial_eq_t ty) (p : (f : flist ty {partial_eq f e}) -> Type0)
+  : Tot Type0 (decreases ty)
+  = match (|ty, e|) <: ty : ty_list & partial_eq_t ty with
+  | (|[], Dl.DNil|)  -> p nil
+  | (|t0 :: ts, Dl.DCons _ ox _ es|) ->
+       let ox : option t0 = ox in
+       match ox with
+       | Some x -> exists_flist_part ts es (partial_app_flist_eq_Some t0 ts Type0 x es p)
+       | None   -> (exists (x : t0) . exists_flist_part ts es (partial_app_flist_eq_None t0 ts Type0 x es p))
+
+#push-options "--ifuel 2 --fuel 2 --z3rlimit 10"
+let rec forall_flist_part_iff (ty : ty_list) (e : partial_eq_t ty) (p : (f : flist ty {partial_eq f e}) -> Type0)
+  : Lemma (ensures forall_flist_part ty e p <==> (forall (xs : flist ty {partial_eq xs e}) . p xs)) (decreases ty)
+  = match (|ty, e|) <: ty : ty_list & partial_eq_t ty with
+  | (|[], Dl.DNil|)  -> FStar.Classical.forall_intro nil_uniq
+  | (|t0 :: ts, Dl.DCons _ ox _ es|) ->
+       let ox : option t0 = ox in
+       introduce forall (xs : flist ty {partial_eq xs e}) .
+                   xs == cons (head #t0 #ts xs) (tail #t0 #ts xs) /\ partial_eq (tail #t0 #ts xs) es
+         with as_cons #t0 #ts xs;
+       match ox with
+       | Some x ->
+           calc (<==>) {
+             forall (xs : flist ty {partial_eq xs e}) . p xs;
+           <==> { }
+             forall (xs' : flist ts {partial_eq xs' es}) . p (cons x xs');
+           <==> { forall_flist_part_iff ts es (partial_app_flist_eq_Some t0 ts Type0 x es p) }
+             forall_flist_part ty e p;
+           }
+       | None   ->
+           calc (<==>) {
+             forall (xs : flist ty {partial_eq xs e}) . p xs;
+           <==> { }
+             forall (x : t0) (xs' : flist ts {partial_eq xs' es}) . p (cons x xs');
+           <==> {
+               introduce forall (x : t0) .
+                 forall_flist_part ts es (partial_app_flist_eq_None t0 ts Type0 x es p) <==>
+                 (forall (xs : flist ts {partial_eq xs es}) . p (cons x xs))
+               with forall_flist_part_iff ts es (partial_app_flist_eq_None t0 ts Type0 x es p)
+              }
+             forall (x : t0) . forall_flist_part ts es (partial_app_flist_eq_None t0 ts Type0 x es p);
+           <==> { }
+             forall_flist_part ty e p;
+           }
+#pop-options
+
+#push-options "--ifuel 2 --fuel 2 --z3rlimit 30"
+let rec exists_flist_part_iff (ty : ty_list) (e : partial_eq_t ty) (p : (f : flist ty {partial_eq f e}) -> Type0)
+  : Lemma (ensures exists_flist_part ty e p <==> (exists (xs : flist ty {partial_eq xs e}) . p xs)) (decreases ty)
+  = match (|ty, e|) <: ty : ty_list & partial_eq_t ty with
+  | (|[], Dl.DNil|)  -> FStar.Classical.forall_intro nil_uniq
+  | (|t0 :: ts, Dl.DCons _ ox _ es|) ->
+       let ox : option t0 = ox in
+       introduce forall (xs : flist ty {partial_eq xs e}) .
+                   xs == cons (head #t0 #ts xs) (tail #t0 #ts xs) /\ partial_eq (tail #t0 #ts xs) es
+         with as_cons #t0 #ts xs;
+       match ox with
+       | Some x ->
+           calc (<==>) {
+             exists (xs : flist ty {partial_eq xs e}) . p xs;
+           <==> { }
+             exists (xs' : flist ts {partial_eq xs' es}) . p (cons x xs');
+           <==> { exists_flist_part_iff ts es (partial_app_flist_eq_Some t0 ts Type0 x es p) }
+             exists_flist_part ty e p;
+           }
+       | None   ->
+           calc (<==>) {
+             exists (xs : flist ty {partial_eq xs e}) . p xs;
+           <==> { }
+             exists (x : t0) (xs' : flist ts {partial_eq xs' es}) . p (cons x xs');
+           <==> {
+               introduce forall (x : t0) .
+                 exists_flist_part ts es (partial_app_flist_eq_None t0 ts Type0 x es p) <==>
+                 (exists (xs : flist ts {partial_eq xs es}) . p (cons x xs))
+               with exists_flist_part_iff ts es (partial_app_flist_eq_None t0 ts Type0 x es p)
+              }
+             exists (x : t0) . exists_flist_part ts es (partial_app_flist_eq_None t0 ts Type0 x es p);
+           <==> { }
+             exists_flist_part ty e p;
+           }
+#pop-options
