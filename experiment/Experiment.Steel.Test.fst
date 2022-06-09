@@ -6,6 +6,7 @@ module L    = FStar.List.Pure
 module Ll   = Learn.List
 module Dl   = Learn.DList
 module Fl   = Learn.FList
+module SU   = Learn.Steel.Util
 module U32  = FStar.UInt32
 module Perm = Learn.Permutation
 
@@ -114,7 +115,7 @@ let steel_read #a (r : ref a) () :
     (**) change_equal_slprop (vptr r `star` emp) (M.vprop_of_list [vptr' r full_perm]);
     Steel.Effect.Atomic.return x
 
-[@@ __test__; __steel_reduce__]
+[@@ __test__; __reduce__]
 inline_for_extraction
 let r_read (#a : Type0) (r : ref a) : M.repr SH.KSteel a =
   MC.repr_of_steel_r (read_pre r) (read_post r) (read_req r) (read_ens r) (SH.steel_f (steel_read r))
@@ -128,14 +129,14 @@ let steel_write #a (r : ref a) (x : a) ()
     write r x;
     (**) change_equal_slprop (vptr r `star` emp) (M.vprop_of_list [vptr' r full_perm])
 
-[@@ __test__; __steel_reduce__]
+[@@ __test__; __reduce__]
 inline_for_extraction
 let r_write #a (r : ref a) (x : a) : M.repr SH.KSteel unit =
   MC.repr_of_steel_r [vptr' r full_perm] (fun _ -> [vptr' r full_perm])
                     (fun sl0 -> True) (fun sl0 () sl1 -> x == sl1 0)
                     (SH.steel_f (steel_write r x))
 
-[@@ __test__; __steel_reduce__]
+[@@ __test__; __reduce__]
 let test0_M (r : ref nat) : M.repr SH.KSteel nat = MC.(
   x <-- r_read r;
   return x)
@@ -639,3 +640,24 @@ let test_ghost (r : ref U32.t)
                                          MC.return_ghost (Ghost.hide x)));
     call (aux_steel r) x
   ) (_ by (mk_steel [Extract])))
+
+////////// test vprop_group //////////
+
+[@@ expect_failure [228]]
+let test_id_fail (v : vprop)
+  : F.steel unit v (fun () -> v)
+       (requires fun _ -> True) (ensures fun h0 () h1 -> frame_equalities v h0 h1)
+  = F.(to_steel (return ()) (_ by (mk_steel [])))
+
+let test_id_ok (v : vprop')
+  : F.steel unit (VUnit v) (fun () -> VUnit v)
+       (requires fun _ -> True) (ensures fun h0 () h1 -> frame_equalities (VUnit v) h0 h1)
+  = F.(to_steel (return ()) (_ by (mk_steel [])))
+
+// TODO: improve the WP
+let test_id_caller (r0 r1 : ref U32.t)
+  : F.steel unit (vptr r0 `star` vptr r1) (fun () -> vptr r0 `star` vptr r1)
+       (requires fun _ -> True) (ensures fun h0 () h1 -> frame_equalities (vptr r0 `star` vptr r1) h0 h1)
+  = F.(to_steel (
+    call (test_id_ok (SU.vprop_group' (M.vprop_of_list [vptr' r0 full_perm; vptr' r1 full_perm]))) ()
+    ) (_ by (mk_steel [Timer; Dump Stage_WP])))

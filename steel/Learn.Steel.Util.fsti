@@ -42,45 +42,49 @@ let rewrite_vprop #opened (#p #q : vprop) ($rw : squash (p == q))
 let eq_sym (#a : Type) (#x #y : a) ($p : squash (x == y)) : squash (y == x) = ()
 
 
-(** expansion of a vprop *)
+(** [group_vprop] *)
 
-/// Those utilities allow to expend a vprop as a [VUnit] with explicit fields. This transformation allows F* to
-/// determine the type of the selector by normalisation.
+/// Group a [vprop] inside a [VUnit].
 
-let expanded_vprop (v : vprop) : v':vprop{t_of v' == t_of v}
-  = VUnit ({
+[@@__steel_reduce__]
+let vprop_group' (v : vprop) : v':vprop'{v'.t == t_of v}
+  = {
     hp  = hp_of v;
     t   = t_of v;
     sel = sel_of v
-  })
+  }
+[@@__reduce__;__steel_reduce__]
+let vprop_group (v : vprop) : v':vprop{t_of v' == t_of v}
+  = VUnit (vprop_group' v)
 
-let intro_expanded_vprop_lem (v : vprop) (m : Mem.mem)
+let intro_vprop_group_lem (v : vprop) (m : Mem.mem)
   : Lemma (requires Mem.interp (hp_of v) m)
-          (ensures  Mem.interp (hp_of (expanded_vprop v)) m /\
-                    sel_of (expanded_vprop v) m === sel_of v m)
+          (ensures  Mem.interp (hp_of (vprop_group v)) m /\
+                    sel_of (vprop_group v) m === sel_of v m)
   = ()
 
-let elim_expanded_vprop_lem (v : vprop) (m : Mem.mem)
-  : Lemma (requires Mem.interp (hp_of (expanded_vprop v)) m)
+let elim_vprop_group_lem (v : vprop) (m : Mem.mem)
+  : Lemma (requires Mem.interp (hp_of (vprop_group v)) m)
           (ensures  Mem.interp (hp_of v) m /\
-                    sel_of (expanded_vprop v) m === sel_of v m)
+                    sel_of (vprop_group v) m === sel_of v m)
   = ()
 
-let intro_expanded_vprop #opened (v : vprop)
+let intro_vprop_group #opened (v : vprop)
   : SteelGhost unit opened
-               v (fun () -> expanded_vprop v)
-               (requires fun _ -> True) (ensures fun h0 _ h1 -> h1 (expanded_vprop v) == h0 v)
-  = change_slprop_rel v (expanded_vprop v)
+               v (fun () -> vprop_group v)
+               (requires fun _ -> True) (ensures fun h0 _ h1 -> h1 (vprop_group v) == h0 v)
+  =
+    change_slprop_rel v (vprop_group v)
                       (fun sl0 sl1 -> sl1 == sl0)
-                      (intro_expanded_vprop_lem v)
+                      (intro_vprop_group_lem v)
 
-let elim_expanded_vprop #opened (v : vprop)
+let elim_vprop_group #opened (v : vprop)
   : SteelGhost unit opened
-               (expanded_vprop v) (fun () -> v)
-               (requires fun _ -> True) (ensures fun h0 _ h1 -> h0 (expanded_vprop v) == h1 v)
-  = change_slprop_rel (expanded_vprop v) v
+               (vprop_group v) (fun () -> v)
+               (requires fun _ -> True) (ensures fun h0 _ h1 -> h0 (vprop_group v) == h1 v)
+  = change_slprop_rel (vprop_group v) v
                       (fun sl0 sl1 -> sl0 == sl1)
-                      (elim_expanded_vprop_lem v)
+                      (elim_vprop_group_lem v)
 
 
 (** [pure] with a selector that gives a squash of the proposition *)

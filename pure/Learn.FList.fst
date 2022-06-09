@@ -53,6 +53,10 @@ let as_cons (#t : Type) (#ts : ty_list) (xs : flist (t :: ts))
   : Lemma (xs == cons #t (head xs) #ts (tail xs))
   = flist_extensionality xs (cons #t (head xs) #ts (tail xs)) (fun _ -> ())
 
+let tail_cons (#t : Type) (#ts : ty_list) (x : t) (xs : flist ts)
+  : Lemma (tail (cons x xs) == xs)
+  = flist_extensionality (tail (cons x xs)) xs (fun _ -> ())
+
 
 let flist_of_d (#ts : ty_list) (l : Dl.dlist ts) : flist ts
   = mk_flist ts (Dl.index l)

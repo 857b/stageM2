@@ -4,7 +4,10 @@ module M    = Experiment.Steel.Repr.M
 module U    = Learn.Util
 module L    = FStar.List.Pure
 module Ll   = Learn.List
+module Fl   = Learn.FList
+module Dl   = Learn.DList
 module SE   = Steel.Effect
+module SU   = Learn.Steel.Util
 module Msk  = Learn.List.Mask
 module Fin  = FStar.Fin
 module Opt  = Learn.Option
@@ -14,6 +17,7 @@ open FStar.Tactics
 open Learn.Tactics.Util
 open FStar.Mul
 open Experiment.Steel.Interface
+open FStar.Calc
 
 
 #set-options "--fuel 1 --ifuel 1"
@@ -716,24 +720,216 @@ let vequiv_sol_inj
            VeqPrt src src_add trg (vequiv_inj L.(src@src_add) trg (extend_partial_injection ij src_add) e')
 
 
+(**** pointwise equivalence *)
+
+[@@__cond_solver__]
+noeq
+type vequiv_pointwise : (pre : M.vprop_list) -> (post : M.vprop_list) -> Type =
+  | VeqPt_Nil   :  vequiv_pointwise [] []
+  | VeqPt_Cons  : (hd : SE.vprop') -> (pre : M.vprop_list) -> (post : M.vprop_list) ->
+                   vequiv_pointwise pre post ->
+                   vequiv_pointwise (hd :: pre) (hd :: post)
+  | VeqPt_Elim  : (hd : SE.vprop') -> (hds : M.vprop_list) ->
+                   (e : M.vequiv [hd] hds) ->
+                  (pre : M.vprop_list) -> (post : M.vprop_list) ->
+                   vequiv_pointwise pre post ->
+                   vequiv_pointwise (hd :: pre) L.(hds@post)
+  | VeqPt_Intro : (hds : M.vprop_list) -> (hd : SE.vprop') ->
+                   (e : M.vequiv hds [hd]) ->
+                  (pre : M.vprop_list) -> (post : M.vprop_list) ->
+                   vequiv_pointwise pre post ->
+                   vequiv_pointwise L.(hds@pre) (hd :: post)
+
+[@@__cond_solver__]
+let rec vequiv_pointwise_M #pre #post (e : vequiv_pointwise pre post)
+  : Tot (M.vequiv pre post) (decreases e)
+  = match e with
+  | VeqPt_Nil -> M.vequiv_refl []
+  | VeqPt_Cons hd pre' post' e ->
+      M.vequiv_cons hd (vequiv_pointwise_M e)
+  | VeqPt_Elim hd hds e0 pre post e1 ->
+      (**) assert_norm (L.append [hd] pre == hd :: pre);
+      M.vequiv_app e0 (vequiv_pointwise_M e1)
+  | VeqPt_Intro hds hd e0 pre post e1 ->
+      (**) assert_norm (L.append [hd] post == hd :: post);
+      M.vequiv_app e0 (vequiv_pointwise_M e1)
+
+[@@__cond_solver__]
+let vequiv_sol_pointwise_elim #all #pre0 #pre1 #post
+      (e0 : vequiv_pointwise pre0 pre1)
+      (e1 : vequiv_sol all post pre1)
+  : vequiv_sol all post pre0
+  = match e1 with
+  | VeqAll post' pre1' e1 ->
+      VeqAll post' pre0 (M.vequiv_trans (vequiv_pointwise_M e0) e1)
+  | VeqPrt post' unmatched pre1' e1 ->
+      VeqPrt post' unmatched pre0 (M.vequiv_trans (vequiv_pointwise_M e0) e1)
+
+[@@__cond_solver__]
+let vequiv_sol_pointwise_intro #all #pre #post0 #post1
+      (e0 : vequiv_pointwise post0 post1)
+      (e1 : vequiv_sol all post0 pre)
+  : vequiv_sol all post1 pre
+  = match e1 with
+  | VeqAll post0' pre' e1 ->
+      VeqAll post1 pre' (M.vequiv_trans e1 (vequiv_pointwise_M e0))
+  | VeqPrt post0' unmatched pre' e1 ->
+      VeqPrt post1 unmatched pre
+        (M.vequiv_trans e1 (M.vequiv_app (vequiv_pointwise_M e0) (M.vequiv_refl unmatched)))
+
+
+[@@__cond_solver__]
+let veqPt_elim
+      (#hd : SE.vprop') (#hds0 #hds1 : M.vprop_list)
+      (e0 : M.vequiv [hd] hds0) (e1 : vequiv_pointwise hds0 hds1)
+      (#pre #post : M.vprop_list)
+      (e2 : vequiv_pointwise pre post)
+  : vequiv_pointwise (hd :: pre) L.(hds1 @ post)
+  = VeqPt_Elim hd hds1 (M.vequiv_trans e0 (vequiv_pointwise_M e1)) pre post e2
+
+[@@__cond_solver__]
+let veqPt_intro
+      (#hds1 #hds0 : M.vprop_list) (#hd : SE.vprop')
+      (e0 : M.vequiv hds0 [hd]) (e1 : vequiv_pointwise hds1 hds0)
+      (#pre #post : M.vprop_list)
+      (e2 : vequiv_pointwise pre post)
+  : vequiv_pointwise L.(hds1 @ pre) (hd :: post)
+  = VeqPt_Intro hds1 hd (M.vequiv_trans (vequiv_pointwise_M e1) e0) pre post e2
+
+
+// TODO: conversion vprop -> vprop_list, pointwise equality
+[@@M.__vequiv__]
+let vequiv_elim_vprop_group (vs : M.vprop_list)
+  : M.vequiv [SU.vprop_group' (M.vprop_of_list vs)] vs
+  = {
+    veq_req = (fun _ -> True);
+    veq_ens = (fun sl0 sl1 -> M.vpl_sels _ (sl0 0) == Fl.dlist_of_f sl1);
+    veq_eq  = L.map (fun _ -> None) vs;
+    veq_typ = ();
+    veq_g   = (fun opened -> SU.elim_vprop_group (M.vprop_of_list vs))
+  }
+
+#push-options "--fuel 2"
+[@@M.__vequiv__]
+let vequiv_intro_vprop_group (vs : M.vprop_list)
+  : M.vequiv vs [SU.vprop_group' (M.vprop_of_list vs)]
+  = {
+    veq_req = (fun _ -> True);
+    veq_ens = (fun sl0 sl1 -> M.vpl_sels _ (sl1 0) == Fl.dlist_of_f sl0);
+    veq_eq  = [None];
+    veq_typ = ();
+    veq_g   = Steel.Effect.Atomic.(fun opened ->
+                 SU.intro_vprop_group (M.vprop_of_list vs);
+                 change_equal_slprop (VUnit (SU.vprop_group' (M.vprop_of_list vs)) `star` emp)
+                                     (M.vprop_of_list ([SU.vprop_group' (M.vprop_of_list vs)])))
+  }
+#pop-options
+
+
 (**** Tac *)
+
+/// If [intro] is set, solves a goal [vequiv_pointwise ?pre post].
+/// If [intro] is not set (elim), solves a goal [vequiv_pointwise pre ?post]
+/// Returns [true] if an intro/elim has been performed.
+#push-options "--ifuel 2"
+let rec build_vequiv_pointwise (intro : bool) : Tac bool =
+  try apply (`VeqPt_Nil); false with | _ ->
+  let b =
+    match catch (fun () ->
+      if intro
+      then begin
+        apply (`veqPt_intro);
+        // e0
+        // currently: only [vprop_group]
+        apply (`vequiv_intro_vprop_group)
+      end else begin
+        apply (`veqPt_elim);
+        // e0
+        apply (`vequiv_elim_vprop_group)
+      end)
+    with
+    | Inr () -> let _ : bool = build_vequiv_pointwise intro in true
+    | Inl _  -> apply (`VeqPt_Cons); false
+  in
+  let b' = build_vequiv_pointwise intro in
+  b || b'
+#pop-options
+
+let __normal_vequiv_pointwise : list norm_step = [
+    delta_only [`%L.op_At; `%L.append];
+    iota; zeta]
+
+exception Cancel
+
+/// On a goal [vequiv_sol all src trg], performs some introductions/eliminations to change the goal into
+/// [vequiv_sol all src' trg'].
+let rew_vequiv_sol_pointwise () : Tac unit
+  =
+    begin try
+      apply (`vequiv_sol_pointwise_elim);
+      if build_vequiv_pointwise false
+      then norm __normal_vequiv_pointwise
+      // As an optimisation, if not elimination was performed, we do not change the goal's witness
+      else raise Cancel
+    with Cancel | _ -> ()
+    end;
+    begin try
+      apply (`vequiv_sol_pointwise_intro);
+      if build_vequiv_pointwise true
+      then norm __normal_vequiv_pointwise
+      else raise Cancel
+    with Cancel | _ -> ()
+    end
+
+let test_vequiv_pointwise_elim (v : int -> SE.vprop')
+  : M.vequiv [SU.vprop_group' (M.vprop_of_list [v 0; v 1]); v 2] [v 0; v 1; v 2]
+  = _ by (
+    apply (`M.vequiv_trans);
+    apply (`vequiv_pointwise_M);
+    let b = build_vequiv_pointwise false in
+    norm __normal_vequiv_pointwise;
+    apply (`M.vequiv_refl))
+
+let test_vequiv_pointwise_intro (v : int -> SE.vprop')
+  : M.vequiv [v 0; v 1; v 2]
+             [SU.vprop_group' (M.vprop_of_list [v 0; SU.vprop_group' (M.vprop_of_list [v 1])]); v 2]
+  = _ by (
+    apply (`M.vequiv_trans); flip ();
+    apply (`vequiv_pointwise_M);
+    let b = build_vequiv_pointwise true in
+    norm __normal_vequiv_pointwise;
+    apply (`M.vequiv_refl))
+
+let test_rew_vequiv_sol_pointwise (v : int -> SE.vprop')
+  : vequiv_sol false
+      [SU.vprop_group' (M.vprop_of_list [v 0; v 1]); v 2]
+      [v 0; SU.vprop_group' (M.vprop_of_list [v 1; v 2])]
+  = _ by (
+    rew_vequiv_sol_pointwise ();
+    apply (`vequiv_sol_end))
+
 
 let normal_ij_mask : list norm_step = [
   delta_only [`%Msk.filter_mask; `%ij_src_mask; `%ij_trg_mask; `%L.map;
               `%None?; `%Ll.initi; `%op_Negation; `%L.mem];
   iota; zeta; primops]
 
+let build_vequiv_sol_triv () : Tac unit =
+  try apply (`vequiv_sol_end)     with | _ ->
+      apply (`vequiv_sol_end_prt)
+
+
 /// This tactics solves a goal of the form [vequiv_sol all src trg]
 let build_vequiv_sol fr ctx (all : bool) : Tac unit
-  = try apply (`vequiv_sol_end)     with | _ ->
-    try apply (`vequiv_sol_end_prt)
+  =
+    rew_vequiv_sol_pointwise ();
+    try build_vequiv_sol_triv ()
     with | _ ->
       apply_raw (`vequiv_sol_inj);
       build_partial_injection fr ctx;
       norm normal_build_partial_injection;
       norm normal_ij_mask;
-    try apply (`vequiv_sol_end)     with | _ ->
-    try apply (`vequiv_sol_end_prt) with | _ ->
+    try build_vequiv_sol_triv () with | _ ->
       cs_raise fr ctx (fun m -> fail (m Fail_cond_sol []))
 
 (*
@@ -771,7 +967,12 @@ let normal_cond_solver : list norm_step = [
                 `%L.tail; `%L.tl;
                 `%Ll.initi; `%Ll.set;
                 `%Perm.mk_perm_f; `%Perm.perm_f_to_list;
-                `%Opt.map];
+                `%Opt.map; `%Opt.bind;
+                `%Fl.forall_flist_part; `%Fl.exists_flist_part;
+                `%Fl.partial_app_flist_eq_None; `%Fl.partial_app_flist_eq_Some;
+                `%M.veq_partial_eq; `%Dl.initi_ty; `%Dl.initi;
+                `%M.veq_sel_eq_eff; `%M.veq_sel_eq_eff_aux;
+                `%M.vprop_list_sels_t];
     delta_attr [`%__tac_helper__; `%__cond_solver__; `%Msk.__mask__; `%M.__vequiv__];
     delta_qualifier ["unfold"];
     iota; zeta; primops
@@ -809,7 +1010,7 @@ private
 let __extract_vequiv (#pre #post : M.vprop_list) (e : M.vequiv pre post) : Type
   = __extract_veq_eq e.veq_eq
 
-let tc_extract_veq_eq (n : nat) : Tac (list (option int)) =
+let tc_extract_veq_eq () : Tac (list (option int)) =
   norm_cond_sol ();
   extract_term_tac (unquote #(list (option int)))
 
@@ -894,6 +1095,8 @@ let __build_TCspec_u
 
       (pre_n   : extract_term (L.length pre))
       (post_n  : (x : a) -> extract_term (L.length (post x)))
+      (pre'_n  : extract_term (L.length pre'))
+      (post'_n : (x : a) -> extract_term L.(length (post x @ VeqPrt?.unmatched cs0)))
       (frame_n : extract_term (L.length (VeqPrt?.unmatched cs0)))
       (p0 : __extract_vequiv (vequiv_sol_prt cs0))
 
@@ -917,6 +1120,8 @@ let __build_TCspec_p
 
       (pre_n   : extract_term (L.length pre))
       (post_n  : (x : a) -> extract_term (L.length (post x)))
+      (pre'_n  : extract_term (L.length pre'))
+      (post'_n : (x : a) -> extract_term L.(length (post' x)))
       (frame_n : extract_term (L.length (VeqPrt?.unmatched cs0)))
       (p0 : __extract_vequiv (vequiv_sol_prt cs0))
       (p1 : (x : a) -> __extract_vequiv (vequiv_sol_all (cs1 x)))
@@ -942,6 +1147,8 @@ let __build_TCspecS_u
 
       (pre_n   : extract_term (L.length tr.r_pre))
       (post_n  : (x : a) -> extract_term (L.length (tr.r_post x)))
+      (pre'_n  : extract_term (L.length pre'))
+      (post'_n : (x : a) -> extract_term L.(length (tr.r_post x @ VeqPrt?.unmatched cs0)))
       (frame_n : extract_term (L.length (VeqPrt?.unmatched cs0)))
       (p0 : __extract_vequiv (vequiv_sol_prt cs0))
 
@@ -966,6 +1173,8 @@ let __build_TCspecS_p
 
       (pre_n   : extract_term (L.length tr.r_pre))
       (post_n  : (x : a) -> extract_term (L.length (tr.r_post x)))
+      (pre'_n  : extract_term (L.length pre'))
+      (post'_n : (x : a) -> extract_term L.(length (post' x)))
       (frame_n : extract_term (L.length (VeqPrt?.unmatched cs0)))
       (p0 : __extract_vequiv (vequiv_sol_prt cs0))
       (p1 : (x : a) -> __extract_vequiv (vequiv_sol_all (cs1 x)))
@@ -995,7 +1204,8 @@ let __build_TCret_u
       (#pre : M.pre_t)
       (cs : vequiv_sol false (sl_hint x) pre)
       
-      (n : extract_term (L.length pre))
+      (pre_n  : extract_term (L.length pre))
+      (post_n : (x : a) -> extract_term L.(length (sl_hint x @ VeqPrt?.unmatched cs)))
       (p : __extract_vequiv (vequiv_sol_prt cs))
 
   : M.tree_cond (M.Tret a x sl_hint) pre (fun x -> L.(sl_hint x @ VeqPrt?.unmatched cs))
@@ -1008,7 +1218,8 @@ let __build_TCret_p
       (#pre : M.pre_t) (#post : M.post_t a)
       (cs : vequiv_sol true (post x) pre)
 
-      (n : extract_term (L.length pre))
+      (pre_n  : extract_term (L.length pre))
+      (post_n : (x : a) -> extract_term L.(length (post x)))
       (p : __extract_vequiv (vequiv_sol_all cs))
 
   : M.tree_cond (M.Tret a x sl_hint) pre post
@@ -1048,12 +1259,12 @@ let build_TCspec fr (is_Steel : bool) (post : bool) : Tac shape_tree_t
 
     let pre_n   = tc_extract_nat ()                     in
     let post_n  = let _ = intro () in tc_extract_nat () in
+    let pre'_n  = tc_extract_nat ()                     in
+    let post'_n = let _ = intro () in tc_extract_nat () in
     let frame_n = tc_extract_nat ()                     in
-    let pre'_n  = pre_n + frame_n                       in
-    let post'_n = post_n + frame_n                      in
-    let e_pre = tc_extract_veq_eq pre'_n                in
+    let e_pre = tc_extract_veq_eq ()                    in
     let e_post : list (option int) =
-      if post then let _ = intro () in tc_extract_veq_eq post'_n
+      if post then let _ = intro () in tc_extract_veq_eq ()
       else Ll.initi 0 post'_n (fun i -> Some (i <: int))
     in
     (|pre'_n, post'_n, PSspec pre_n post_n pre'_n post'_n frame_n e_pre e_post|)
@@ -1069,9 +1280,10 @@ let build_TCret fr (post : bool) : Tac shape_tree_t
       build_vequiv_sol fr (fun () -> [Info_location "after the return statement"]) false
     end;
 
-    let n = tc_extract_nat () in
-    let e = tc_extract_veq_eq n in
-    (|n, n, PSret n n e|)
+    let pre_n  = tc_extract_nat ()                     in
+    let post_n = let _ = intro () in tc_extract_nat () in
+    let e      = tc_extract_veq_eq ()                  in
+    (|pre_n, post_n, PSret pre_n post_n e|)
 
 let rec build_TCbind fr (post : bool) : Tac shape_tree_t
   = apply (`M.TCbind);
@@ -1171,7 +1383,7 @@ let intro_squash_l_True : squash (l_True) = ()
 
 /// This is the front-end tactics. It solves a goal of the form [M.prog_cond t pre post].
 let build_prog_cond fr : Tac unit
-  = 
+  =
     let tc0   = fresh_uvar None in
     let tc_eq = fresh_uvar None in
     let ushp  = fresh_uvar None in
@@ -1182,6 +1394,7 @@ let build_prog_cond fr : Tac unit
     // tc <- tc0
     unshelve tc_eq;
     norm_cond_sol ();
+    norm [simplify];
     trefl ();
     // shp
     unshelve ushp;

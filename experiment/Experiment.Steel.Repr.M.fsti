@@ -163,7 +163,7 @@ let rec vpl_sels (vs : vprop_list) (sl : t_of (vprop_of_list vs))
   : Tot (sl_list vs) (decreases vs)
   = match (|vs, sl|) <: (vs : vprop_list & t_of (vprop_of_list vs)) with
   | (|[], _|) -> Dl.DNil
-  | (|v0 :: vs, (x0, xs)|) -> Dl.DCons v0.t x0 _ (vpl_sels vs xs)
+  | (|v0 :: vs, sl|) -> Dl.DCons v0.t sl._1 _ (vpl_sels vs sl._2)
 
 unfold
 let vpl_sels_f (vs : vprop_list) (sl : t_of (vprop_of_list vs)) : sl_f vs
@@ -214,6 +214,21 @@ let sel_f_eq' (vs : vprop_list) (h : rmem (vprop_of_list vs))
 val sel_eq' : squash (sel_f' == sel)
 
 
+let gget' (#opened : Mem.inames) (p : vprop')
+  : SteelGhost (Ghost.erased p.t) opened (VUnit p) (fun _ -> VUnit p)
+               (requires fun _ -> True)
+               (ensures fun h0 x h1 -> frame_equalities (VUnit p) h0 h1 /\ Ghost.reveal x == h0 (VUnit p))
+  = gget (VUnit p)
+
+let gget_f (#opened : Mem.inames) (vs : vprop_list)
+  : SteelGhost (Ghost.erased (sl_f vs)) opened (vprop_of_list vs) (fun _ -> vprop_of_list vs)
+               (requires fun _ -> True)
+               (ensures fun h0 x h1 -> frame_equalities (vprop_of_list vs) h0 h1 /\
+                                    Ghost.reveal x == sel_f vs h0)
+  = let x = gget (vprop_of_list vs) in
+    vpl_sels_f vs x
+
+
 unfold
 let split_vars (vs0 vs1 : vprop_list) (xs : sl_f L.(vs0 @ vs1))
   : sl_f vs0 & sl_f vs1
@@ -241,6 +256,18 @@ let append_vars (#vs0 #vs1 : vprop_list) (xs : sl_f vs0) (ys : sl_f vs1)
     (**) Ll.map_append Mkvprop'?.t vs0 vs1;
     Fl.append xs ys
 
+
+val steel_elim_vprop_of_list_cons_f (#opened : Mem.inames) (v : vprop') (vs : vprop_list)
+  : SteelGhost unit opened
+      (vprop_of_list (v :: vs)) (fun () -> VUnit v `star` vprop_of_list vs)
+      (requires fun _ -> True)
+      (ensures fun h0 () h1 -> sel_f (v :: vs) h0 == Fl.cons (h1 (VUnit v)) (sel_f vs h1))
+
+val steel_intro_vprop_of_list_cons_f (#opened : Mem.inames) (v : vprop') (vs : vprop_list)
+  : SteelGhost unit opened
+      (VUnit v `star` vprop_of_list vs) (fun () -> vprop_of_list (v :: vs))
+      (requires fun _ -> True)
+      (ensures fun h0 () h1 -> sel_f (v :: vs) h1 == Fl.cons (h0 (VUnit v)) (sel_f vs h0))
 
 val steel_elim_vprop_of_list_append_f (#opened : Mem.inames) (vs0 vs1 : vprop_list)
   : SteelGhost unit opened
@@ -442,6 +469,108 @@ let vequiv_trans (#v0 #v1 #v2 : vprop_list) (e0 : vequiv v0 v1) (e1 : vequiv v1 
 }
 
 
+(****** [vequiv_cons] *)
+
+[@@__vequiv__]
+let fin_shift (l m : nat) (n : nat {l + m <= n}) (i : Fin.fin l) : Fin.fin n
+  = i + m
+
+[@@__vequiv__]
+let vequiv_cons_eq #pre_n #post_n (e : veq_eq_t_list pre_n post_n)
+  : veq_eq_t_list (pre_n+1) (post_n+1)
+  = Some 0 :: L.map (Opt.map (fin_shift pre_n 1 (pre_n+1))) e
+
+val vequiv_cons_typ (hd : Type) (#pre #post : Fl.ty_list) (e : veq_eq_t_list (L.length pre) (L.length post))
+  : Lemma (requires veq_typ_eq pre post (veq_of_list e))
+          (ensures  veq_typ_eq (hd :: pre) (hd :: post) (U.cast _ (veq_of_list (vequiv_cons_eq e))))
+
+val vequiv_cons_g (hd : SE.vprop') (#pre #post : vprop_list) (e : vequiv pre post) (opened : Mem.inames)
+  : SteelGhost unit opened (vprop_of_list (hd :: pre)) (fun () -> vprop_of_list (hd :: post))
+      (requires fun h0       -> e.veq_req (Fl.tail #hd.t #(vprop_list_sels_t  pre) (sel (hd :: pre) h0)))
+      (ensures  fun h0 () h1 -> let sl0 = sel (hd :: pre) h0 in
+                             let sl1 = sel (hd :: post) h1 in
+                             e.veq_ens (Fl.tail #hd.t #(vprop_list_sels_t  pre) sl0)
+                                       (Fl.tail #hd.t #(vprop_list_sels_t post) sl1) /\
+                             veq_sel_eq (U.cast _ (veq_of_list (vequiv_cons_eq e.veq_eq))) sl0 sl1)
+
+[@@__vequiv__]
+let vequiv_cons (hd : SE.vprop') (#pre #post : vprop_list) (e : vequiv pre post)
+  : vequiv (hd :: pre) (hd :: post)
+  = {
+    veq_req = (fun sl0     -> e.veq_req (Fl.tail #hd.t #(vprop_list_sels_t  pre) sl0));
+    veq_ens = (fun sl0 sl1 -> e.veq_ens (Fl.tail #hd.t #(vprop_list_sels_t  pre) sl0)
+                                     (Fl.tail #hd.t #(vprop_list_sels_t post) sl1));
+    veq_eq  = vequiv_cons_eq e.veq_eq;
+    veq_typ = (e.veq_typ;
+               vequiv_cons_typ hd.t #(vprop_list_sels_t pre) #(vprop_list_sels_t post) e.veq_eq;
+               ());
+    veq_g   = vequiv_cons_g hd e
+   }
+
+
+(****** [vequiv_app] *)
+
+[@@__vequiv__]
+let vequiv_app_eq
+      #pre0_n #post0_n (e0 : veq_eq_t_list pre0_n post0_n)
+      #pre1_n #post1_n (e1 : veq_eq_t_list pre1_n post1_n)
+  : veq_eq_t_list (pre0_n+pre1_n) (post0_n+post1_n)
+  = L.(map (Opt.map (fin_shift pre0_n   0    (pre0_n + pre1_n))) e0
+     @ map (Opt.map (fin_shift pre1_n pre0_n (pre0_n + pre1_n))) e1)
+
+val vequiv_app_typ
+      (#pre0 #post0 : Fl.ty_list) (e0 : veq_eq_t_list (L.length pre0) (L.length post0))
+      (#pre1 #post1 : Fl.ty_list) (e1 : veq_eq_t_list (L.length pre1) (L.length post1))
+  : Lemma (requires veq_typ_eq pre0 post0 (veq_of_list e0) /\
+                    veq_typ_eq pre1 post1 (veq_of_list e1))
+          (ensures  veq_typ_eq L.(pre0 @ pre1) L.(post0 @ post1)
+                                 (U.cast _ (veq_of_list (vequiv_app_eq e0 e1))))
+
+val vequiv_app_sl_eq
+      (#pre0 #post0 : Fl.ty_list) (e0 : veq_eq_t_list (L.length pre0) (L.length post0))
+      (#pre1 #post1 : Fl.ty_list) (e1 : veq_eq_t_list (L.length pre1) (L.length post1))
+      (sl0_0 : Fl.flist pre0)  (sl0_1 : Fl.flist pre1)
+      (sl1_0 : Fl.flist post0) (sl1_1 : Fl.flist post1)
+  : Lemma (requires veq_sel_eq (veq_of_list e0) sl0_0 sl1_0 /\
+                    veq_sel_eq (veq_of_list e1) sl0_1 sl1_1)
+          (ensures  veq_sel_eq (U.cast _ (veq_of_list (vequiv_app_eq e0 e1)))
+                                 (Fl.append sl0_0 sl0_1) (Fl.append sl1_0 sl1_1))
+val vequiv_app_g
+      (#pre0 #post0 : vprop_list) (e0 : vequiv pre0 post0)
+      (#pre1 #post1 : vprop_list) (e1 : vequiv pre1 post1)
+      (opened : Mem.inames)
+  : SteelGhost unit opened (vprop_of_list L.(pre0 @ pre1)) (fun () -> vprop_of_list L.(post0 @ post1))
+      (requires fun h0       -> let sl0s = split_vars pre0 pre1 (sel L.(pre0 @ pre1) h0) in
+                             e0.veq_req sl0s._1 /\ e1.veq_req sl0s._2)
+      (ensures  fun h0 () h1 -> let sl0  = sel L.(pre0  @ pre1 ) h0   in
+                             let sl1  = sel L.(post0 @ post1) h1   in
+                             let sl0s = split_vars pre0  pre1  sl0 in
+                             let sl1s = split_vars post0 post1 sl1 in
+                             e0.veq_ens sl0s._1 sl1s._1 /\ e1.veq_ens sl0s._2 sl1s._2 /\
+                             veq_sel_eq (U.cast _ (veq_of_list (vequiv_app_eq e0.veq_eq e1.veq_eq))) sl0 sl1)
+
+[@@__vequiv__]
+let vequiv_app
+      (#pre0 #post0 : vprop_list) (e0 : vequiv pre0 post0)
+      (#pre1 #post1 : vprop_list) (e1 : vequiv pre1 post1)
+  : vequiv L.(pre0 @ pre1) L.(post0 @ post1)
+  = {
+    veq_req = (fun sl0     -> let sl0s = split_vars pre0 pre1 sl0 in
+                           e0.veq_req sl0s._1 /\ e1.veq_req sl0s._2);
+    veq_ens = (fun sl0 sl1 -> let sl0s = split_vars pre0  pre1  sl0 in
+                           let sl1s = split_vars post0 post1 sl1 in
+                           e0.veq_ens sl0s._1 sl1s._1 /\ e1.veq_ens sl0s._2 sl1s._2);
+    veq_eq  = vequiv_app_eq e0.veq_eq e1.veq_eq;
+    veq_typ = (e0.veq_typ; e1.veq_typ;
+               vequiv_app_typ #(vprop_list_sels_t pre0) #(vprop_list_sels_t post0) e0.veq_eq
+                              #(vprop_list_sels_t pre1) #(vprop_list_sels_t post1) e1.veq_eq;
+               Ll.map_append SE.Mkvprop'?.t pre0 pre1;
+               Ll.map_append SE.Mkvprop'?.t post0 post1;
+               ());
+    veq_g   = vequiv_app_g e0 e1
+   }
+
+
 (***** [vequiv_perm] *)
 
 let vequiv_perm : vprop_list -> vprop_list -> Type = Perm.pequiv #vprop'
@@ -498,6 +627,7 @@ let vequiv_of_perm (#pre #post : vprop_list) (f : vequiv_perm pre post) : vequiv
   veq_typ = ();
   veq_g   = vequiv_of_perm_g f
 }
+
 
 (*** [repr_steel_t] *)
 

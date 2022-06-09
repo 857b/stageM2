@@ -123,7 +123,7 @@ let __normal_M : list norm_step = [
               `%L.map; `%SE.Mkvprop'?.t;
               `%prog_M_to_Fun];
   delta_attr [`%__tac_helper__; `%M.__repr_M__;
-              `%SE.__steel_reduce__; `%SE.__reduce__];
+              `%SE.__reduce__];
   delta_qualifier ["unfold"];
   iota; zeta
 ]
@@ -138,7 +138,7 @@ let __normal_ST : list norm_step = [
               `%M.Mkprog_cond?.pc_tree;  `%M.Mkprog_cond?.pc_post_len; `%M.Mkprog_cond?.pc_shape;
               `%Perm.perm_f_to_list; `%Ll.initi; `%Perm.id_n; `%Perm.mk_perm_f];
   delta_qualifier ["unfold"];
-  delta_attr [`%__tac_helper__; `%SE.__steel_reduce__];
+  delta_attr [`%__tac_helper__; `%SE.__reduce__];
   iota; zeta; primops
 ]
 
@@ -215,7 +215,8 @@ let __normal_Fun_spec : list norm_step = [
               `%Fl.cons; `%Fl.nil;
               `%SF.Mksl_tys_t?.val_t; `%SF.Mksl_tys_t?.sel_t;
               `%SF.Mksl_tys_v?.val_v; `%SF.Mksl_tys_v?.sel_v;
-              `%SF.Mksl_tys_r?.vl; `%SF.Mksl_tys_r?.sl];
+              `%SF.Mksl_tys_r?.vl; `%SF.Mksl_tys_r?.sl;
+              `%M.vprop_of_list; `%M.vprop_of_list'; `%M.vpl_sels];
   delta_qualifier ["unfold"];
   delta_attr [`%SE.__steel_reduce__];
   iota; zeta; primops
