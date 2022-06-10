@@ -389,6 +389,7 @@ let veq_sel_eq_eff_sound
       (sl0 : Fl.flist pre) (sl1 : Fl.flist post)
   : Lemma (requires veq_typ_eq pre post f_eq)
           (ensures  veq_sel_eq_eff f_eq sl0 sl1 <==> veq_sel_eq f_eq sl0 sl1)
+          [SMTPat (veq_sel_eq_eff f_eq sl0 sl1)]
   = veq_sel_eq_eff_aux_sound f_eq sl0 sl1 0
 
 #push-options "--z3rlimit 10"
@@ -456,7 +457,7 @@ let vequiv_trans_ens_imp (#v0 #v1 #v2 : vprop_list) (e0 : vequiv v0 v1) (e1 : ve
       exists (sl1 : sl_f v1) . (veq_sel_eq (veq_eq_sl (veq_of_list e0.veq_eq)) sl0 sl1 /\ p sl1);
     <==> { }
       exists (sl1 : sl_f v1) . veq_ens1 e0 sl0 sl1 /\ p1 sl1 /\ p2 sl1;
-    <==> { FStar.Classical.forall_intro_2 (FStar.Classical.move_requires_2 (veq_sel_eq_eff_sound f_eq)) }
+    <==> { }
       exists (sl1 : sl_f v1) . veq_ens1 e0 sl0 sl1 /\ e1.veq_ens sl1 sl2 /\ veq_sel_eq f_eq sl1 sl2;
     };
     introduce forall (sl1 : sl_f v1 { veq_ens1 e1 sl1 sl2 }) . veq_sel_eq f_eq sl1 sl2

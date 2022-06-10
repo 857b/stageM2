@@ -390,6 +390,30 @@ let injective_on_domI (#a #b : Type) (f : a -> option b)
 
 
 [@@ __cond_solver__]
+let rec check_injective_on_dom_aux (#b : eqtype) (f : list (option b))
+  : Tot (bool & list b) (decreases f) // is injective & range
+  = match f with
+  | [] -> true, []
+  | None :: fs   -> check_injective_on_dom_aux fs
+  | Some y :: fs -> let ij, rng = check_injective_on_dom_aux fs in
+                  ij && not (L.mem y rng), y :: rng
+
+[@@ __cond_solver__]
+let check_injective_on_dom (#b : eqtype) (f : list (option b))
+  : bool
+  = let b, _ = check_injective_on_dom_aux f in b
+
+val check_injective_on_dom_aux_spec (#b : eqtype) (f : list (option b))
+  : Lemma (let ij, rng = check_injective_on_dom_aux f in
+             (ij ==> injective_on_dom #(Fin.fin (len f)) (L.index f)) /\
+             (forall (y : b) . L.mem (Some y) f ==> L.mem y rng))
+
+let check_injective_on_dom_spec (#b : eqtype) (f : list (option b))
+  : Lemma (check_injective_on_dom f ==> injective_on_dom #(Fin.fin (len f)) (L.index f))
+  = check_injective_on_dom_aux_spec f
+
+
+[@@ __cond_solver__]
 let rec build_injection_find (#trg_n : nat) (g mask : Ll.vec trg_n bool) (i : nat)
   : Tot (option (Fin.fin (i + trg_n))) (decreases trg_n)
   = match g, mask with
@@ -434,12 +458,15 @@ let build_injection_spec (#src_n #trg_n : nat) (g : ograph src_n trg_n)
   = build_injection_iter_spec g (Ll.initi 0 trg_n (fun _ -> true))
 
 
+let map_to_eq (#a : Type) (src trg : list a) (f : Fin.fin (len src) -> option (Fin.fin (len trg)))
+  : prop
+  = forall (i : Fin.fin (len src)) . Some? (f i) ==> L.index trg (Some?.v (f i)) == L.index src i
+
 /// The type of partial injection between equal elements of two lists.
 /// In practice [a] is [vprop']
 type partial_injection (#a : Type) (src trg : list a) =
   f : Ll.vec (len src) (option (Fin.fin (len trg))) {
-    (forall (i : Fin.fin (len src)) . Some? (L.index f i) ==>
-         L.index trg (Some?.v (L.index f i)) == L.index src i) /\
+    map_to_eq src trg (L.index f) /\
     injective_on_dom #(Fin.fin (len src)) (L.index f)
   }
 
@@ -507,6 +534,8 @@ let normal_build_partial_injection : list norm_step = [
   delta_only [`%__build_partial_injection; `%ograph_of_equalities; `%list_to_matrix; `%L.splitAt;
               `%L.length; `%Ll.initi; `%len; `%Ll.set;
               `%build_injection; `%build_injection_iter; `%build_injection_find];
+  delta_attr [`%__cond_solver__; `%__tac_helper__];
+  delta_qualifier ["unfold"];
   iota; zeta; primops]
 
 /// solves a goal of the form [partial_injection src dst]
@@ -530,6 +559,176 @@ let _ = assert (U.print_util test_inj)
         let inj, () = build_term goal build_partial_injection in
         exact inj)*)
 
+
+(***** Building an injection for smt_fallback *)
+
+type findi_exact_r (n : nat) =
+  | FER_None
+  | FER_Some of (Fin.fin n)
+  | FER_Err
+
+[@@ __cond_solver__]
+let rec findi_exact (#a : eqtype) (x : a) (l : list a)
+  : Tot (findi_exact_r (len l))
+  = match l with
+  | [] -> FER_None
+  | y :: ys -> match findi_exact x ys with
+             | FER_None   -> if x = y then FER_Some 0 else FER_None
+             | FER_Some i -> if x = y then FER_Err    else FER_Some (i+1)
+             | FER_Err    -> FER_Err
+
+[@@__cond_solver__]
+let rec build_injection_exact_iter (#src_n #trg_n : nat) (g : ograph src_n trg_n)
+  : Tot (option (Ll.vec src_n (option (Fin.fin trg_n)))) (decreases src_n)
+  =
+    match g with
+    | [] -> Some []
+    | im :: g ->
+           let rng_t = option (Fin.fin trg_n)                     in
+           let vec_cons (y : rng_t) (ys : Ll.vec (src_n-1) rng_t)
+               : Ll.vec src_n rng_t = y :: ys                      in
+           let ij = build_injection_exact_iter #(src_n-1) g       in
+           match findi_exact true im with
+           | FER_None   -> Opt.map (vec_cons (None #(Fin.fin trg_n)))   ij
+           | FER_Some i -> Opt.map (vec_cons (Some #(Fin.fin trg_n) i)) ij
+           | FER_Err    -> None
+
+[@@ __cond_solver__]
+let build_injection_exact (#src_n #trg_n : nat) (g : ograph src_n trg_n)
+  : Tot (option (ij : Ll.vec src_n (option (Fin.fin trg_n)) {injective_on_dom #(Fin.fin src_n) (L.index ij)}))
+  = Opt.bind (build_injection_exact_iter g) (fun ij ->
+      if check_injective_on_dom ij
+      then (check_injective_on_dom_spec ij; Some ij)
+      else None #(ij : Ll.vec src_n (option (Fin.fin trg_n)) {injective_on_dom #(Fin.fin src_n) (L.index ij)}))
+
+
+type key_of (#a : Type) (k : Type) (x : a) = k
+
+[@@__tac_helper__]
+private
+let __intro_key_of (#a : Type) (k : Type) (x : a) (y : k) : key_of k x = y
+
+/// Solves a goal [key_of (option string) (f xs...)] by using [Some "f"] as key if f is a FVar, [None] otherwise.
+let build_key_of () : Tac unit =
+  let g = cur_goal () in
+  match inspect g with
+  | Tv_App _ (t, Q_Explicit) ->
+        let hd, _ = collect_app t in
+        apply (`__intro_key_of);
+       (match inspect hd with
+        | Tv_FVar fv ->
+              let key = implode_qn (inspect_fv fv) in
+              exact (quote (Some #string key))
+        | _ -> exact (quote (None #string))
+        )
+  | _ -> fail "build_key_of"
+
+type key_list (#a k : Type) : list a -> Type =
+  | KeyNil  : key_list #a k []
+  | KeyCons : (x : a) -> (xs : list a) ->
+              (y : key_of k x) -> key_list k xs ->
+              key_list k (x :: xs)
+
+/// Solves a goal [key_list string ts]
+#push-options "--ifuel 2"
+(**) private val __begin_opt_2 : unit
+let rec build_key_list () : Tac unit =
+  match catch (fun () -> apply (`KeyCons)) with
+  | Inl _  -> apply (`KeyNil)
+  | Inr () -> build_key_of ();
+             build_key_list ()
+#pop-options
+(**) private val __end_opt_2 : unit
+
+
+[@@__cond_solver__]
+let rec extract_key_list (#a #k : Type) (#xs : list a) (l : key_list k xs)
+  : Tot (l' : list k {len l' = len xs}) (decreases l)
+  = match l with
+  | KeyNil -> []
+  | KeyCons _ _ y ys -> y :: extract_key_list ys
+
+(*
+let test_key_list (r : Steel.Reference.ref int) (v : SE.vprop')
+  : key_list (option string) [Steel.Reference.vptr' r (Steel.FractionalPermission.full_perm); v]
+  = _ by (build_key_list ())
+
+let _ = fun r v -> assert (print_util (extract_key_list (test_key_list r v)))
+                    by (norm [delta_only [`%test_key_list];
+                              delta_attr [`%__cond_solver__; `%__tac_helper__];
+                              iota; zeta]; fail "print")
+*)
+
+
+[@@ __cond_solver__]
+let graph_of_keys (#k : Type) (f : k -> k -> bool) (src trg : list k)
+  : Ll.vec (len src) (Ll.vec (len trg) bool) =
+  L.map #_ #(Ll.vec (len trg) bool) (fun x -> L.map (fun y -> f x y) trg) src
+
+[@@ __cond_solver__]
+let key_eq (x x' : option string) : bool =
+  match x, x' with
+  | Some s, Some s' -> s = s'
+  | _ -> false
+
+type pre_partial_injection (#a : Type) (src trg : list a) =
+   f : Ll.vec (len src) (option (Fin.fin (len trg)))
+     { injective_on_dom #(Fin.fin (len src)) (L.index f) }
+
+[@@__cond_solver__]
+private
+let __build_injection_from_key (#a : Type u#a) (src trg : list a)
+      (ksrc : key_list (option string) src) (ktrg : key_list (option string) trg)
+      (#ij : pre_partial_injection src trg)
+      (_ : squash (Some ij ==
+             build_injection_exact #(len src) #(len trg)
+               (graph_of_keys key_eq (extract_key_list ksrc) (extract_key_list ktrg))))
+  : pre_partial_injection src trg
+  = ij
+
+let __normal_build_injection_from_keys : list norm_step = [
+  delta_only [`%L.map];
+  delta_attr [`%__cond_solver__; `%__tac_helper__];
+  iota; zeta
+]
+
+/// Solves a goal [pre_partial_injection src trg]
+let build_pre_partial_injection_from_keys fr ctx : Tac unit
+  =
+    let goal = cur_goal () in
+    let ij = fresh_uvar None in
+    apply_raw (`__build_injection_from_key);
+    // ksrc
+    build_key_list ();
+    // ktrg
+    build_key_list ();
+    // ij
+    exact ij;
+    // ij <- Some?.v build_injection_exact...
+    norm __normal_build_injection_from_keys;
+    cs_try trefl fr ctx  (fun m -> fail (m Fail_SMT_fallback_inj [Info_goal goal]))
+
+
+/// The side condition encoded to the SMT for the smt_fallbacks
+[@@ __cond_solver__]
+let rec check_map_to_eq (#a : Type) (src trg : list a) (ij : Ll.vec (len src) (option (Fin.fin (len trg))))
+  : Tot prop (decreases ij)
+  = match ij with
+  | [] -> True
+  | None   :: ij' -> let _  :: tl = src in check_map_to_eq tl trg ij'
+  | Some i :: ij' -> let hd :: tl = src in L.index trg i == hd /\ check_map_to_eq tl trg ij'
+
+val check_map_to_eq_spec (#a : Type) (src trg : list a) (ij : Ll.vec (len src) (option (Fin.fin (len trg))))
+  : Lemma (requires check_map_to_eq src trg ij) (ensures map_to_eq src trg (L.index ij))
+
+unfold
+let checked_pre_partial_injection
+      (#a : Type) (#src #trg : list a) (ij : pre_partial_injection src trg)
+      (_ : squash (check_map_to_eq src trg ij))
+  : partial_injection src trg
+  =
+    (**) check_map_to_eq_spec src trg ij;
+    ij
 
 (*** Building a [M.vequiv] *)
 
@@ -569,6 +768,18 @@ let vequiv_sol_end_prt (trg : M.vprop_list) : vequiv_sol false [] trg
 
 (**** [vequiv_sol_inj] *)
 
+// Used instead of [L.mem (Some x) l] to avoid problems of reduction of [Some #t x = Some #t' y]
+[@@__cond_solver__]
+let rec mem_Some (#a : eqtype) (x : a) (l : list (option a))
+  : Tot bool (decreases l) =
+  match l with
+  | [] -> false
+  | None :: l -> mem_Some x l
+  | Some y :: l -> y = x || mem_Some x l
+
+val mem_Some_eq (#a : eqtype) (x : a) (l : list (option a))
+  : Lemma (mem_Some x l = L.mem (Some x) l) [SMTPat (mem_Some x l)]
+
 /// Masks to select the elements that have *not* been matched
 
 [@@ __cond_solver__]
@@ -577,7 +788,7 @@ let ij_src_mask (#src_n : nat) (#b : Type) (ij : Ll.vec src_n (option b)) : Ll.v
 
 [@@ __cond_solver__]
 let ij_trg_mask (#src_n #trg_n : nat) (ij : Ll.vec src_n (option (Fin.fin trg_n))) : Ll.vec trg_n bool
-  = Ll.initi 0 trg_n (fun j -> not (L.mem (Some j) ij))
+  = Ll.initi 0 trg_n (fun j -> not (mem_Some j ij))
 
 /// Number of matched elements i.e. number of [Some]
 let ij_matched_n (#a : Type) (#src #trg : list a) (ij : partial_injection src trg) : nat
@@ -658,6 +869,7 @@ val vequiv_inj_g
                             (Msk.filter_mask_fl (ij_src_mask ij) _ (M.sel src h1)) /\
                  M.veq_sel_eq (M.veq_eq_sl (M.veq_of_list (vequiv_inj_eq ij e'))) (M.sel trg h0) (M.sel src h1))
 
+//TODO? [filter_mask_dl] instead of [filter_mask_fl]
 [@@ __cond_solver__]
 let vequiv_inj
       (src : M.vprop_list) (trg : M.vprop_list)
@@ -715,9 +927,32 @@ let vequiv_sol_inj
   = match e' with
   | VeqAll src' trg' e' -> VeqAll src trg (vequiv_inj src trg ij e')
   | VeqPrt src' src_add trg' e' ->
-           extend_partial_injection_src ij src_add;
-           extend_partial_injection_trg ij src_add;
+           (**) extend_partial_injection_src ij src_add;
+           (**) extend_partial_injection_trg ij src_add;
            VeqPrt src src_add trg (vequiv_inj L.(src@src_add) trg (extend_partial_injection ij src_add) e')
+
+(****** [SMT fallback] *)
+
+/// The SMT fallback phase is an injection whose [map_to_eq] condition is added to [veq_req] and solved by SMT.
+/// The injection is built from the graph of equalities between the head symbols of the [vprop']. We do not use the
+/// [smt_fallback] attribute.
+
+[@@ __cond_solver__]
+let vequiv_sol_inj_SMT_fallback
+      (all : bool) (src : M.vprop_list) (trg : M.vprop_list)
+      (ij : pre_partial_injection src trg)
+      (e' : vequiv_sol all (Msk.filter_mask (ij_src_mask ij) src) (Msk.filter_mask (ij_trg_mask ij) trg))
+  : vequiv_sol all src trg
+  = match e' with
+  | VeqAll src' trg' e' ->
+           VeqAll src trg (M.vequiv_with_req (check_map_to_eq src trg ij) (fun rq ->
+             vequiv_inj src trg (checked_pre_partial_injection ij rq) e'))
+  | VeqPrt src' src_add trg' e' ->
+           VeqPrt src src_add trg (M.vequiv_with_req (check_map_to_eq src trg ij) (fun rq ->
+             let ij = checked_pre_partial_injection ij rq in
+             (**) extend_partial_injection_src ij src_add;
+             (**) extend_partial_injection_trg ij src_add;
+             vequiv_inj L.(src@src_add) trg (extend_partial_injection ij src_add) e'))
 
 
 (**** pointwise equivalence *)
@@ -912,6 +1147,8 @@ let test_rew_vequiv_sol_pointwise (v : int -> SE.vprop')
 let normal_ij_mask : list norm_step = [
   delta_only [`%Msk.filter_mask; `%ij_src_mask; `%ij_trg_mask; `%L.map;
               `%None?; `%Ll.initi; `%op_Negation; `%L.mem];
+  delta_attr [`%__cond_solver__; `%__tac_helper__];
+  delta_qualifier ["unfold"];
   iota; zeta; primops]
 
 let build_vequiv_sol_triv () : Tac unit =
@@ -927,6 +1164,11 @@ let build_vequiv_sol fr ctx (all : bool) : Tac unit
     with | _ ->
       apply_raw (`vequiv_sol_inj);
       build_partial_injection fr ctx;
+      norm normal_build_partial_injection;
+      norm normal_ij_mask;
+    try build_vequiv_sol_triv () with | _ ->
+      apply_raw (`vequiv_sol_inj_SMT_fallback);
+      build_pre_partial_injection_from_keys fr ctx;
       norm normal_build_partial_injection;
       norm normal_ij_mask;
     try build_vequiv_sol_triv () with | _ ->

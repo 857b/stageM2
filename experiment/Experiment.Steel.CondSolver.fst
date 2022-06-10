@@ -64,6 +64,34 @@ let __build_to_repr_t_lem
 
 (***** [build_injection] *)
 
+let rec check_injective_on_dom_aux_spec (#b : eqtype) (f : list (option b))
+  : Lemma (ensures (let ij, rng = check_injective_on_dom_aux f in
+                   (ij ==> injective_on_dom #(Fin.fin (len f)) (L.index f)) /\
+                   (forall (y : b) . L.mem (Some y) f ==> L.mem y rng)))
+          (decreases f)
+  = match f with
+  | [] -> ()
+  | None :: fs    ->
+      let ij, rng = check_injective_on_dom_aux fs in
+      check_injective_on_dom_aux_spec fs;
+      if ij
+      then injective_on_domI #(Fin.fin (len f)) (L.index f) (fun i i' ->
+        assert (L.index f i  == L.index fs (i -1));
+        assert (L.index f i' == L.index fs (i'-1)))
+  | Some y :: fs ->
+      let ij, rng = check_injective_on_dom_aux fs in
+      check_injective_on_dom_aux_spec fs;
+      if ij && not (L.mem y rng)
+      then injective_on_domI #(Fin.fin (len f)) (L.index f) (fun i i' ->
+        if i > 0 then begin
+          assert (L.index f i == L.index fs (i-1));
+          L.lemma_index_memP fs (i-1)
+        end;
+        if i' > 0 then begin
+          assert (L.index f i' == L.index fs (i'-1));
+          L.lemma_index_memP fs (i'-1)
+        end)
+
 let rec build_injection_find_spec (#trg_n : nat) (g mask : Ll.vec trg_n bool) (i : nat)
   : Lemma (requires Some? (build_injection_find g mask i))
           (ensures (let j = Some?.v (build_injection_find g mask i) - i in
@@ -163,8 +191,35 @@ let ograph_of_equalities_index (#a : Type) (src trg : list a) (bs : list bool)
       L.index src i == L.index trg j;
     }
 
+(**) #push-options "--ifuel 2"
+(**) private let __begin_opt_2 = ()
+(**) #pop-options
+(**) private let __end_opt_2 = ()
+
+let rec check_map_to_eq_spec (#a : Type) (src trg : list a) (ij : Ll.vec (len src) (option (Fin.fin (len trg))))
+  : Lemma (requires check_map_to_eq src trg ij)
+          (ensures map_to_eq src trg (L.index ij)) (decreases ij)
+  = match ij with
+  | [] -> ()
+  | None   :: ij' -> let _  :: tl = src in
+                   check_map_to_eq_spec tl trg ij';
+                   introduce forall (i : Fin.fin (len src) {Some? (L.index ij i)}).
+                         L.index trg (Some?.v (L.index ij i)) == L.index src i
+                     with assert (L.index ij i == L.index ij' (i-1) /\ L.index src i == L.index tl (i-1))
+  | Some i :: ij' -> let hd :: tl = src in
+                   check_map_to_eq_spec tl trg ij';
+                   introduce forall (i : Fin.fin (len src) {Some? (L.index ij i)}).
+                         L.index trg (Some?.v (L.index ij i)) == L.index src i
+                     with if i > 0
+                          then assert (L.index ij i == L.index ij' (i-1) /\ L.index src i == L.index tl (i-1))
 
 (***** [vequiv_sol] *)
+
+let rec mem_Some_eq (#a : eqtype) (x : a) (l : list (option a))
+  : Lemma (ensures mem_Some x l = L.mem (Some x) l) (decreases l) [SMTPat (mem_Some x l)]
+  = match l with
+  | [] -> ()
+  | y :: ys -> mem_Some_eq x ys
 
 #push-options "--ifuel 1 --fuel 0"
 let ij_matched_perm_f_injective
@@ -172,7 +227,7 @@ let ij_matched_perm_f_injective
   : Lemma (Perm.injective (ij_matched_perm_f ij))
   = Perm.injectiveI (ij_matched_perm_f ij) (fun i1 i1' ->
       let nm_src = Msk.mask_not (ij_src_mask ij) in
-      // FIXME we cannot [nm_src] here
+      // FIXME we cannot use [nm_src] here
       let i0  = Msk.mask_pull (Msk.mask_not (ij_src_mask ij)) i1  in
       let i0' = Msk.mask_pull (Msk.mask_not (ij_src_mask ij)) i1' in
       let j0  = Some?.v (L.index ij i0 ) in
@@ -206,7 +261,7 @@ let ij_matched_len (#a : Type) (#src #trg : list a) (ij : partial_injection src 
     Perm.fin_surjective_ge _ _ (ij_matched_perm_f ij)
 #pop-options
 
-#push-options "--ifuel 1 --fuel 1 --z3rlimit 60"
+#push-options "--ifuel 1 --fuel 1 --z3rlimit 120"
 let ij_matched_perm_eq (#a : Type) (#src #trg : list a) (ij : partial_injection src trg)
   : Lemma (ij_matched_len ij;
            Msk.filter_mask (Msk.mask_not (ij_src_mask ij)) src ==

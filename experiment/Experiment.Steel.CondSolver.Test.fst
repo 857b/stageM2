@@ -308,3 +308,10 @@ let test_build_tree_cond__ret_f (v : int -> vprop') (x : int) (f : int -> int)
         (M.Tret int (f x) (fun _ -> []))
         [v (f x)] (fun y -> [v y])
    = _ by (norm_test (); let _ = build_tree_cond test_flags true in ())
+
+
+let test_build_tree_cond__smt_fallback_0 (r0 r1 : ref int)
+  : M.tree_cond
+        (M.Tret unit () (fun _ -> []))
+        [vptr' r0 full_perm] (fun _ -> [vptr' r1 full_perm])
+  = _ by (let _ = build_tree_cond test_flags true in ())

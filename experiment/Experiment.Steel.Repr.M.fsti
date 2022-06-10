@@ -360,6 +360,7 @@ val veq_sel_eq_eff_sound
       (sl0 : Fl.flist pre) (sl1 : Fl.flist post)
   : Lemma (requires veq_typ_eq pre post f_eq)
           (ensures  veq_sel_eq_eff f_eq sl0 sl1 <==> veq_sel_eq f_eq sl0 sl1)
+          [SMTPat (veq_sel_eq_eff f_eq sl0 sl1)]
 
 
 let veq_partial_eq (#pre #post : Fl.ty_list) (l_eq : veq_eq_t_list (L.length pre) (L.length post))
@@ -399,6 +400,10 @@ let veq_ens1 (#pre #post : vprop_list) (veq : vequiv pre post) (sl0 : sl_f pre) 
   = veq.veq_ens sl0 sl1 /\ veq_sel_eq (veq_eq_sl (veq_of_list veq.veq_eq)) sl0 sl1
 
 [@@__vequiv__]
+let veq_ens_eff (#pre #post : vprop_list) (veq : vequiv pre post) (sl0 : sl_f pre) (sl1 : sl_f post) : prop
+  = veq.veq_ens sl0 sl1 /\ veq_sel_eq_eff (veq_eq_sl (veq_of_list veq.veq_eq)) sl0 sl1
+
+[@@__vequiv__]
 let veq_f (#pre #post : vprop_list) (veq : vequiv pre post) : veq_eq_t (L.length pre) (L.length post)
   = veq_of_list veq.veq_eq
 
@@ -409,6 +414,16 @@ let vequiv_refl (v : vprop_list) : vequiv v v = {
   veq_eq  = Ll.initi 0 (L.length v) (fun i -> Some (i <: Fin.fin (L.length v)));
   veq_typ = ();
   veq_g   = (fun opened -> noop ())
+}
+
+[@@__vequiv__]
+let vequiv_with_req (#v0 #v1 : vprop_list) (req : Type0) (e : squash req -> vequiv v0 v1) : vequiv v0 v1 = {
+  veq_req = (fun sl0     -> req /\ (e ()).veq_req sl0);
+  veq_ens = (fun sl0 sl1 -> req /\ veq_ens_eff (e ()) sl0 sl1);
+  // [veq_typ] cannot requires req so we do not propagate the equalities
+  veq_eq  = L.map (fun _ -> None) v1;
+  veq_typ = ();
+  veq_g   = (fun opened -> (e ()).veq_g opened)
 }
 
 (****** [vequiv_trans] *)

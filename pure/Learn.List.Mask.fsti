@@ -107,6 +107,7 @@ val filter_mask_dl_index (#len : nat) (mask : vec len bool) (ts : vec len Type) 
           (ensures  Dl.index (filter_mask_dl mask ts xs) i === Dl.index xs (mask_pull mask i))
           [SMTPat (Dl.index (filter_mask_dl mask ts xs) i)]
 
+[@@__mask__]
 noextract
 let filter_mask_fl (#len : nat) (mask : vec len bool) (ts : vec len Type) (xs : Fl.flist ts)
   : Tot (Fl.flist (filter_mask mask ts))

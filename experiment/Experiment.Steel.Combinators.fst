@@ -410,7 +410,7 @@ let ghost_to_steel (#a : Type) (f : repr (SH.KGhost Set.empty) (Ghost.erased a))
                     ghost_to_steel_steel a f.repr_tree pre post c (f.repr_steel _ _ c))
   }
 
-(*
+
 inline_for_extraction noextract
 let ghost_to_steel_steel_ct_aux (a : Type) (t : prog_tree a) (pre : pre_t) (post : post_t a)
       (c : tree_cond t pre post)
@@ -419,7 +419,7 @@ let ghost_to_steel_steel_ct_aux (a : Type) (t : prog_tree a) (pre : pre_t) (post
              (vprop_of_list pre) (fun x -> vprop_of_list (post (Ghost.reveal x)))
              (fun h0 -> tree_req t c (sel pre h0))
              (fun h0 x h1 -> tree_ens t c (sel pre h0) (Ghost.reveal x) (sel (post (Ghost.reveal x)) h1))
-  = let x = ghost_u r () in Ghost.hide x
+  = let x = SH.ghost_u r () in Ghost.hide x
 
 inline_for_extraction noextract
 let ghost_to_steel_steel_ct (a : Type) (t : prog_tree a) (pre : pre_t) (post : post_t a)
@@ -428,10 +428,10 @@ let ghost_to_steel_steel_ct (a : Type) (t : prog_tree a) (pre : pre_t) (post : p
       (rv : (x : Ghost.erased a) -> (x' : a { x' == Ghost.reveal x }))
   : repr_steel_t SH.KSteel a pre post (tree_req t c) (tree_ens t c)
   = SH.steel_f (fun () ->
-    let x = ghost_to_steel_steel_ct_aux a t pre post c r in
-    change_equal_slprop (vprop_of_list (post (Ghost.reveal x))) (vprop_of_list (post (rv x)));
-    Steel.Effect.Atomic.return (rv x)
+    let x : Ghost.erased a = ghost_to_steel_steel_ct_aux a t pre post c r in
+    let x' : a = rv x in
+    change_equal_slprop (vprop_of_list (post (Ghost.reveal x))) (vprop_of_list (post x'));
+    Steel.Effect.Atomic.return x'
   )
-*)
 
 // TODO: SteelAtomic

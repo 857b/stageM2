@@ -661,3 +661,12 @@ let test_id_caller (r0 r1 : ref U32.t)
   = F.(to_steel (
     call (test_id_ok (SU.vprop_group' (M.vprop_of_list [vptr' r0 full_perm; vptr' r1 full_perm]))) ()
     ) (_ by (mk_steel [Timer; Dump Stage_WP])))
+
+////////// test smt_fallback //////////
+
+let test_smt_fallback (r0 r1 : ref U32.t)
+  : F.steel unit (vptr r0) (fun () -> vptr r1)
+        (requires fun _ -> r0 == r1) (ensures fun h0 () h1 -> sel r0 h0 = sel r1 h1)
+  = F.(to_steel (
+    return ()
+    ) (_ by (mk_steel [Dump Stage_WP])))

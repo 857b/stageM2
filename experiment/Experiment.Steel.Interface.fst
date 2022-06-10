@@ -80,6 +80,7 @@ type failure_enum =
   | Fail_elem_index
   | Fail_shape_unification : nat -> nat -> failure_enum
   | Fail_to_repr_t
+  | Fail_SMT_fallback_inj
 
 noeq
 type info =

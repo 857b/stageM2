@@ -218,7 +218,7 @@ let __normal_Fun_spec : list norm_step = [
               `%SF.Mksl_tys_r?.vl; `%SF.Mksl_tys_r?.sl;
               `%M.vprop_of_list; `%M.vprop_of_list'; `%M.vpl_sels];
   delta_qualifier ["unfold"];
-  delta_attr [`%SE.__steel_reduce__];
+  delta_attr [`%SE.__steel_reduce__; `%Learn.List.Mask.__mask__];
   iota; zeta; primops
 ]
 
@@ -362,16 +362,16 @@ let __build_to_steel
   = M.steel_of_repr goal_tr goal_f
 
 /// Solves a goal [__to_steel_goal]
-// FIXME: this tactic get stuck if this file is lax-checked
 let build_to_steel (fr : flags_record) : Tac unit
   =
     // This tactics fails if called in lax mode.
     // It appears that at this point the goal contains unification variables in lax-mode:
     //   __to_steel_goal unit ?pre ?post ?req ?ens t
     // whereas the specifications are concrete terms (inferred from the top-level annotation) in normal-mode.
-    // If we try to solve the goal with [lax_guard], Steel then fails to solve some [equiv] with the
-    // [__lax_made] introduced for the specifications.
-    
+    // If we try to solve the goal with [lax_guard], we obtain:
+    //   (Error 217) Tactic left uninstantiated unification variable ?421 of type Type
+    //               (reason = "Instantiating implicit argument in application")
+    with_policy Force (fun () ->
     let t = timer_start "specs     " fr.f_timer in
     apply_raw (`__build_to_steel);
     CSl.build_to_repr_t fr (fun () -> [Info_location "in the specification"]);
@@ -380,6 +380,7 @@ let build_to_steel (fr : flags_record) : Tac unit
     // [extract]
     norm [delta_attr [`%__tac_helper__]; iota];
     solve_by_wp fr
+    )
 
 
 [@@ __tac_helper__]
