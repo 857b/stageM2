@@ -273,13 +273,13 @@ val steel_elim_vprop_of_list_append_f (#opened : Mem.inames) (vs0 vs1 : vprop_li
   : SteelGhost unit opened
       (vprop_of_list L.(vs0@vs1)) (fun () -> vprop_of_list vs0 `star` vprop_of_list vs1)
       (requires fun _ -> True)
-      (ensures fun h0 () h1 -> sel_f (vs0@vs1) h0 == append_vars (sel_f vs0 h1) (sel_f vs1 h1))
+      (ensures fun h0 () h1 -> sel_f L.(vs0@vs1) h0 == append_vars (sel_f vs0 h1) (sel_f vs1 h1))
 
 val steel_intro_vprop_of_list_append_f (#opened : Mem.inames) (vs0 vs1 : vprop_list)
   : SteelGhost unit opened
       (vprop_of_list vs0 `star` vprop_of_list vs1) (fun () -> vprop_of_list L.(vs0@vs1))
       (requires fun _ -> True)
-      (ensures fun h0 () h1 -> sel_f (vs0@vs1) h1 == append_vars (sel_f vs0 h0) (sel_f vs1 h0))
+      (ensures fun h0 () h1 -> sel_f L.(vs0@vs1) h1 == append_vars (sel_f vs0 h0) (sel_f vs1 h0))
 
 
 (***** [vequiv] *)

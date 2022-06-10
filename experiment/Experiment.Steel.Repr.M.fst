@@ -292,7 +292,7 @@ let rec steel_elim_vprop_of_list_append #opened (vs0 vs1 : vprop_list)
   : SteelGhost unit opened
       (vprop_of_list L.(vs0@vs1)) (fun () -> vprop_of_list vs0 `star` vprop_of_list vs1)
       (requires fun _ -> True)
-      (ensures fun h0 () h1 -> split_vars_list vs0 vs1 (sel_list (vs0@vs1) h0)
+      (ensures fun h0 () h1 -> split_vars_list vs0 vs1 (sel_list L.(vs0@vs1) h0)
                         == (sel_list vs0 h1, sel_list vs1 h1))
       (decreases %[vs0; 0])
   =
@@ -305,7 +305,7 @@ and steel_elim_vprop_of_list_append__cons #opened (vs0 vs1 : vprop_list) v0 (vs0
   : SteelGhost unit opened
       (vprop_of_list L.(vs0@vs1)) (fun () -> vprop_of_list vs0 `star` vprop_of_list vs1)
       (requires fun _ -> vs0 == v0 :: vs0')
-      (ensures fun h0 () h1 -> split_vars_list vs0 vs1 (sel_list (vs0@vs1) h0)
+      (ensures fun h0 () h1 -> split_vars_list vs0 vs1 (sel_list L.(vs0@vs1) h0)
                         == (sel_list vs0 h1, sel_list vs1 h1))
       (decreases %[vs0'; 1])
   =
@@ -329,7 +329,7 @@ let steel_elim_vprop_of_list_append_f #opened (vs0 vs1 : vprop_list)
   : SteelGhost unit opened
       (vprop_of_list L.(vs0@vs1)) (fun () -> vprop_of_list vs0 `star` vprop_of_list vs1)
       (requires fun _ -> True)
-      (ensures fun h0 () h1 -> sel_f (vs0@vs1) h0 == append_vars (sel_f vs0 h1) (sel_f vs1 h1))
+      (ensures fun h0 () h1 -> sel_f L.(vs0@vs1) h0 == append_vars (sel_f vs0 h1) (sel_f vs1 h1))
   =
     let sl = gget (vprop_of_list L.(vs0@vs1)) in
     Ll.map_append Mkvprop'?.t vs0 vs1;
@@ -345,7 +345,7 @@ let rec steel_intro_vprop_of_list_append #opened (vs0 vs1 : vprop_list)
   : SteelGhost unit opened
       (vprop_of_list vs0 `star` vprop_of_list vs1) (fun () -> vprop_of_list L.(vs0@vs1))
       (requires fun _ -> True)
-      (ensures fun h0 () h1 -> split_vars_list vs0 vs1 (sel_list (vs0@vs1) h1)
+      (ensures fun h0 () h1 -> split_vars_list vs0 vs1 (sel_list L.(vs0@vs1) h1)
                         == (sel_list vs0 h0, sel_list vs1 h0))
       (decreases vs0)
   = match vs0 with
@@ -363,7 +363,7 @@ let steel_intro_vprop_of_list_append_f #opened (vs0 vs1 : vprop_list)
   : SteelGhost unit opened
       (vprop_of_list vs0 `star` vprop_of_list vs1) (fun () -> vprop_of_list L.(vs0@vs1))
       (requires fun _ -> True)
-      (ensures fun h0 () h1 -> sel_f (vs0@vs1) h1 == append_vars (sel_f vs0 h0) (sel_f vs1 h0))
+      (ensures fun h0 () h1 -> sel_f L.(vs0@vs1) h1 == append_vars (sel_f vs0 h0) (sel_f vs1 h0))
   =
     steel_intro_vprop_of_list_append vs0 vs1;
     let sl = gget (vprop_of_list L.(vs0@vs1)) in

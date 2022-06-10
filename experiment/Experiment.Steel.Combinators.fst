@@ -26,7 +26,7 @@ let repr_of_steel_steel
   = SH.steel_f (fun () ->
     (**) tcs.tcs_pre_eq.veq_g _;
     (**) steel_elim_vprop_of_list_append_f pre tcs.tcs_frame;
-    let x = SH.steel_u f () in
+    let (x : a) = SH.steel_u f () in
     (**) steel_intro_vprop_of_list_append_f (post x) tcs.tcs_frame;
     (**) (tcs.tcs_post_eq x).veq_g _;
     Steel.Effect.Atomic.return x)
@@ -41,7 +41,7 @@ let repr_of_steel_ghost_steel
   = SH.ghost_f #opened (fun () ->
     (**) tcs.tcs_pre_eq.veq_g _;
     (**) steel_elim_vprop_of_list_append_f pre tcs.tcs_frame;
-    let x = SH.ghost_u f () in
+    let (x : a) = SH.ghost_u f () in
     (**) steel_intro_vprop_of_list_append_f (post x) tcs.tcs_frame;
     (**) (tcs.tcs_post_eq x).veq_g _;
     (**) noop ();

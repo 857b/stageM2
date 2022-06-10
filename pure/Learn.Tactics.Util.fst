@@ -97,7 +97,7 @@ let extract_nat_tac () : Tac nat
 // TODO ? bv, binder, comp, attrs, match
 let rec uvars_of_aux (t : term) (acc : list term) : Tac (list term) =
   match inspect t with
-  | Tv_Var _ | Tv_BVar _ | Tv_FVar _ -> acc
+  | Tv_Var _ | Tv_BVar _ | Tv_FVar _ | Tv_UInst _ _ -> acc
   | Tv_App hd (arg, _) -> uvars_of_aux hd (uvars_of_aux arg acc)
   | Tv_Abs (bv:binder) body -> uvars_of_aux body acc
   | Tv_Arrow (bv:binder) (c:comp) -> acc

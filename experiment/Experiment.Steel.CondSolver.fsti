@@ -1324,7 +1324,7 @@ and build_tree_cond fr (post : bool) : Tac shape_tree_t
       then fail_shape ()
       else let hd = (collect_app (L.index args 1)._1)._1 in
       match inspect hd with
-      | Tv_FVar fv ->
+      | Tv_FVar fv | Tv_UInst fv _ ->
           // TODO? better solution to match
           let nd = inspect_fv fv in
           if Nil? nd then (let _ = fail_shape () in fail "unreachable");
@@ -1337,7 +1337,7 @@ and build_tree_cond fr (post : bool) : Tac shape_tree_t
           | "Tif"    -> build_TCif    fr
           | _ -> fail_shape ()
           end
-      | _ -> fail_shape ()
+      | r -> fail_shape ()
     in
     if post
     then build_tac true

@@ -55,12 +55,12 @@ let intro_subcomp_pre'
 
 
 /// Modified version of [init_resolve_tac]
-[@@ resolve_implicits; framing_implicit]
+[@@ resolve_implicits; framing_implicit; override_resolve_implicits_handler framing_implicit [`%init_resolve_tac]]
 let resolve_framing () : Tac unit =
   let slgs, loggs = filter_goals (goals()) in
   set_goals slgs;
-  solve_maybe_emps (goals ());
-  solve_indirection_eqs (goals());
+  solve_maybe_emps (List.Tot.length (goals ()));
+  solve_indirection_eqs (List.Tot.length (goals()));
 
   //Solve the two goals using the hypothesis p1, p2
   let _ = repeatn 2 begin fun () ->
@@ -68,7 +68,8 @@ let resolve_framing () : Tac unit =
   end in
   
   set_goals loggs;
-  resolve_tac_logical ()
+  // Finally running the core of the tactic, scheduling and solving goals
+  resolve_tac_logical []
 
 [@@ handle_smt_goals ]
 let tac () =
