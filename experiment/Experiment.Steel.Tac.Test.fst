@@ -1,4 +1,4 @@
-module Experiment.Steel.CondSolver.Test
+module Experiment.Steel.Tac.Test
 
 module M    = Experiment.Steel.Repr.M
 module U    = Learn.Util
@@ -13,13 +13,16 @@ open Steel.Effect
 open Steel.FractionalPermission
 open Steel.Reference
 open Experiment.Steel.Interface
-open Experiment.Steel.CondSolver
+open Experiment.Steel.Tac
+open Experiment.Steel.Tac.MCond
 
 
 let test_flags = make_flags_record [Full_Msg]
 
 let _ : elem_index #int 4 [1;3;4;2;7]
   = _ by (build_elem_index test_flags dummy_ctx)
+
+#push-options "--silent"
 
 [@@ expect_failure [228]]
 let _ : elem_index #int 5 [1;3;4;2;7]
@@ -28,6 +31,8 @@ let _ : elem_index #int 5 [1;3;4;2;7]
 [@@ expect_failure [228]]
 let _ : elem_index #int 4 L.(0 :: ([1;3] @ [4;2;7]))
   = _ by (build_elem_index test_flags dummy_ctx)
+
+#pop-options
 
 unfold
 let specT (a : Type) (pre : M.pre_t) (post : M.post_t a) : M.prog_tree a
@@ -166,10 +171,12 @@ let test_build_prog_cond_0 (v0 v1 : vprop') (vx0 vx1 : int -> vprop')
         [v0] (fun y -> [v0; vx1 y; v1])
   = _ by (norm_test (); build_prog_cond test_flags)
 
+(*
 let _ = fun v0 v1 vx0 vx1 ->
   assert (U.print_util (test_build_prog_cond_0 v0 v1 vx0 vx1))
       by (norm [delta_only [`%test_build_prog_cond_0]; delta_attr [`%__tac_helper__]];
           dump "print")
+ *)
 
 (*let test_build_prog_cond_1 (v : int -> vprop')
   : M.prog_cond
@@ -185,6 +192,7 @@ let _ = fun v0 v1 vx0 vx1 ->
 /// inferred post is simply the current vprops, ignoring the returned value (i.e. [fun _ -> pre] in [__build_TCret_u]).
 /// But at this point pre is [vx0 x] where [x] is bound, the inferred post is thus [fun _ -> [vx0 x]] which
 /// depends on [x].
+#push-options "--silent"
 [@@expect_failure [228]]
 let test_build_tree_cond__Tret_u_0 (vx0 : int -> vprop')
   : M.tree_cond
@@ -193,6 +201,7 @@ let test_build_tree_cond__Tret_u_0 (vx0 : int -> vprop')
             (fun x -> M.Tret int x (fun _ -> [])))
         [] (fun x -> [vx0 x])
   = _ by (norm_test (); let _ = build_tree_cond test_flags true in ())
+#pop-options
 
 /// This example works because the resolution of [M.Tret] is given the expected post (the post of the whole
 /// program), [fun x' -> [vx0 x']].
@@ -213,21 +222,25 @@ let test_build_tree_cond__Tret_u_2 (v0 : vprop') (vx0 : int -> vprop')
 
 
 /// This example fails because we cannot find a [v0] in the pre.
+#push-options "--silent"
 [@@expect_failure [228]]
 let test_build_tree_cond__not_found (v0 : vprop')
   : M.tree_cond
         (specT int [v0] (fun _ -> []))
         [] (fun _ -> [])
   = _ by (norm_test (); let _ = build_tree_cond test_flags true in ())
+#pop-options
 
 /// This example fails because we obtain [fun _ -> [v0]] as post which is not unifiable with the expected post
 /// [fun _ -> []].
+#push-options "--silent"
 [@@expect_failure [228]]
 let test_build_tree_cond__post (v0 : vprop')
   : M.tree_cond
         (specT int [] (fun _ -> [v0]))
         [] (fun _ -> [])
   = _ by (norm_test (); let _ = build_tree_cond test_flags true in ())
+#pop-options
 
 
 let test_build_tree_cond__if_0 (v0 v1 v2 : vprop')
@@ -246,6 +259,7 @@ let test_build_tree_cond__if_1 (v0 v1 v2 : vprop')
 
 /// This example fails because the inference of the post-condition of the `if` statement uses the inference of
 /// the first branch, hence chooses [fun _ -> vx 0].
+#push-options "--silent"
 [@@expect_failure [228]]
 let test_build_tree_cond__if_2 (vx : int -> vprop')
   : M.tree_cond
@@ -254,6 +268,7 @@ let test_build_tree_cond__if_2 (vx : int -> vprop')
           (fun x -> M.Tret int x (fun _ -> [])))
         [vx 0] (fun x -> [vx x])
   = _ by (norm_test (); let _ = build_tree_cond test_flags true in ())
+#pop-options
 
 /// The solution is to add a [sl_hint] to the return of the first branch.
 let test_build_tree_cond__if_3 (vx : int -> vprop')
@@ -281,20 +296,24 @@ let test_build_tree_cond__if_5 (vx : int -> vprop')
   = _ by (norm_test (); let _ = build_tree_cond test_flags true in ())
 
 
+#push-options "--silent"
 [@@expect_failure [228]]
 let test_steel__ret_ghost_0 (r : ref int)
   : SteelT (Ghost.erased (ref int)) (vptr r) (fun r' -> vptr (Ghost.reveal r'))
   = Steel.Effect.Atomic.return (Ghost.hide r)
+#pop-options
 
 let test_steel__ret_ghost_1 (r : ref int)
   : SteelT (Ghost.erased (ref int)) (vptr r) (fun r' -> vptr (Ghost.reveal r'))
   = let r' = Ghost.hide r in
     Steel.Effect.Atomic.return r'
 
+#push-options "--silent"
 [@@expect_failure [228]]
 let test_steel__ret_f (v : int -> vprop) (x : int) (f : int -> int)
   : SteelT int (v (f x)) (fun y -> v y)
   = Steel.Effect.Atomic.return (f x)
+#pop-options
 
 (* TODO : mark vprop' as erasable
 let test_build_tree_cond__ret_ghost (r : ref int)

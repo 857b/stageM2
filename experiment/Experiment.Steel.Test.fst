@@ -10,15 +10,19 @@ module SU   = Learn.Steel.Util
 module U32  = FStar.UInt32
 module Perm = Learn.Permutation
 
-module F     = Experiment.Steel.Notations
-module M     = Experiment.Steel.Repr.M
-module MC    = Experiment.Steel.Combinators
-module ST    = Experiment.Steel.Repr.ST
-module SF    = Experiment.Steel.Repr.SF
-module SH    = Experiment.Steel.SteelHack
-module Fun   = Experiment.Repr.Fun
-module CSl   = Experiment.Steel.CondSolver
-module ST2SF = Experiment.Steel.Repr.ST_to_SF.Spec
+module F      = Experiment.Steel.Notations
+module M      = Experiment.Steel.Repr.M
+module MC     = Experiment.Steel.Combinators
+module ST     = Experiment.Steel.Repr.ST
+module SF     = Experiment.Steel.Repr.SF
+module SH     = Experiment.Steel.Steel
+module Fun    = Experiment.Repr.Fun
+module Vpl    = Experiment.Steel.VPropList
+module Veq    = Experiment.Steel.VEquiv
+module M2ST   = Experiment.Steel.Repr.M_to_ST
+module ST2SF  = Experiment.Steel.Repr.ST_to_SF.Spec
+module SF2Fun = Experiment.Steel.Repr.SF_to_Fun
+
 
 open Steel.Effect
 open Steel.Effect.Atomic
@@ -104,15 +108,15 @@ let read_ens  #a (r : ref a) : M.ens_t (read_pre r) a (read_post r)
 
 inline_for_extraction
 let steel_read #a (r : ref a) () :
-  Steel a (M.vprop_of_list [vptr' r full_perm]) (fun _ -> M.vprop_of_list [vptr' r full_perm])
+  Steel a (Vpl.vprop_of_list [vptr' r full_perm]) (fun _ -> Vpl.vprop_of_list [vptr' r full_perm])
     (requires fun _ -> True)
-    (ensures fun h0 x h1 -> let sl0 = M.sel_f [vptr' r full_perm] h0 in
-                         let sl1 = M.sel_f [vptr' r full_perm] h1 in
+    (ensures fun h0 x h1 -> let sl0 = Vpl.sel_f [vptr' r full_perm] h0 in
+                         let sl1 = Vpl.sel_f [vptr' r full_perm] h1 in
                          sl0 0 == sl1 0 /\ x == sl1 0)
   =
-    (**) change_equal_slprop (M.vprop_of_list [vptr' r full_perm]) (vptr r `star` emp);
+    (**) change_equal_slprop (Vpl.vprop_of_list [vptr' r full_perm]) (vptr r `star` emp);
     let x = read r in
-    (**) change_equal_slprop (vptr r `star` emp) (M.vprop_of_list [vptr' r full_perm]);
+    (**) change_equal_slprop (vptr r `star` emp) (Vpl.vprop_of_list [vptr' r full_perm]);
     Steel.Effect.Atomic.return x
 
 [@@ __test__; __reduce__]
@@ -122,12 +126,12 @@ let r_read (#a : Type0) (r : ref a) : M.repr SH.KSteel a =
 
 inline_for_extraction
 let steel_write #a (r : ref a) (x : a) ()
-  : Steel unit (M.vprop_of_list [vptr' r full_perm]) (fun _ -> M.vprop_of_list [vptr' r full_perm])
-               (requires fun _ -> True) (ensures fun h0 () h1 -> x == M.sel_f [vptr' r full_perm] h1 0)
+  : Steel unit (Vpl.vprop_of_list [vptr' r full_perm]) (fun _ -> Vpl.vprop_of_list [vptr' r full_perm])
+               (requires fun _ -> True) (ensures fun h0 () h1 -> x == Vpl.sel_f [vptr' r full_perm] h1 0)
   =
-    (**) change_equal_slprop (M.vprop_of_list [vptr' r full_perm]) (vptr r `star` emp);
+    (**) change_equal_slprop (Vpl.vprop_of_list [vptr' r full_perm]) (vptr r `star` emp);
     write r x;
-    (**) change_equal_slprop (vptr r `star` emp) (M.vprop_of_list [vptr' r full_perm])
+    (**) change_equal_slprop (vptr r `star` emp) (Vpl.vprop_of_list [vptr' r full_perm])
 
 [@@ __test__; __reduce__]
 inline_for_extraction
@@ -152,8 +156,8 @@ let normal_vp : list norm_step = [
   assert (U.print_util (test0_M r).repr_tree) by T.(norm __normal_M; qed ())*)
 
 unfold
-let test0_equiv (r : ref nat) (v : vprop') : M.vequiv ([vptr' r full_perm; v]) [vptr' r full_perm; v] =
-  M.vequiv_of_perm (Perm.id_n 2)
+let test0_equiv (r : ref nat) (v : vprop') : Veq.vequiv ([vptr' r full_perm; v]) [vptr' r full_perm; v] =
+  Veq.vequiv_of_perm (Perm.id_n 2)
 
 [@@ __test__]
 let test0_cond (r : ref nat) (v : vprop')
@@ -176,7 +180,7 @@ let test0_cond (r : ref nat) (v : vprop')
   qed ())
 
 unfold
-let test0_equiv_l : M.veq_eq_t_list 2 2 = [Some 0; Some 1]
+let test0_equiv_l : Veq.veq_eq_t_list 2 2 = [Some 0; Some 1]
 
 [@@ __test__]
 let test0_shape_M : M.shape_tree 2 2 = M.(
@@ -196,7 +200,7 @@ let test0_M_has_shape (r : ref nat) (v : vprop')
 
 [@@ __test__]
 let test0_ST (r : ref nat) (v : vprop') =
-  ST.flatten_prog (ST.repr_ST_of_M (test0_M r).repr_tree (test0_cond r v))
+  ST.flatten_prog (M2ST.repr_ST_of_M (test0_M r).repr_tree (test0_cond r v))
 
 (*let _ = fun r ->
    assert (U.print_util (test0_ST r (to_vprop' Steel.Memory.emp)))
@@ -208,9 +212,9 @@ let test0_ST (r : ref nat) (v : vprop') =
 let test0_shape_ST (r : ref nat) (v : vprop') : ST.prog_shape (test0_ST r v)
   = 
     (**) test0_M_has_shape r v;
-    (**) ST.repr_ST_of_M_shape (test0_M r).repr_tree (test0_cond r v) test0_shape_M;
-    let s = ST.shape_ST_of_M test0_shape_M in
-    (**) ST.flatten_prog_shape (ST.repr_ST_of_M (test0_M r).repr_tree (test0_cond r v)) s;
+    (**) M2ST.repr_ST_of_M_shape (test0_M r).repr_tree (test0_cond r v) test0_shape_M;
+    let s = M2ST.shape_ST_of_M test0_shape_M in
+    (**) ST.flatten_prog_shape (M2ST.repr_ST_of_M (test0_M r).repr_tree (test0_cond r v)) s;
     ST.mk_prog_shape (test0_ST r v) (ST.flatten_shape s)
 
 (*let _ = fun r v ->
@@ -244,7 +248,7 @@ let test0_shape_SF (r : ref nat) (v : vprop') (x_ini : nat) (v_ini : v.t) : SF.p
 
 [@@ __test__]
 let test0_Fun (r : ref nat) (v : vprop') (x_ini : nat) (v_ini : v.t) = 
-  SF.repr_Fun_of_SF (test0_SF r v x_ini v_ini)
+  SF2Fun.repr_Fun_of_SF (test0_SF r v x_ini v_ini)
 
 (*let _ = fun r (p : Steel.Memory.slprop) x_ini ->
     assert (U.print_util (test0_Fun r (to_vprop' p) x_ini ()))
@@ -294,7 +298,7 @@ let test0_wp (r : ref nat) (v : vprop') (x_ini : nat) (v_ini : v.t) =
 let sequiv_of_perm (#pre #post : Fl.ty_list) (f : Perm.pequiv pre post) : ST.sequiv pre post = {
   seq_req = (fun _ -> True);
   seq_ens = (fun _ _ -> True);
-  seq_eq  = M.mk_veq_eq (L.length pre) (L.length post) (fun i -> Some (f i));
+  seq_eq  = Veq.mk_veq_eq (L.length pre) (L.length post) (fun i -> Some (f i));
   seq_typ = ()
 }
 
@@ -314,9 +318,9 @@ let test1_ST : ST.prog_tree int [bool; int] (fun _ -> [bool; int])
 [@@ __test__]
 let test1_shape_tree_ST : ST.shape_tree 2 2 = ST.(
   Sbind _ _ _ (Sframe _ _ 1 (Sspec  1 1))
- (Sbind _ _ _ (Sequiv 2 2 (M.mk_veq_eq 2 2 (fun i -> Some (Perm.perm_f_swap #2 0 i))))
+ (Sbind _ _ _ (Sequiv 2 2 (Veq.mk_veq_eq 2 2 (fun i -> Some (Perm.perm_f_swap #2 0 i))))
  (Sbind _ _ _ (Sframe _ _ 1 (Sspec  1 1))
- (Sbind _ _ _ (Sequiv 2 2 (M.mk_veq_eq 2 2 (fun i -> Some (Perm.perm_f_swap #2 0 i))))
+ (Sbind _ _ _ (Sequiv 2 2 (Veq.mk_veq_eq 2 2 (fun i -> Some (Perm.perm_f_swap #2 0 i))))
               (Sret   true 2)))))
 
 
@@ -347,7 +351,7 @@ let test1_SF (b_ini : bool) (x_ini : int) : SF.prog_tree _ _ =
 
 [@@ __test__]
 let test1_Fun (b_ini : bool) (x_ini : int) = 
-  SF.repr_Fun_of_SF (test1_SF b_ini x_ini)
+  SF2Fun.repr_Fun_of_SF (test1_SF b_ini x_ini)
 
 (*let _ = fun b_ini x_ini ->
   assert (U.print_util (test1_Fun b_ini x_ini))
@@ -372,7 +376,7 @@ let test2_SF : SF.prog_tree bool (fun _ -> [int]) = SF.(
 
 [@@ __test__]
 let test2_Fun =
-  SF.repr_Fun_of_SF test2_SF
+  SF2Fun.repr_Fun_of_SF test2_SF
 
 (*let _ =
   assert (U.print_util test2_Fun)
@@ -429,7 +433,7 @@ let test3_steel (r0 r1 : ref U32.t)
 
 
 
-// The SMT query still contains some references to test3_mem, M.vprop_list_sels_t...
+// The SMT query still contains some references to test3_mem, Vpl.vprop_list_sels_t...
 // and an application of Dl.initi_g that is not reduced
 #push-options "--ifuel 0"
 let test3_steel_caller (r0 r1 : ref U32.t)
@@ -560,6 +564,7 @@ let test_ite_1 (r : ref U32.t)
 // ? because of a `pure_wp_monotonic`
 //[@@ handle_smt_goals ]
 //let tac () = T.dump "SMT query"
+#push-options "--silent"
 [@@ expect_failure [19]]
 let test_pure (x : U32.t)
   : F.steel unit emp (fun () -> emp)
@@ -568,8 +573,11 @@ let test_pure (x : U32.t)
     x' <-- pure (fun () -> U32.(x +^ 1ul));
     return ()
   end (_ by (mk_steel [Dump Stage_WP])))
+#pop-options
 
 ////////// test failures //////////
+
+#push-options "--silent"
 
 [@@ expect_failure [228]]
 let test_fail_spec (v : vprop)
@@ -591,6 +599,8 @@ let test_fail_to_repr_t (#a : Type) (r : ref a) (p : rmem (vptr r) -> prop)
   : F.steel unit (vptr r) (fun () -> vptr r) (fun h0 -> p h0) (fun _ _ _ -> True)
   = F.(to_steel (return ()) (_ by (mk_steel [])))
 
+#pop-options
+
 ////////// test time //////////
 
 let steel_id (#a : Type) (r : ref a)
@@ -607,7 +617,7 @@ let rec repeat_n (n : nat) (t : M.repr SH.KSteel unit) : M.repr SH.KSteel unit
       (requires fun _ -> True) (ensures fun h0 () h1 -> frame_equalities (vptr r) h0 h1)
   = F.(to_steel (repeat_n 30 (call steel_id r))
         (_ by (T.norm [delta_only [
-                         `%M.vprop_list_sels_t;     `%M.Mkrepr?.repr_tree;
+                         `%Vpl.vprop_list_sels_t;   `%M.Mkrepr?.repr_tree;
                          `%M.Mkprog_cond?.pc_tree;  `%M.Mkprog_cond?.pc_post_len; `%M.Mkprog_cond?.pc_shape;
                          `%L.map; `%Mkvprop'?.t;
                          `%prog_M_to_Fun];
@@ -643,11 +653,13 @@ let test_ghost (r : ref U32.t)
 
 ////////// test vprop_group //////////
 
+#push-options "--silent"
 [@@ expect_failure [228]]
 let test_id_fail (v : vprop)
   : F.steel unit v (fun () -> v)
        (requires fun _ -> True) (ensures fun h0 () h1 -> frame_equalities v h0 h1)
   = F.(to_steel (return ()) (_ by (mk_steel [])))
+#pop-options
 
 let test_id_ok (v : vprop')
   : F.steel unit (VUnit v) (fun () -> VUnit v)
@@ -659,7 +671,7 @@ let test_id_caller (r0 r1 : ref U32.t)
   : F.steel unit (vptr r0 `star` vptr r1) (fun () -> vptr r0 `star` vptr r1)
        (requires fun _ -> True) (ensures fun h0 () h1 -> frame_equalities (vptr r0 `star` vptr r1) h0 h1)
   = F.(to_steel (
-    call (test_id_ok (SU.vprop_group' (M.vprop_of_list [vptr' r0 full_perm; vptr' r1 full_perm]))) ()
+    call (test_id_ok (SU.vprop_group' (Vpl.vprop_of_list [vptr' r0 full_perm; vptr' r1 full_perm]))) ()
     ) (_ by (mk_steel [Timer; Dump Stage_WP])))
 
 ////////// test smt_fallback //////////

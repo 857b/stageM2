@@ -61,7 +61,7 @@ and repr_SF_of_ST_ens
   = ST.match_prog_tree t
     (fun a pre post t -> (sl0 : Fl.flist pre) -> (res : a) -> (sl1 : Fl.flist (post res)) ->
        squash (ST.tree_ens t sl0 res sl1 <==> tree_ens (repr_SF_of_ST t sl0) res sl1))
-    (fun (*ST.Tequiv*) pre post0 e -> fun sl0 res sl1 -> M.veq_sel_eq_eff_sound e.seq_eq sl0 sl1)
+    (fun (*ST.Tequiv*) pre post0 e -> fun sl0 res sl1 -> Veq.veq_sel_eq_eff_sound e.seq_eq sl0 sl1)
     begin fun (*ST.Tframe*) a pre post frame f -> fun sl0 x sl1 ->
       let sl0', sl_frame = Fl.splitAt_ty pre frame sl0 in
       calc (<==>) {

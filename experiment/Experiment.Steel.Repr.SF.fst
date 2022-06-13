@@ -1,158 +1,126 @@
 module Experiment.Steel.Repr.SF
 
-module T = FStar.Tactics
-open FStar.Calc
-open Learn.Logic
+module Fl  = Learn.FList
+module Dl  = Learn.DList
+module ST  = Experiment.Steel.Repr.ST
+module Fin = FStar.Fin
 
 
-(*** Steel.Repr.SF --> Repr.Fun *)
+type post_t (a : Type) = a -> Fl.ty_list
+type post_v (#a : Type) (post : post_t a) (x : a) = Fl.flist (post x)
+type req_t = Type0
+type ens_t (a : Type) (post : post_t a) = (x : a) -> post_v post x -> Type0
 
-let __begin_repr_fun_of_steel = ()
+noeq
+type prog_tree : (a : Type u#a) -> (post : post_t u#a u#b a) -> Type u#(1 + max a b) =
+  | Tspec : (a : Type u#a) -> (post : post_t a) ->
+            (req : req_t) -> (ens : ens_t a post) ->
+            prog_tree a post
+  | Tret   : (a : Type u#a) -> (x : a) -> (post : post_t a) -> (sl : Dl.dlist (post x)) ->
+             prog_tree a post
+  | Tbind  : (a : Type u#a) -> (b : Type u#a) ->
+             (itm : post_t a) -> (post : post_t b) ->
+             (f : prog_tree a itm) -> (g : ((x : a) -> (sl : post_v itm x) -> prog_tree b post)) ->
+             prog_tree b post
+  | TbindP : (a : Type u#a) -> (b : Type u#a) ->
+             (post : post_t b) ->
+             (wp : pure_wp a) -> (g : a -> prog_tree b post) ->
+             prog_tree b post
+  | Tif    : (a : Type u#a) -> (guard : bool) ->
+             (post : post_t a) ->
+             (thn : prog_tree a post) -> (els : prog_tree a post) ->
+             prog_tree a post
 
-module Fun = Experiment.Repr.Fun
+[@@ strict_on_arguments [2]] (* strict on t *)
+let rec tree_req (#a : Type) (#post : post_t a) (t : prog_tree a post)
+  : Tot req_t (decreases t)
+  = match t with
+  | Tspec _ _  req _ ->
+             req
+  | Tret _ _ _ _ ->
+             True
+  | Tbind a _  itm _  f g ->
+             tree_req f /\
+               (forall (x : a) (sl : post_v itm x) . tree_ens f x sl ==> tree_req (g x sl))
+  | TbindP a _  _  wp g ->
+             wp (fun (x : a) -> tree_req (g x))
+  | Tif a guard _ thn els ->
+             tree_req (if guard then thn else els)
+
+and tree_ens (#a : Type) (#post : post_t a) (t : prog_tree a post)
+  : Tot (ens_t a post) (decreases t)
+  = match t with
+  | Tspec _ _  _ ens ->
+             ens
+  | Tret _ x  post0 sl ->
+             (fun x' (sl' : post_v post x') -> x' == x /\ sl' == Fl.flist_of_d sl)
+  | Tbind a _  itm post0  f g ->
+             (fun y (sl2 : post_v post y) ->
+               (exists (x : a) (sl1 : post_v itm x) .
+                 tree_ens f x sl1 /\ tree_ens (g x sl1) y sl2))
+  | TbindP a _  post0  wp g ->
+             (fun y (sl1 : post_v post y) ->
+               (exists (x : a) . as_ensures wp x /\ tree_ens (g x) y sl1))
+  | Tif a guard _ thn els ->
+             tree_ens (if guard then thn else els)
 
 
-let sl_tys_hyp () : Lemma (Fun.tys_hyp (sl_tys' u#a u#b)) =
-  introduce forall (x : sl_tys'.v sl_tys'.unit) . x == sl_tys'.emp
-    with Fl.nil_uniq x.sel_v;
-  assert (Fun.tys_hyp sl_tys') by T.(norm [delta_only [`%Fun.tys_hyp]])
+(***** Shape *)
 
-let sl_tys_lam_id ()
-  : Lemma (Fun.tys_lam_id sl_tys_lam')
+type shape_tree : (post_n : nat) -> Type =
+  | Sspec  : (post_n : nat) ->
+             shape_tree post_n
+  | Sret   : (smp_ret : bool) -> (n : nat) ->
+             shape_tree n
+  | Sbind  : (itm_n : nat) -> (post_n : nat) ->
+             (f : shape_tree itm_n) -> (g : shape_tree post_n) ->
+             shape_tree post_n
+  | SbindP : (post_n : nat) ->
+             (g : shape_tree post_n) ->
+             shape_tree post_n
+  | Sif    : (post_n : nat) ->
+             (thn : shape_tree post_n) -> (els : shape_tree post_n) ->
+             shape_tree post_n
+
+[@@ strict_on_arguments [2]] (* strict on t *)
+let rec prog_has_shape (#a : Type u#a) (#post : post_t u#a u#b a)
+                       (t : prog_tree a post)
+                       (#post_n : nat) (s : shape_tree post_n)
+  : Pure prop (requires True)
+              (ensures fun p -> p ==> ST.post_has_len post post_n)
+              (decreases t)
   =
-    let s  = sl_tys      in
-    let lm = sl_tys_lam' in
-    introduce forall (src : sl_tys_t) (f : pure_post (sl_tys_v src)) .
-            lm.lam_prop f == (fun (x : sl_tys_v src) -> f x)
-    with begin
-      let {val_t; sel_t} = src <: sl_tys_t in
-      U.funext_eta_gtot (sl_tys_lam'.lam_prop #({val_t; sel_t}) f)
-                   (fun (x : sl_tys_v ({val_t; sel_t})) -> f x)
-        (_ by T.(trefl ())) (_ by T.(trefl())) (fun x -> ());
-      U.prop_equal (fun (src' : sl_tys_t {src' == src}) ->
-                      sl_tys_lam'.lam_prop f == (fun (x : sl_tys_v src') -> f x))
-                   ({val_t; sel_t}) src
-    end;
-  introduce forall (src : sl_tys_t) (trg : Type) (f : sl_tys_v src -> trg).
-              lm.lam_tree #src #trg f == (fun (x : sl_tys_v src) -> f x)
-    with begin
-      let {val_t; sel_t} = src <: sl_tys_t in
-      U.funext_eta (sl_tys_lam'.lam_tree #({val_t; sel_t}) #trg f)
-                   (fun (x : sl_tys_v ({val_t; sel_t})) -> f x)
-        (_ by T.(trefl ())) (_ by T.(trefl())) (fun x -> ());
-      U.prop_equal (fun (src' : sl_tys_t {src' == src}) ->
-                      sl_tys_lam'.lam_tree #src' #trg f == (fun (x : sl_tys_v src') -> f x))
-                   ({val_t; sel_t}) src
-    end;
-  assert (Fun.tys_lam_id #s lm)
-    by T.(norm [delta_only [`%Fun.tys_lam_id; `%sl_tys; `%Fun.Mktys'?.t; `%Fun.Mktys'?.v]])
+    ST.post_has_len post post_n /\
+    (match t returns prop with
+    | Tspec  _ post _ _       -> s == Sspec post_n
+    | Tret   _ _ _ _          -> exists (smp_ret : bool) .
+                                s == Sret   smp_ret _
+    | Tbind  a b itm post f g -> exists (itm_n : nat)
+                                  (s_f : shape_tree itm_n)
+                                  (s_g : shape_tree post_n) .
+                                s == Sbind _ _ s_f s_g /\
+                                prog_has_shape f s_f /\
+                                (forall (x : a) (sl1 : post_v itm x) . prog_has_shape (g x sl1) s_g)
+    | TbindP a _ post _ g     -> exists (s_g : shape_tree post_n) .
+                                s == SbindP _ s_g /\
+                               (forall (x : a) . prog_has_shape (g x) s_g)
+    | Tif a gd post thn els   -> exists (s_thn : shape_tree post_n)
+                                  (s_els : shape_tree post_n) .
+                                s == Sif _ s_thn s_els /\
+                                prog_has_shape thn s_thn /\
+                                prog_has_shape els s_els
+    )
 
-//FIXME this proof succeeds in interactive mode with --fuel 1 but not in batch mode
-//      (both wihout hints)
-#push-options "--z3rlimit 40 --ifuel 1 --fuel 2"
-let rec repr_Fun_of_SF_req #val_t #sel_t (t : prog_tree val_t sel_t)
-  : Lemma (ensures tree_req t <==> Fun.tree_req (repr_Fun_of_SF t))
-          (decreases t)
-  = match t with
-  | Tspec a post req ens -> ()
-  | Tret a x post sl -> ()
-  | Tbind a b itm post f g ->
-          repr_Fun_of_SF_req f;
-          introduce forall (x : a) (sl1 : post_v itm x) .
-                    (tree_ens f x sl1   <==> Fun.tree_ens (repr_Fun_of_SF f) ({val_v=x; sel_v=sl1})) /\
-                    (tree_req (g x sl1) <==> Fun.tree_req (repr_Fun_of_SF (g x sl1)))
-            with (repr_Fun_of_SF_ens f x sl1; repr_Fun_of_SF_req (g x sl1))
-  | TbindP a b post wp g ->
-          calc (<==>) {
-            tree_req (TbindP a b post wp g);
-          <==> {_ by T.(apply_lemma (`U.iff_refl); trefl ())}
-            wp (fun x -> tree_req (g x));
-          <==> {wp_morph_iff wp (fun x -> tree_req (g x)) (fun x -> Fun.tree_req (repr_Fun_of_SF (g x)))
-                              (fun x -> repr_Fun_of_SF_req (g x))}
-            wp (fun x -> Fun.tree_req (repr_Fun_of_SF (g x)));
-          <==> {_ by T.(apply_lemma (`U.iff_refl); trefl ())}
-            Fun.tree_req (repr_Fun_of_SF (TbindP a b post wp g));
-          }
-  | Tif a guard post thn els ->
-          if guard
-          then repr_Fun_of_SF_req thn
-          else repr_Fun_of_SF_req els
+noeq
+type prog_shape (#a : Type) (#post : post_t a) (t : prog_tree a post) = {
+  post_len : (l : nat {ST.post_has_len post l});
+  shp      : (s : shape_tree post_len {prog_has_shape t s});
+}
 
-and repr_Fun_of_SF_ens #val_t #sel_t (t : prog_tree val_t sel_t)
-                          (val_v : val_t) (sel_v : Fl.flist (sel_t val_v))
-  : Lemma (ensures tree_ens t val_v sel_v <==> Fun.tree_ens (repr_Fun_of_SF t) ({val_v; sel_v}))
-          (decreases t)
-  = match t with
-  | Tspec a post req ens ->
-          assert (tree_ens (Tspec a post req ens) val_v sel_v == ens val_v sel_v)
-               by T.(trefl ());
-          assert (Fun.tree_ens (repr_Fun_of_SF (Tspec a post req ens)) ({val_v; sel_v})
-               == sl_uncurrify ens ({val_v; sel_v}))
-               by T.(trefl ())
-  | Tret a x post sl -> ()
-  | Tbind a b itm post f g ->
-          assert (tree_ens (Tbind a b itm post f g) val_v sel_v
-               == (exists (x : a) (sl1 : post_v itm x) . tree_ens f x sl1 /\ tree_ens (g x sl1) val_v sel_v) )
-               by T.(trefl ());
-          assert (Fun.tree_ens (repr_Fun_of_SF (Tbind a b itm post f g)) ({val_v; sel_v})
-               == sl_tys.ex ({val_t=a; sel_t=itm}) (fun (x_sl1 : sl_tys_v ({val_t=a; sel_t=itm})) ->
-                     Fun.tree_ens (repr_Fun_of_SF f) x_sl1 /\
-                     Fun.tree_ens
-                      (sl_uncurrify (fun x sls -> repr_Fun_of_SF (g x sls)) x_sl1) ({val_v; sel_v})))
-               by T.(norm [delta_only [`%repr_Fun_of_SF; `%Fun.tree_ens]; iota; zeta];
-                     trefl ());
-          introduce forall (x : a) (sl1 : post_v itm x) .
-                    (tree_ens f x sl1   <==> Fun.tree_ens (repr_Fun_of_SF f) ({val_v=x; sel_v=sl1})) /\
-                    (tree_ens (g x sl1) val_v sel_v <==> Fun.tree_ens (repr_Fun_of_SF (g x sl1)) ({val_v; sel_v}))
-            with (repr_Fun_of_SF_ens f x sl1; repr_Fun_of_SF_ens (g x sl1) val_v sel_v)
-  | TbindP a b post wp g ->
-          assert (tree_ens (TbindP a b post wp g) val_v sel_v
-              == (exists (x : a) . as_ensures wp x /\ tree_ens (g x) val_v sel_v))
-            by T.(trefl ());
-          assert (Fun.tree_ens (repr_Fun_of_SF (TbindP a b post wp g)) ({val_v; sel_v})
-              <==> (exists (x : a) .
-                   (exists (nl : Fl.flist []) . as_ensures (add_sl_to_wp wp) ({val_v = x; sel_v = nl})) /\
-                   Fun.tree_ens (repr_Fun_of_SF (g x)) ({val_v; sel_v})))
-            by T.(norm [delta_only [`%Fun.tree_ens; `%repr_Fun_of_SF; `%sl_uncurrify;
-                                    `%sl_tys; `%sl_tys'; `%Fun.Mktys'?.ex; `%sl_ex;
-                                    `%Mksl_tys_t?.val_t; `%Mksl_tys_t?.sel_t];
-                        iota; zeta]; smt ());
-          introduce forall (x : a) .
-              ((exists (nl : Fl.flist []) . as_ensures (add_sl_to_wp wp) ({val_v = x; sel_v = nl})) <==>
-                  as_ensures wp x) /\
-              (tree_ens (g x) val_v sel_v <==> Fun.tree_ens (repr_Fun_of_SF (g x)) ({val_v; sel_v}))
-            with introduce _ /\ _
-            with FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp
-             and repr_Fun_of_SF_ens (g x) val_v sel_v
-  | Tif a guard post thn els ->
-          if guard
-          then repr_Fun_of_SF_ens thn val_v sel_v
-          else repr_Fun_of_SF_ens els val_v sel_v
+unfold
+let mk_prog_shape (#a : Type) (#post : post_t a) (t : prog_tree a post)
+                  (#post_len : nat) (shp : shape_tree post_len {prog_has_shape t shp})
+  : prog_shape t =
+  { post_len; shp}
 
-#pop-options
 
-#push-options "--fuel 1 --ifuel 1"
-let rec repr_Fun_of_SF_shape
-      (#val_t : Type) (#sel_t : post_t val_t) (t : prog_tree u#a u#b val_t sel_t)
-      (s : prog_shape t)
-  : Lemma (ensures Fun.prog_has_shape (repr_Fun_of_SF t) (shape_Fun_of_SF s.shp))
-          (decreases t)
-  = match t with
-  | Tspec _ _ _ _ | Tret _ _ _ _ -> ()
-  | Tbind a b itm post f g ->
-          let Sbind _ _ s_f s_g = s.shp in
-          repr_Fun_of_SF_shape f (mk_prog_shape f s_f);
-          introduce forall (x : sl_tys_v ({val_t = a; sel_t = itm})) .
-              Fun.prog_has_shape ((sl_uncurrify (fun x sls -> repr_Fun_of_SF (g x sls))) x)
-                                 (shape_Fun_of_SF s_g)
-            with repr_Fun_of_SF_shape (g x.val_v x.sel_v) (mk_prog_shape _ s_g)
-  | TbindP a b post wp g ->
-          let SbindP _ s_g = s.shp in
-          introduce forall (x : a) .
-              Fun.prog_has_shape (repr_Fun_of_SF (g x)) (shape_Fun_of_SF s_g)
-            with repr_Fun_of_SF_shape (g x) (mk_prog_shape _ s_g)
-  | Tif a guard post thn els ->
-          let Sif _ s_thn s_els = s.shp in
-          repr_Fun_of_SF_shape thn (mk_prog_shape thn s_thn);
-          repr_Fun_of_SF_shape els (mk_prog_shape els s_els)
-#pop-options

@@ -1,16 +1,10 @@
 module Experiment.Steel.SteelHack
 
-module U   = Learn.Util
 module Mem = Steel.Memory
 
 open Steel.Effect
 open Steel.Effect.Atomic
 
-noeq
-type effect_kind =
-  | KSteel
-  | KAtomic of Mem.inames
-  | KGhost  of Mem.inames
 
 type unit_steel (a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
   = unit -> Steel a pre post req ens
@@ -22,46 +16,6 @@ let unit_steel_atomic
 let unit_steel_ghost
       (a : Type) (opened : Mem.inames) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
   = unit -> SteelGhost a opened pre post req ens
-
-noeq inline_for_extraction
-type steel (a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
-  : effect_kind -> Type =
-  | FSteel  : (f : unit_steel a pre post req ens) ->
-               steel a pre post req ens KSteel
-  | FAtomic : (o : Mem.inames) -> (f : unit_steel_atomic a o pre post req ens) ->
-               steel a pre post req ens (KAtomic o)
-  | FGhost  : (o : Mem.inames) -> (f : unit_steel_ghost  a o pre post req ens) ->
-               steel a pre post req ens (KGhost o)
-
-unfold inline_for_extraction
-let steel_u #a #pre #post #req #ens (f : steel a pre post req ens KSteel)
-  : unit_steel a pre post req ens
-  = FSteel?.f f
-
-unfold inline_for_extraction
-let steel_f #a #pre #post #req #ens (f : unit_steel a pre post req ens)
-  : steel a pre post req ens KSteel
-  = FSteel f
-
-unfold inline_for_extraction
-let atomic_u #opened #a #pre #post #req #ens (f : steel a pre post req ens (KAtomic opened))
-  : unit_steel_atomic a opened pre post req ens
-  = U.cast _ (FAtomic?.f f)
-
-unfold inline_for_extraction
-let atomic_f #opened #a #pre #post #req #ens (f : unit_steel_atomic a opened pre post req ens)
-  : steel a pre post req ens (KAtomic opened)
-  = FAtomic opened f
-
-unfold inline_for_extraction
-let ghost_u #opened #a #pre #post #req #ens (f : steel a pre post req ens (KGhost opened))
-  : unit_steel_ghost a opened pre post req ens
-  = U.cast (unit_steel_ghost a opened pre post req ens) (FGhost?.f f)
-
-unfold inline_for_extraction
-let ghost_f #opened #a #pre #post #req #ens (f : unit_steel_ghost a opened pre post req ens)
-  : steel a pre post req ens (KGhost opened)
-  = FGhost opened f
 
 
 /// [subcomp_pre] without [rewrite_with_tactic] and [frame_equality] reduced

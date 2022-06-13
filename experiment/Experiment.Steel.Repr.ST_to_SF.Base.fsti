@@ -5,8 +5,8 @@ module L   = FStar.List.Pure
 module Ll  = Learn.List
 module Fl  = Learn.FList
 module Dl  = Learn.DList
-module M   = Experiment.Steel.Repr.M
 module ST  = Experiment.Steel.Repr.ST
+module Veq = Experiment.Steel.VEquiv
 
 open Experiment.Steel.Repr.ST
 open Experiment.Steel.Repr.SF
@@ -23,7 +23,7 @@ let rec repr_SF_of_ST
   | ST.Tequiv pre post0 e ->
           // TODO? specialized constructor / wp
           Tspec U.unit' (const_post post0) (e.seq_req sl0)
-                (fun _ sl1 -> M.veq_sel_eq_eff e.seq_eq sl0 sl1 /\ e.seq_ens sl0 sl1)
+                (fun _ sl1 -> Veq.veq_sel_eq_eff e.seq_eq sl0 sl1 /\ e.seq_ens sl0 sl1)
   | ST.Tframe a pre post frame f ->
           let (sl0', sl_frame) = Fl.splitAt_ty pre frame sl0 in
           Tbind a a _ _ (repr_SF_of_ST f sl0') (fun x sl1' ->

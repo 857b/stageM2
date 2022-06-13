@@ -5,7 +5,7 @@ module Experiment.Steel
 module U    = Learn.Util
 module L    = FStar.List.Pure
 module SE   = Steel.Effect
-module SH   = Experiment.Steel.SteelHack
+module SH   = Experiment.Steel.Steel
 module Ll   = Learn.List
 module Dl   = Learn.DList
 module Fl   = Learn.FList
@@ -15,13 +15,20 @@ module M   = Experiment.Steel.Repr.M
 module ST  = Experiment.Steel.Repr.ST
 module SF  = Experiment.Steel.Repr.SF
 module Fun = Experiment.Repr.Fun
-module CSl = Experiment.Steel.CondSolver
+module Vpl = Experiment.Steel.VPropList
+module Veq = Experiment.Steel.VEquiv
+module STc = Experiment.Steel.Tac
+module CSl = Experiment.Steel.Tac.MCond
+
+module M2ST       = Experiment.Steel.Repr.M_to_ST
 module ST2SF_Spec = Experiment.Steel.Repr.ST_to_SF.Spec
 module ST2SF_Base = Experiment.Steel.Repr.ST_to_SF.Base
+module SF2Fun     = Experiment.Steel.Repr.SF_to_Fun
 
 open FStar.Tactics
 open Learn.Tactics.Util
 open Experiment.Steel.Interface
+
 
 #push-options "--ifuel 0"
 (**) private val __begin_prog_M_to_Fun : unit
@@ -31,20 +38,20 @@ let prog_M_to_Fun
       (#ek : SH.effect_kind) (#a : Type) (t : M.repr ek a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
-  : (sl0 : M.sl_f pre) ->
-    Fun.prog_tree #SF.sl_tys SF.({val_t = a; sel_t = ST.post_ST_of_M post})
+  : (sl0 : Vpl.sl_f pre) ->
+    Fun.prog_tree #SF2Fun.sl_tys SF.({val_t = a; sel_t = M2ST.post_ST_of_M post})
   =
     let { pc_tree = t_M; pc_post_len = post_n; pc_shape = shp_M } = c in
-    let t_ST    = ST.repr_ST_of_M t.repr_tree t_M   in
-    let shp_ST  = ST.shape_ST_of_M shp_M            in
-    (**) ST.repr_ST_of_M_shape t.repr_tree t_M shp_M;
+    let t_ST    = M2ST.repr_ST_of_M t.repr_tree t_M   in
+    let shp_ST  = M2ST.shape_ST_of_M shp_M            in
+    (**) M2ST.repr_ST_of_M_shape t.repr_tree t_M shp_M;
     let (|t_ST', shp_ST'|)
       : (t : ST.prog_tree a _ _ & s : ST.shape_tree _ _ {ST.prog_has_shape t s}) =
       if opt.o_flatten
       then ((**) ST.flatten_prog_shape t_ST shp_ST;
            (|ST.flatten_prog t_ST, ST.flatten_shape shp_ST|))
-      else (|t_ST, shp_ST|)                         in
-    begin fun (sl0 : M.sl_f pre) ->
+      else (|t_ST, shp_ST|)                           in
+    begin fun (sl0 : Vpl.sl_f pre) ->
       let (|t_SF, shp_SF|)
         : (t : SF.prog_tree a _ & s : SF.shape_tree _ {SF.prog_has_shape t s})
         = if opt.o_ST2SF then (
@@ -56,11 +63,11 @@ let prog_M_to_Fun
              (|ST2SF_Base.repr_SF_of_ST t_ST' sl0, ST2SF_Base.shape_SF_of_ST shp_ST'|)
           )
       in
-      let t_Fun   = SF.repr_Fun_of_SF t_SF    in
-      let shp_Fun = SF.shape_Fun_of_SF shp_SF in
-      (**) SF.repr_Fun_of_SF_shape t_SF (SF.mk_prog_shape t_SF shp_SF);
+      let t_Fun   = SF2Fun.repr_Fun_of_SF t_SF    in
+      let shp_Fun = SF2Fun.shape_Fun_of_SF shp_SF in
+      (**) SF2Fun.repr_Fun_of_SF_shape t_SF (SF.mk_prog_shape t_SF shp_SF);
       if opt.o_elim_ret
-      then Fun.elim_returns SF.sl_tys_lam t_Fun shp_Fun
+      then Fun.elim_returns SF2Fun.sl_tys_lam t_Fun shp_Fun
       else t_Fun
     end
 
@@ -72,10 +79,10 @@ val prog_M_to_Fun_equiv
       (#ek : SH.effect_kind) (#a : Type) (t : M.repr ek a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
-      (sl0 : M.sl_f pre)
+      (sl0 : Vpl.sl_f pre)
   : Lemma (M.tree_req t.repr_tree c.pc_tree sl0 <==> Fun.tree_req (prog_M_to_Fun opt t c sl0) /\
           (M.tree_req t.repr_tree c.pc_tree sl0 ==>
-          (forall (x : a) (sl1 : M.sl_f (post x)) .
+          (forall (x : a) (sl1 : Vpl.sl_f (post x)) .
                (M.tree_ens t.repr_tree c.pc_tree sl0 x sl1 <==>
                 Fun.tree_ens (prog_M_to_Fun opt t c sl0) SF.({val_v = x; sel_v = sl1})))))
 
@@ -86,9 +93,9 @@ let prog_M_to_Fun_extract
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
       (req : M.req_t pre) (ens : M.ens_t pre a post)
-      (sub : (sl0 : M.sl_f pre) -> Lemma (requires req sl0)
+      (sub : (sl0 : Vpl.sl_f pre) -> Lemma (requires req sl0)
                (ensures Fun.tree_req (prog_M_to_Fun opt t c sl0) /\
-                  (forall (x : a) (sl1 : M.sl_f (post x)) .
+                  (forall (x : a) (sl1 : Vpl.sl_f (post x)) .
                     Fun.tree_ens (prog_M_to_Fun opt t c sl0) SF.({val_v = x; sel_v = sl1}) ==>
                     ens sl0 x sl1)))
   : M.repr_steel_t SH.KSteel a pre post req ens
@@ -106,7 +113,7 @@ let prog_M_to_Fun_extract_wp
       (#pre : M.pre_t) (#post : M.post_t a)
       (c : M.prog_cond t.repr_tree pre post)
       (req : M.req_t pre) (ens : M.ens_t pre a post)
-      (wp : (sl0 : M.sl_f pre) -> Lemma
+      (wp : (sl0 : Vpl.sl_f pre) -> Lemma
               (requires req sl0)
               (ensures Fun.tree_wp (prog_M_to_Fun opt t c sl0) (fun res -> ens sl0 res.val_v res.sel_v)))
   : M.repr_steel_t SH.KSteel a pre post req ens
@@ -118,7 +125,7 @@ let prog_M_to_Fun_extract_wp
 (**** normalisation steps *)
 
 let __normal_M : list norm_step = [
-  delta_only [`%M.vprop_list_sels_t;     `%M.Mkrepr?.repr_tree;
+  delta_only [`%Vpl.vprop_list_sels_t;   `%M.Mkrepr?.repr_tree;
               `%M.Mkprog_cond?.pc_tree;  `%M.Mkprog_cond?.pc_post_len; `%M.Mkprog_cond?.pc_shape;
               `%L.map; `%SE.Mkvprop'?.t;
               `%prog_M_to_Fun];
@@ -129,12 +136,12 @@ let __normal_M : list norm_step = [
 ]
 
 let __normal_ST : list norm_step = [
-  delta_only [`%ST.repr_ST_of_M; `%ST.repr_ST_of_M_Spec; `%ST.bind; `%ST.post_ST_of_M;
-              `%M.vprop_list_sels_t; `%L.map; `%SE.Mkvprop'?.t;
+  delta_only [`%M2ST.repr_ST_of_M; `%M2ST.repr_ST_of_M_Spec; `%ST.bind; `%M2ST.post_ST_of_M;
+              `%Vpl.vprop_list_sels_t; `%L.map; `%SE.Mkvprop'?.t;
               `%ST.const_post; `%ST.frame_post; `%L.op_At; `%L.append;
               `%ST.flatten_prog; `%ST.flatten_prog_aux; `%ST.flatten_prog_k_id;
 
-              `%ST.shape_ST_of_M; `%ST.flatten_shape; `%ST.flatten_shape_aux; `%ST.flatten_shape_k_id;
+              `%M2ST.shape_ST_of_M; `%ST.flatten_shape; `%ST.flatten_shape_aux; `%ST.flatten_shape_k_id;
               `%M.Mkprog_cond?.pc_tree;  `%M.Mkprog_cond?.pc_post_len; `%M.Mkprog_cond?.pc_shape;
               `%Perm.perm_f_to_list; `%Ll.initi; `%Perm.id_n; `%Perm.mk_perm_f];
   delta_qualifier ["unfold"];
@@ -153,7 +160,7 @@ let __delta_ST2SF_Spec : list string = ST2SF_Spec.([
 
 let __delta_ST2SF_Base : list string = ST2SF_Base.([
   `%repr_SF_of_ST; `%shape_SF_of_ST;
-  `%M.veq_sel_eq_eff; `%M.veq_sel_eq_eff_aux;
+  `%Veq.veq_sel_eq_eff; `%Veq.veq_sel_eq_eff_aux;
   `%L.op_At; `%L.append;
   `%Fl.apply_perm_r; `%Fl.append;
   `%ST.const_post; `%ST.frame_post
@@ -169,32 +176,32 @@ let __normal_SF : list norm_step = [
               `%Learn.Option.map;
               `%Perm.perm_f_swap; `%Perm.perm_f_transpose; `%Perm.perm_f_of_pair;
               `%Perm.mk_perm_f; `%Perm.id_n; `%Perm.perm_f_of_list;
-              `%ST.sequiv_of_vequiv;
+              `%M2ST.sequiv_of_vequiv;
               `%ST.Mksequiv?.seq_req; `%ST.Mksequiv?.seq_ens; `%ST.Mksequiv?.seq_eq;
               `%ST.seq_ens1
               ]));
   delta_qualifier ["unfold"];
-  delta_attr [`%U.__util_func__; `%M.__vequiv__];
+  delta_attr [`%U.__util_func__; `%Veq.__vequiv__];
   iota; zeta; primops
 ]
 
 let __normal_Fun : list norm_step = [
-  delta_only [`%SF.repr_Fun_of_SF;
-              `%SF.shape_Fun_of_SF; `%SF.Mkprog_shape?.post_len; `%SF.Mkprog_shape?.shp];
+  delta_only [`%SF2Fun.repr_Fun_of_SF;
+              `%SF2Fun.shape_Fun_of_SF; `%SF.Mkprog_shape?.post_len; `%SF.Mkprog_shape?.shp];
   delta_qualifier ["unfold"];
   iota; zeta; primops
 ]
 
 let __normal_Fun_elim_returns_0 : list norm_step = [
   delta_only [`%Fun.elim_returns; `%Fun.elim_returns_aux; `%Fun.elim_returns_k_trm; `%Fun.elim_returns_k_ret;
-              `%SF.sl_tys; `%SF.sl_tys_lam;
+              `%SF2Fun.sl_tys; `%SF2Fun.sl_tys_lam;
               `%Fun.Mktys'?.v_of_r; `%Fun.Mktys'?.r_of_v;
               `%Fun.Mktys_lam'?.lam_prop; `%Fun.Mktys_lam'?.lam_tree;
-              `%SF.Mksl_tys_t?.val_t;     `%SF.Mksl_tys_t?.sel_t;
-              `%SF.Mksl_tys_v?.val_v;     `%SF.Mksl_tys_v?.sel_v;
-              `%SF.Mksl_tys_r?.vl;        `%SF.Mksl_tys_r?.sl;
+              `%SF2Fun.Mksl_tys_t?.val_t; `%SF2Fun.Mksl_tys_t?.sel_t;
+              `%SF2Fun.Mksl_tys_v?.val_v; `%SF2Fun.Mksl_tys_v?.sel_v;
+              `%SF2Fun.Mksl_tys_r?.vl;    `%SF2Fun.Mksl_tys_r?.sl;
               `%Fun.Tret?.x;
-              `%SF.sl_r_of_v; `%SF.sl_v_of_r;
+              `%SF2Fun.sl_r_of_v; `%SF2Fun.sl_v_of_r;
               `%Fl.cons; `%Fl.nil; `%Fl.dlist_of_f; `%Fl.flist_of_d'; `%Dl.initi; `%Dl.index;
               `%L.length; `%L.index; `%L.hd; `%L.tl; `%L.tail; `%Ll.initi
               ];
@@ -203,27 +210,27 @@ let __normal_Fun_elim_returns_0 : list norm_step = [
 ]
 
 let __normal_Fun_elim_returns_1 : list norm_step = [
-  delta_only [`%SF.delayed_sl_uncurrify];
+  delta_only [`%SF2Fun.delayed_sl_uncurrify];
   delta_qualifier ["unfold"];
   iota; zeta; primops
 ]
 
 let __normal_Fun_spec : list norm_step = [
   delta_only [`%Fun.tree_wp; `%Fl.partial_app_flist;
-              `%Fun.Mktys'?.all; `%SF.sl_tys; `%SF.sl_all; `%Fl.forall_flist;
-              `%Fun.Mktys'?.v_of_r; `%SF.sl_v_of_r; `%Fl.flist_of_d';
+              `%Fun.Mktys'?.all; `%SF2Fun.sl_tys; `%SF2Fun.sl_all; `%Fl.forall_flist;
+              `%Fun.Mktys'?.v_of_r; `%SF2Fun.sl_v_of_r; `%Fl.flist_of_d';
               `%Fl.cons; `%Fl.nil;
-              `%SF.Mksl_tys_t?.val_t; `%SF.Mksl_tys_t?.sel_t;
-              `%SF.Mksl_tys_v?.val_v; `%SF.Mksl_tys_v?.sel_v;
-              `%SF.Mksl_tys_r?.vl; `%SF.Mksl_tys_r?.sl;
-              `%M.vprop_of_list; `%M.vprop_of_list'; `%M.vpl_sels];
+              `%SF2Fun.Mksl_tys_t?.val_t; `%SF2Fun.Mksl_tys_t?.sel_t;
+              `%SF2Fun.Mksl_tys_v?.val_v; `%SF2Fun.Mksl_tys_v?.sel_v;
+              `%SF2Fun.Mksl_tys_r?.vl;    `%SF2Fun.Mksl_tys_r?.sl;
+              `%Vpl.vprop_of_list; `%Vpl.vprop_of_list'; `%Vpl.vpl_sels];
   delta_qualifier ["unfold"];
   delta_attr [`%SE.__steel_reduce__; `%Learn.List.Mask.__mask__];
   iota; zeta; primops
 ]
 
 let __normal_vprop_list : list norm_step = [
-  delta_only [`%M.vprop_of_list; `%M.vprop_list_sels_t; `%M.sel_f'; `%M.sel';
+  delta_only [`%Vpl.vprop_of_list; `%Vpl.vprop_list_sels_t; `%Vpl.sel_f'; `%Vpl.sel';
               `%Fl.flist_of_g; `%Fl.dlist_of_f_g; `%Fl.flist_of_d;
               `%Dl.index; `%Dl.initi_g;
               `%L.length; `%L.index; `%L.map; `%L.hd; `%L.tl; `%L.tail];
@@ -247,9 +254,9 @@ val call_repr_steel
       (#pre : M.pre_t)     (#post : M.post_t a)
       (#req : M.req_t pre) (#ens  : M.ens_t pre a post)
       (r : M.repr_steel_t SH.KSteel a pre post req ens)
-  : SE.Steel a (M.vprop_of_list' pre) (fun x -> M.vprop_of_list' (post x))
-      (requires fun h0      -> norm_vpl (req (M.sel_f' pre h0)))
-      (ensures  fun h0 x h1 -> norm_vpl (ens (M.sel_f' pre h0) x (M.sel_f' (post x) h1)))
+  : SE.Steel a (Vpl.vprop_of_list' pre) (fun x -> Vpl.vprop_of_list' (post x))
+      (requires fun h0      -> norm_vpl (req (Vpl.sel_f' pre h0)))
+      (ensures  fun h0 x h1 -> norm_vpl (ens (Vpl.sel_f' pre h0) x (Vpl.sel_f' (post x) h1)))
 
 
 (***** Extracting a [M.repr_steel_t] from a [M.repr] *)
@@ -269,10 +276,10 @@ let __solve_by_wp
       (#pre : M.pre_t) (#post : M.post_t a)
       (#req : M.req_t pre) (#ens : M.ens_t pre a post)
       (c : M.prog_cond t.repr_tree pre post)
-      (t_Fun : (sl0 : M.sl_f pre) ->
-               GTot (Fun.prog_tree #SF.sl_tys SF.({val_t = a; sel_t = ST.post_ST_of_M post})))
+      (t_Fun : (sl0 : Vpl.sl_f pre) ->
+               GTot (Fun.prog_tree #SF2Fun.sl_tys SF.({val_t = a; sel_t = M2ST.post_ST_of_M post})))
       (t_Fun_eq : squash (t_Fun == (fun sl0 -> prog_M_to_Fun opt t c sl0)))
-      (wp : squash (Fl.forall_flist (M.vprop_list_sels_t pre) (fun sl0 ->
+      (wp : squash (Fl.forall_flist (Vpl.vprop_list_sels_t pre) (fun sl0 ->
                req sl0 ==>
                Fun.tree_wp (t_Fun sl0) (fun res -> ens sl0 res.val_v res.sel_v))))
       (ext : M.repr_steel_t SH.KSteel a pre post req ens)
@@ -374,7 +381,7 @@ let build_to_steel (fr : flags_record) : Tac unit
     with_policy Force (fun () ->
     let t = timer_start "specs     " fr.f_timer in
     apply_raw (`__build_to_steel);
-    CSl.build_to_repr_t fr (fun () -> [Info_location "in the specification"]);
+    STc.build_to_repr_t fr (fun () -> [Info_location "in the specification"]);
     timer_stop t;
 
     // [extract]

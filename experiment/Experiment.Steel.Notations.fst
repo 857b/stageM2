@@ -6,7 +6,7 @@ module M   = Experiment.Steel.Repr.M
 module MC  = Experiment.Steel.Combinators
 module SE  = Steel.Effect
 module SA  = Steel.Effect.Atomic
-module SH  = Experiment.Steel.SteelHack
+module SH  = Experiment.Steel.Steel
 module Mem = Steel.Memory
 
 open FStar.Tactics

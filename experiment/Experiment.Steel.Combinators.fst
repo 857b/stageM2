@@ -1,12 +1,14 @@
 module Experiment.Steel.Combinators
 
-module L    = FStar.List.Pure
-module SE   = Steel.Effect
-module SH   = Experiment.Steel.SteelHack
-module Mem  = Steel.Memory
+module L   = FStar.List.Pure
+module SE  = Steel.Effect
+module SH  = Experiment.Steel.Steel
+module Mem = Steel.Memory
+module Veq = Experiment.Steel.VEquiv
 
 open Steel.Effect
 open Steel.Effect.Atomic
+open Experiment.Steel.VPropList
 open Experiment.Steel.Repr.M
 
 #push-options "--ifuel 1"
@@ -127,7 +129,7 @@ inline_for_extraction noextract
 let return_steel
       (a : Type) (x : a) (sl_hint : post_t a)
       (pre : pre_t) (post : post_t a)
-      (e : vequiv pre (post x))
+      (e : Veq.vequiv pre (post x))
   : (let c = TCret #a #x #sl_hint pre post e in
      repr_steel_t SH.KSteel a pre post (tree_req _ c) (tree_ens _ c))
   = SH.steel_f (fun () ->
@@ -138,7 +140,7 @@ inline_for_extraction noextract
 let return_ghost_steel
       (a : Type) (opened : Mem.inames) (x : a) (sl_hint : post_t a)
       (pre : pre_t) (post : post_t a)
-      (e : vequiv pre (post x))
+      (e : Veq.vequiv pre (post x))
   : (let c = TCret #a #x #sl_hint pre post e in
      repr_steel_t (SH.KGhost opened) a pre post (tree_req _ c) (tree_ens _ c))
   = SH.ghost_f #opened (fun () ->

@@ -5,7 +5,6 @@ module L   = FStar.List.Pure
 module Ll  = Learn.List
 module Fl  = Learn.FList
 module Dl  = Learn.DList
-module M   = Experiment.Steel.Repr.M
 module ST  = Experiment.Steel.Repr.ST
 module Fin = FStar.Fin
 module Opt = Learn.Option
