@@ -446,7 +446,7 @@ let vequiv_inj_eq
     let mask_trg = ij_trg_mask ij in
     Msk.merge_fun_on_mask mask_src #(option (Fin.fin (L.length trg)))
         (fun _ j -> Opt.map (Msk.mask_pull mask_trg) (veq_f e' j))
-        (fun i   -> L.index ij i)
+        (fun i _ -> L.index ij i)
 
 val vequiv_inj_typ
       (#src #trg : vprop_list)

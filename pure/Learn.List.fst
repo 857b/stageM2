@@ -15,11 +15,18 @@ type vec (n : nat) (a : Type) = llist a n
 let list_extensionality (#a : Type)
       (l0 : list a) (l1 : list a {length l1 = length l0})
       (pf : (i : nat {i < length l0}) -> squash (index l0 i == index l1 i))
-  : Lemma (ensures l0 == l1)
+  : Lemma (l0 == l1)
   =
     introduce forall (i : nat {i < length l0}) . index l0 i == index l1 i
       with pf i;
     index_extensionality l0 l1
+
+let list_extensionality_sq (#a : Type)
+      (#l0 : list a) (#l1 : list a {length l1 = length l0})
+      (pf : (i : nat {i < length l0}) -> squash (index l0 i == index l1 i))
+  : squash (l0 == l1)
+  = list_extensionality l0 l1 pf
+
 
 let rec list_eq (#a : Type) (eq_a : U.eq_dec a) (l0 l1 : list a)
   : Tot (b : bool {b <==> l0 == l1}) (decreases l0)
@@ -27,6 +34,29 @@ let rec list_eq (#a : Type) (eq_a : U.eq_dec a) (l0 l1 : list a)
   | [], [] -> true
   | x :: xs, y :: ys -> x `eq_a` y && xs `list_eq eq_a` ys
   | _ -> false
+
+(* [memP] *)
+
+#push-options "--ifuel 1 --fuel 1"
+let rec memP_iff (#a : Type) (x : a) (l : list a)
+  : Lemma (ensures memP x l <==> (exists (i : Fin.fin (length l)) . index l i == x))
+          (decreases l)
+  = match l with
+  | [] -> ()
+  | y :: ys ->
+      calc (<==>) {
+        memP x l;
+      <==> { }
+        y == x \/ memP x ys;
+      <==> { memP_iff x ys }
+        index l 0 == x \/ (exists (i : Fin.fin (length ys)) . index ys i == x);
+      <==> { }
+        index l 0 == x \/ (exists (i : Fin.fin (length l - 1)) . index l (i+1) == x);
+      <==> { introduce forall (i : Fin.fin (length l)) . i == 0 \/ (exists (i' : Fin.fin (length l - 1)) . i = i'+1)
+             with if i > 0 then assert (i = (i-1)+1) }
+        exists (i : Fin.fin (length l)) . index l i == x;
+      }
+#pop-options
 
 (* [mem_findi] *)
 
@@ -83,12 +113,17 @@ let rec append_index (#a:Type) (l1 l2 : list a) (i : nat{i < length l1 + length 
     | _ :: tl -> if i = 0 then () else append_index tl l2 (i-1)
 
 let pat_append ()
-  : Lemma (forall (a : Type) (l1 l2 : list a) (i : Fin.fin (length l1 + length l2)) .
+  : Lemma ((forall (a : Type) (l1 l2 : list a) (i : Fin.fin (length l1 + length l2)) .
              {:pattern (index (l1@l2) i)}
-             index (l1@l2) i == (if i < length l1 then index l1 i else index l2 (i - length l1)))
+             index (l1@l2) i == (if i < length l1 then index l1 i else index l2 (i - length l1))) /\
+           (forall (a b : Type) (f : a -> b) (l1 l2 : list a) .
+             map f (l1@l2) == map f l1 @ map f l2))
   = introduce forall (a : Type) (l1 l2 : list a) (i : Fin.fin (length l1 + length l2)) .
               index (l1@l2) i == (if i < length l1 then index l1 i else index l2 (i - length l1))
-      with append_index l1 l2 i
+      with append_index l1 l2 i;
+    introduce forall (a b : Type) (f : a -> b) (l1 l2 : list a) .
+              map f (l1@l2) == map f l1 @ map f l2
+      with map_append f l1 l2
 
 
 (* [filteri] *)
@@ -269,6 +304,25 @@ let rec initi_index (#a : Type) (lb ub : int) (f : (i:int{lb <= i /\ i < ub}) ->
   = if i = 0 then ()
     else initi_index (lb+1) ub f (i-1)
 
+(* [repeat] *)
+
+let rec repeat (#a : Type) (n : nat) (x : a)
+  : Tot (llist a n)
+  = if n = 0 then [] else x :: repeat (n-1) x
+
+let rec repeat_index (#a : Type) (n : nat) (x : a) (i : Fin.fin n)
+  : Lemma (ensures index (repeat n x) i == x) (decreases n)
+          [SMTPat (index (repeat n x) i)]
+  = if i > 0 then repeat_index (n-1) x (i-1)
+
+let rec repeat_count (#a : eqtype) (n : nat) (x x' : a)
+  : Lemma (ensures count x' (repeat n x) == (if x = x' then n else 0)) (decreases n)
+  = if n > 0 then repeat_count (n-1) x x'
+
+let map_repeat (#a #b : Type) (f : a -> b) (n : nat) (x : a)
+  : Lemma (map f (repeat n x) == repeat n (f x))
+          [SMTPat (map f (repeat n x))]
+  = list_extensionality (map f (repeat n x)) (repeat n (f x)) (fun i -> ())
 
 (* [insert] *)
 
