@@ -49,12 +49,42 @@ let eij_trg_mask_f (#a : Type) (#src #trg : list a) (eij : eq_injection_l src tr
   = L.mem j eij
 
 let eij_trg_mask (#a : Type) (#src #trg : list a) (eij : eq_injection_l src trg)
-  : Ll. vec (L.length trg) bool
+  : Ll.vec (L.length trg) bool
   = Ll.initi 0 (L.length trg) (eij_trg_mask_f eij)
 
 let eij_sl (#src #trg : vprop_list) (eij : eq_injection src trg) (xs : sl_f trg)
   : sl_f src
   = Fl.mk_flist (vprop_list_sels_t src) (fun i -> xs (eij i) <: (L.index src i).t)
+
+
+let eij_equiv_f (#a : Type) (#src #trg : list a) (eij : eq_injection_l src trg)
+                (i : Fin.fin (L.length src))
+  : Fin.fin (mask_len (eij_trg_mask eij))
+  = let k = L.index eij i in
+    L.lemma_index_memP eij i;
+    mask_push (eij_trg_mask eij) k
+
+val eij_equiv_injective (#a : Type) (#src #trg : list a) (eij : eq_injection_l src trg)
+  : Lemma (Perm.injective (eij_equiv_f eij))
+
+val eij_equiv_surjective (#a : Type) (#src #trg : list a) (eij : eq_injection_l src trg)
+  : Lemma (Perm.surjective (eij_equiv_f eij))
+  
+val eij_equiv_eq (#a : Type) (#src #trg : list a) (eij : eq_injection_l src trg) (i : Fin.fin (L.length src))
+  : Lemma (L.index src i == L.index (filter_mask (eij_trg_mask eij) trg) (eij_equiv_f eij i))
+
+val eij_trg_mask_len (#a : Type) (#src #trg : list a) (eij : eq_injection_l src trg)
+  : Lemma (mask_len (eij_trg_mask eij) == L.length src)
+
+let eij_equiv (#a : Type) (#src #trg : list a) (eij : eq_injection_l src trg)
+  : Perm.pequiv (filter_mask (eij_trg_mask eij) trg) src
+  =
+    (**) eij_equiv_injective eij;
+    (**) eij_trg_mask_len eij;
+    (**) let trg' = filter_mask (eij_trg_mask eij) trg in
+    let f = Perm.mk_perm_f (L.length trg') (eij_equiv_f eij) in
+    (**) Ll.list_extensionality src (Perm.apply_perm_r f trg') (fun i -> eij_equiv_eq eij i);
+    f
 
 
 (*** [lin_cond] *)
@@ -128,6 +158,7 @@ type lin_cond :
   | LCret :
       (env : vprop_list) ->
       (#a : Type u#a) -> (#x : a) -> (#sl_hint : M.post_t a) ->
+      // NOTE: [prd] is redundant since [csm_f] determines its values
       (prd : prd_t a) -> (csm_f : eq_injection_l (prd x) env) ->
       lin_cond env (M.Tret a x sl_hint) (eij_trg_mask csm_f) prd
   | LCbind :

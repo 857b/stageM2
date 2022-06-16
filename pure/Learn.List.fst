@@ -113,7 +113,7 @@ let rec append_index (#a:Type) (l1 l2 : list a) (i : nat{i < length l1 + length 
     | _ :: tl -> if i = 0 then () else append_index tl l2 (i-1)
 
 let pat_append ()
-  : Lemma ((forall (a : Type) (l1 l2 : list a) (i : Fin.fin (length l1 + length l2)) .
+  : squash ((forall (a : Type) (l1 l2 : list a) (i : Fin.fin (length l1 + length l2)) .
              {:pattern (index (l1@l2) i)}
              index (l1@l2) i == (if i < length l1 then index l1 i else index l2 (i - length l1))) /\
            (forall (a b : Type) (f : a -> b) (l1 l2 : list a) .

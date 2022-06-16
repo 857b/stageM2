@@ -155,6 +155,34 @@ val filter_mask_and
 
 
 #push-options "--ifuel 1 --fuel 1"
+let rec mask_perm_append (#n : nat) (m : vec n bool)
+  : Tot (Perm.perm_f n)
+  = match m with
+  | [] ->
+      U.cast _ Perm.(id_n 0)
+  | true :: m ->
+      let m : vec (n-1) bool = m in
+      U.cast _ Perm.(perm_f_cons (mask_perm_append m))
+  | false :: m ->
+      let m : vec (n-1) bool = m in
+      U.cast _ Perm.(comp
+          (perm_f_move_head (mask_len m) (mask_len (mask_not m)))
+          (U.cast _ (perm_f_cons (mask_perm_append m))))
+
+let rec mask_perm_append' (#n : nat) (m : vec n bool)
+  : Tot (Perm.perm_f n)
+  = match m with
+  | [] ->
+      U.cast _ Perm.(id_n 0)
+  | true :: m ->
+      let m : vec (n-1) bool = m in
+      U.cast _ Perm.(perm_f_cons (mask_perm_append' m))
+  | false :: m ->
+      let m : vec (n-1) bool = m in
+      U.cast _ Perm.(comp
+          (U.cast _ (perm_f_cons (mask_perm_append' m)))
+          (perm_f_move_to_head (mask_len m) (mask_len (mask_not m))))
+
 let rec mask_or_append_f (#len : nat) (m0 : vec len bool) (m1 : vec (mask_len (mask_not m0)) bool)
   : Tot (Perm.perm_f (mask_len (mask_comp_or m0 m1))) (decreases m0)
   = match m0, m1 with
@@ -173,10 +201,21 @@ let rec mask_or_append_f (#len : nat) (m0 : vec len bool) (m1 : vec (mask_len (m
       U.cast _ (mask_or_append_f m0 m1)
 #pop-options
 
+
+val filter_mask_perm_append_inv (#n : nat) (m : vec n bool)
+  : Lemma (Perm.inv_f (mask_perm_append m) == mask_perm_append' m)
+
+val filter_mask_perm_append (#a : Type) (#n : nat) (m : vec n bool) (l : vec n a)
+  : Lemma (filter_mask m l @ filter_mask (mask_not m) l == Perm.apply_perm_r (mask_perm_append m) l)
+
+val filter_mask_perm_append' (#a : Type) (#n : nat) (m : vec n bool) (l : vec n a)
+  : Lemma (l == Perm.apply_perm_r (mask_perm_append' m) (filter_mask m l @ filter_mask (mask_not m) l))
+
 val filter_mask_or_append
       (#a : Type) (#len : nat) (m0 : vec len bool) (m1 : vec (mask_len (mask_not m0)) bool) (l : vec len a)
-  : squash (filter_mask m0 l @ filter_mask m1 (filter_mask (mask_not m0) l)
+  : Lemma (filter_mask m0 l @ filter_mask m1 (filter_mask (mask_not m0) l)
          == Perm.apply_perm_r (mask_or_append_f m0 m1) (filter_mask (mask_comp_or m0 m1) l))
+
 
 [@@__mask__]
 let rec filter_mask_dl (#len : nat) (mask : vec len bool) (ts : vec len Type) (xs : Dl.dlist ts)

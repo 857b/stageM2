@@ -1,7 +1,9 @@
 module Learn.List.Mask
 
-module T    = FStar.Tactics
 module Perm = Learn.Permutation
+
+open FStar.Tactics
+open FStar.List.Pure
 
 
 #push-options "--ifuel 1 --fuel 1"
@@ -27,7 +29,7 @@ let rec merge_fun_on_mask_index #src_n mask #b f g (i : nat)
             = g (i + 1)    j    in
           assert (merge_fun_on_mask #src_n (true :: mask) f g ==
                   f 0 0 :: merge_fun_on_mask #(src_n-1) mask f' g')
-              by (T.trefl ());
+              by (trefl ());
           if i > 0 then merge_fun_on_mask_index #(src_n-1) mask f' g' (i - 1)
   | false :: mask ->
           let mask : vec (src_n-1) bool = mask in
@@ -37,7 +39,7 @@ let rec merge_fun_on_mask_index #src_n mask #b f g (i : nat)
             = g (i + 1) (j + 1) in
           assert (merge_fun_on_mask #src_n (false :: mask) f g ==
                   g 0 0 :: merge_fun_on_mask #(src_n-1) mask f' g')
-              by (T.trefl ());
+              by (trefl ());
           if i > 0 then merge_fun_on_mask_index #(src_n-1) mask f' g' (i - 1)
 
 let rec mask_push_pull (#len : nat) (mask : vec len bool) (j : Fin.fin (mask_len mask))
@@ -125,17 +127,69 @@ let rec filter_mask_and #a #len m0 m1 l
   | true :: m0, _ :: m1, _ :: l | false :: m0, m1, _ :: l -> filter_mask_and #a #(len-1) m0 m1 l
 
 
-let tac_filter_mask_or () : T.Tac unit = T.(
+#push-options "--z3rlimit 20"
+
+let rec filter_mask_perm_append_inv (#n : nat) (m : vec n bool)
+  : Lemma (ensures Perm.inv_f (mask_perm_append m) == mask_perm_append' m)
+          (decreases n)
+  = Perm.(match m with
+  | [] -> ()
+  | true :: m' ->
+      let m' : vec (n-1) bool = m' in
+      filter_mask_perm_append_inv m'
+  | false :: m' ->
+      let m' : vec (n-1) bool = m' in
+      filter_mask_perm_append_inv m';
+      let p0 = perm_cast n (perm_f_move_head (mask_len m') (mask_len (mask_not m'))) in
+      let p1 = perm_cast n (perm_f_cons (mask_perm_append m')) in
+      inv_f_comp p0 p1)
+
+let tac_filter_mask_perm_append () : Tac unit =
+  norm [delta_only [`%mask_perm_append]; zeta];
+  norm [iota];
+  norm [delta_only [`%U.cast]; iota]
+
+let rec filter_mask_perm_append (#a : Type) (#n : nat) (m : vec n bool) (l : vec n a)
+  : Lemma (ensures   filter_mask m l @ filter_mask (mask_not m) l == Perm.apply_perm_r (mask_perm_append m) l)
+          (decreases n)
+  = match m, l with
+  | [], [] -> ()
+  | true  :: m', x :: xs ->
+      let m' : vec (n-1) bool = m' in
+      assert (x :: (filter_mask m' xs @ filter_mask (mask_not m') xs)
+           == Perm.apply_perm_r (mask_perm_append #n (true :: m')) (x :: xs))
+          by (tac_filter_mask_perm_append ();
+              apply (`Perm.pequiv_cons_eq); smt ();
+                apply_lemma (`filter_mask_perm_append))
+  | false :: m', x :: xs ->
+      let m' : vec (n-1) bool = m' in
+      assert (filter_mask m' xs @ x :: filter_mask (mask_not m') xs
+           == Perm.apply_perm_r (mask_perm_append #n (false :: m')) (x :: xs))
+          by (tac_filter_mask_perm_append ();
+              apply (`Perm.pequiv_trans_eq); later ();
+                apply_raw (`Perm.pequiv_cons_eq); later (); later ();
+                  apply_lemma (`filter_mask_perm_append);
+                apply_raw (`Perm.pequiv_move_head_eq); later ();
+              iterAll explode;
+              iterAll (trefl <|> smt))
+
+let filter_mask_perm_append' (#a : Type) (#n : nat) (m : vec n bool) (l : vec n a)
+  : Lemma (l == Perm.apply_perm_r (mask_perm_append' m) (filter_mask m l @ filter_mask (mask_not m) l))
+  =
+    filter_mask_perm_append m l;
+    filter_mask_perm_append_inv m;
+    Perm.apply_r_comp (mask_perm_append' m) (mask_perm_append m) l
+
+
+let tac_filter_mask_or () : Tac unit =
   norm [delta_only [`%mask_or_append_f]; zeta];
   norm [iota];
-  norm [delta_only [`%U.cast]; iota])
-
-#push-options "--z3rlimit 20"
+  norm [delta_only [`%U.cast]; iota]
 
 let rec filter_mask_or_append
       (#a : Type) (#len : nat) (m0 : vec len bool) (m1 : vec (mask_len (mask_not m0)) bool) (l : vec len a)
-  : Tot (squash (filter_mask m0 l @ filter_mask m1 (filter_mask (mask_not m0) l)
-              == Perm.apply_perm_r (mask_or_append_f m0 m1) (filter_mask (mask_comp_or m0 m1) l)))
+  : Lemma (ensures filter_mask m0 l @ filter_mask m1 (filter_mask (mask_not m0) l)
+                   == Perm.apply_perm_r (mask_or_append_f m0 m1) (filter_mask (mask_comp_or m0 m1) l))
         (decreases len)
   = match m0, m1, l with
   | [], [], [] -> ()
@@ -144,9 +198,9 @@ let rec filter_mask_or_append
       let lhs = filter_mask m0' xs @ filter_mask m1 (filter_mask (mask_not m0') xs) in
       let rhs = filter_mask (mask_comp_or m0' m1) xs in
       assert (x :: lhs == Perm.apply_perm_r (mask_or_append_f #len (true :: m0') m1) (x :: rhs))
-        by T.(tac_filter_mask_or ();
+          by (tac_filter_mask_or ();
               apply (`Perm.pequiv_cons_eq); smt ();
-                apply (`filter_mask_or_append))
+                apply_lemma (`filter_mask_or_append))
   | false :: m0', true :: m1', x :: xs ->
       let m0' : vec (len-1) bool = m0' in
       let lhs0 = filter_mask m0' xs in
@@ -156,10 +210,10 @@ let rec filter_mask_or_append
       assert (Perm.apply_perm_r (mask_or_append_f m0 m1) (filter_mask (mask_comp_or m0 m1) l)
            == Perm.apply_perm_r (mask_or_append_f #len (false :: m0') (true :: m1')) (x :: rhs));
       assert (lhs0 @ x :: lhs1 == Perm.apply_perm_r (mask_or_append_f #len (false :: m0') (true :: m1')) (x :: rhs))
-        by T.(tac_filter_mask_or ();
+          by (tac_filter_mask_or ();
               apply (`Perm.pequiv_trans_eq); later ();
                 apply_raw (`Perm.pequiv_cons_eq); later (); later ();
-                  apply_raw (`filter_mask_or_append);
+                  apply_lemma (`filter_mask_or_append);
                 apply_raw (`Perm.pequiv_move_head_eq); later ();
               explode (); trefl (); iterAll smt)
   | false :: m0, false :: m1, x :: xs ->

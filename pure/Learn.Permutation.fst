@@ -120,12 +120,12 @@ let injective  (#a #b : Type) (f : a -> b) : prop =
 
 let surjective (#a #b : Type) (f : a -> b) : prop = forall (y : b) . exists (x : a) . f x == y
 
-let injectiveI (#a #b : Type) (f : a -> b)
+let injectiveI (#a #b : Type) ($f : a -> b)
                (prf : (x : a) -> (x' : a) -> Lemma (requires f x == f x') (ensures x == x'))
   : Lemma (injective f)
   = FStar.Classical.forall_intro_2 (FStar.Classical.move_requires_2 prf)
 
-let surjectiveI (#a #b : Type) (f : a -> b)
+let surjectiveI (#a #b : Type) ($f : a -> b)
                 (wit : (y : b) -> Ghost a (requires True) (ensures fun x -> f x == y))
   : Lemma (surjective f)
   = introduce forall (y : b) . exists (x : a) . f x == y with (let _ = wit y in ())
@@ -191,6 +191,11 @@ let fin_surjective_ge (n m : nat) (f : Fin.fin n -> Fin.fin m)
 
 type perm_f (n : nat) = f : Fext.(Fin.fin n ^-> Fin.fin n) {U.hide_prop (injective f)}
 
+unfold
+let perm_cast (#n : nat) (n' : nat) (f : perm_f n)
+  : Pure (perm_f n') (requires n == n') (ensures fun f' -> f' == f)
+  = f
+
 let mk_perm_f (n : nat) (f : Fin.fin n -> Fin.fin n)
   : Pure (perm_f n) (requires injective f) (ensures fun _ -> True)
   =
@@ -250,6 +255,14 @@ let inv_f (#n : nat) (f : perm_f n)
     inverse_intro f g;
     g
 
+let pat_inv_f () : squash (
+    (forall (n : nat) (f : perm_f n) (i : Fin.fin n) . {:pattern (inv_f f (f i))} inv_f f (f i) == i) /\
+    (forall (n : nat) (f : perm_f n) (i : Fin.fin n) . {:pattern (f (inv_f f i))} f (inv_f f i) == i)
+  )
+  =
+    assert (forall (n : nat) (f : perm_f n) (i : Fin.fin n) . inv_f f (f i) == (inv_f f `comp` f) i);
+    assert (forall (n : nat) (f : perm_f n) (i : Fin.fin n) . f (inv_f f i) == (f `comp` inv_f f) i)
+
 let inverse_uniq (#n : nat) (f g0 g1 : perm_f n)
   : Lemma (requires is_inverse f g0 /\ is_inverse f g1)
           (ensures  g0 == g1)
@@ -266,6 +279,7 @@ let inv_f_invol (#n : nat) (f : perm_f n)
 
 let inv_f_comp (#n : nat) (f g : perm_f n)
   : Lemma (inv_f (f `comp` g) == inv_f g `comp` inv_f f)
+          (* TODO? pattern *)
   =
     comp_assoc f g (inv_f g `comp` inv_f f);
     comp_assoc g (inv_f g) (inv_f f);
@@ -273,6 +287,14 @@ let inv_f_comp (#n : nat) (f g : perm_f n)
     comp_assoc (inv_f f) f g;
     assert (is_inverse (f `comp` g) (inv_f g `comp` inv_f f));
     inverse_uniq (f `comp` g) (inv_f (f `comp` g)) (inv_f g `comp` inv_f f)
+
+let inv_f_eq_intro (#n : nat) (#f : perm_f n) (#g : perm_f n)
+      (pf : (x : Fin.fin n) -> squash (g (f x) == x))
+  : squash (inv_f f == g)
+  = 
+    FStar.Classical.forall_intro_squash_gtot pf;
+    inverse_intro g f;
+    inverse_uniq f (inv_f f) g
 
 
 let perm_f_of_pair (#n : nat) (f g : Fin.fin n -> Fin.fin n)
@@ -645,7 +667,6 @@ let pequiv_trans #a (#l0 #l1 #l2 : list a) (f : pequiv l0 l1) (g : pequiv l1 l2)
     g `comp` f
 
 
-unfold
 let perm_f_cons (#n : nat) (f : perm_f n) : perm_f (n+1)
   =
     let g' (i :  Fin.fin (n + 1)) : Fin.fin (n + 1) =
@@ -653,6 +674,12 @@ let perm_f_cons (#n : nat) (f : perm_f n) : perm_f (n+1)
     in
     (**) injectiveI #(Fin.fin (n + 1)) g' (fun i i' -> if i > 0 && i' > 0 then U.hide_propD (injective f));
     mk_perm_f (n+1) g'
+
+let perm_f_cons_inv (#n : nat) (f : perm_f n)
+  : Lemma (inv_f (perm_f_cons f) == perm_f_cons (inv_f f))
+          [SMTPat (inv_f (perm_f_cons f))]
+  = inv_f_eq_intro #_ #(perm_f_cons f) #(perm_f_cons (inv_f f)) (fun i -> pat_inv_f ())
+
 
 let pequiv_cons_eq #a (x : a) (l0 l1 : list a)
                    (n n' : nat) (_ : squash (n = length l0 /\ n' = n + 1))
@@ -667,17 +694,16 @@ let pequiv_cons #a (x : a) (#l0 #l1 : list a) (f : pequiv l0 l1) : pequiv (x :: 
     U.cast (perm_f (length (x :: l0))) (perm_f_cons f)
 
 
-unfold
 let perm_f_cons_snoc (n : nat) : perm_f (n+1)
   =
     let f' (i : Fin.fin (n+1)) : Fin.fin (n+1) =
       if i = n then 0 else i + 1
     in
-    (**) injectiveI #(Fin.fin n) f' (fun i i' -> ());
+    (**) injectiveI f' (fun i i' -> ());
     mk_perm_f (n+1) f'
 
 let pequiv_cons_snoc_eq #a (x : a) (l : list a)
-                        (n n' : nat) (_ : squash (n = length l /\ n' = length l + 1))
+                        (n n' : nat) (_ : squash (n = length l /\ n' = n + 1))
   : squash (l @ [x] == apply_perm_r #a #n' (perm_f_cons_snoc n) (x :: l))
   = assert (length [x] = 1);
     list_extensionality_sq (fun i -> pat_append ())
@@ -690,26 +716,33 @@ let pequiv_cons_snoc #a (x : a) (l : list a)
     U.cast (perm_f (length (x :: l))) (perm_f_cons_snoc (length l))
 
 
-unfold
 let perm_f_snoc_cons (n : nat) : perm_f (n+1)
   =
     let f' (i : Fin.fin (n+1)) : Fin.fin (n+1) =
       if i = 0 then n else i - 1
     in
-    (**) injectiveI #(Fin.fin n) f' (fun i i' -> ());
+    (**) injectiveI f' (fun i i' -> ());
     mk_perm_f (n+1) f'
 
-unfold
+let perm_f_cons_snoc_inv (n : nat)
+  : Lemma (inv_f (perm_f_cons_snoc n) == perm_f_snoc_cons n)
+          [SMTPat (inv_f (perm_f_cons_snoc n))]
+  = inv_f_eq_intro #_ #(perm_f_cons_snoc n) #(perm_f_snoc_cons n) (fun i -> ())
+
+let pequiv_snoc_cons_eq #a (x : a) (l : list a)
+                        (n n' : nat) (_ : squash (n = length l /\ n' = n + 1))
+  : (assert (length [x] = 1);
+     squash (x :: l == apply_perm_r #a #n' (perm_f_snoc_cons n) (l @ [x])))
+  = list_extensionality_sq (fun i -> pat_append ())
+
 let pequiv_snoc_cons #a (x : a) (l : list a)
   : pequiv (l @ [x]) (x :: l)
   =
     assert (length [x] = 1);
-    let f : perm_f (length (l @ [x])) = U.cast _ (perm_f_snoc_cons (length l)) in
-    (**) list_extensionality (x :: l) (apply_perm_r f (l @ [x])) (fun i -> pat_append ());
-    f
+    pequiv_snoc_cons_eq x l (length l) (length l + 1) ();
+    U.cast (perm_f (length (l @ [x]))) (perm_f_snoc_cons (length l))
 
 
-unfold
 let perm_f_append (#n0 : nat) (f0 : perm_f n0) (#n1 : nat) (f1 : perm_f n1)
   : perm_f (n0 + n1)
   =
@@ -720,6 +753,14 @@ let perm_f_append (#n0 : nat) (f0 : perm_f n0) (#n1 : nat) (f1 : perm_f n1)
     (**) injectiveI #(Fin.fin n) g' (fun i i' ->
     (**)   U.hide_propD (injective f0); U.hide_propD (injective f1));
     mk_perm_f n g'
+
+
+let perm_f_append_inv (#n0 : nat) (f0 : perm_f n0) (#n1 : nat) (f1 : perm_f n1)
+  : Lemma (inv_f (perm_f_append f0 f1) == perm_f_append (inv_f f0) (inv_f f1))
+          [SMTPat (inv_f (perm_f_append f0 f1))]
+  = inv_f_eq_intro #_ #(perm_f_append f0 f1) #(perm_f_append (inv_f f0) (inv_f f1))
+      (fun i -> let _ = pat_append () in let _ = pat_inv_f () in
+             _ by T.(norm [delta_only [`%perm_f_append; `%mk_perm_f; `%Fext.on]]; smt ()))
 
 #push-options "--ifuel 0 --fuel 0"
 let pequiv_append_eq
@@ -768,10 +809,49 @@ let pequiv_move_head #a (x : a) (l0 l1 : list a)
     (**) append_assoc l0 [x] l1;
     U.cast _ (pequiv_append (pequiv_cons_snoc x l0) (pequiv_refl l1))
 
-unfold
 let perm_f_move_to_head (n0 n1 : nat)
   : perm_f (n0 + n1 + 1)
   = U.cast _ (perm_f_append (perm_f_snoc_cons n0) (id_n n1))
+
+let filter_inv_f (#n : nat) (f : perm_f n) (rhs : perm_f n) (pf : squash (inv_f f == rhs))
+  : squash (inv_f f == rhs)
+  = pf
+
+#push-options "--ifuel 0 --fuel 0"
+let perm_f_move_head_inv (n0 n1 : nat)
+  : Lemma (inv_f (perm_f_move_head n0 n1) == perm_f_move_to_head n0 n1)
+          [SMTPat (inv_f (perm_f_move_head n0 n1))]
+  =
+    calc (==) {
+      inv_f (perm_f_move_head n0 n1) <: perm_f (n0 + n1 + 1);
+    == { }
+      inv_f (perm_cast _ (perm_f_append (perm_f_cons_snoc n0) (id_n n1)));
+    == { }
+      perm_cast _ (inv_f (perm_f_append (perm_f_cons_snoc n0) (id_n n1)));
+    == { }
+      perm_cast _ (perm_f_append (inv_f (perm_f_cons_snoc n0)) #n1 (inv_f (id_n n1)));
+    == { }
+      perm_cast _ (perm_f_append (perm_f_snoc_cons n0) (id_n n1));
+    == { }
+      perm_f_move_to_head n0 n1;
+    }
+#pop-options
+
+#push-options "--ifuel 0"
+let pequiv_move_to_head_eq
+      #a (x : a) (l0 l1 : list a) (n0 n1 n2 : nat)
+      (_ : squash (n0 = length l0 /\ n1 = length l1 /\ n2 = length l0 + length l1 + 1))
+  : (assert (length (l0 @ x :: l1) = length l0 + length (x :: l1));
+     squash (x :: l0 @ l1 == apply_perm_r #a #n2 (perm_f_move_to_head n0 n1) (l0 @ x :: l1)))
+  =
+    append_assoc l0 [x] l1;
+    assert (length [x] == 1);
+    assert (((x :: l0) @ l1) == apply_perm_r #a #n2 (perm_f_move_to_head n0 n1) ((l0 @ [x]) @ l1))
+      by T.(norm [delta_only [`%perm_f_move_to_head; `%U.cast]; iota];
+            apply (`pequiv_append_eq); smt ();
+              apply (`pequiv_snoc_cons_eq); smt ();
+              smt ())
+#pop-options
 
 let pequiv_move_to_head #a (x : a) (l0 l1 : list a)
   : pequiv (l0 @ x :: l1) (x :: l0 @ l1)

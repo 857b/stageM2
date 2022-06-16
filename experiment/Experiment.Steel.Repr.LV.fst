@@ -7,6 +7,39 @@ open Learn.List.Mask
 open FStar.Tactics
 
 
+let eij_equiv_injective (#a : Type) (#src #trg : list a) (eij : eq_injection_l src trg)
+  : Lemma (Perm.injective (eij_equiv_f eij))
+  =
+    Perm.injectiveI (eij_equiv_f eij) (fun i i' ->
+      let k  = L.index eij i    in
+      let k' = L.index eij i'   in
+      let m  = eij_trg_mask eij in
+      L.lemma_index_memP eij i;
+      L.lemma_index_memP eij i';
+      assert (mask_pull m (mask_push m k) == mask_pull m (mask_push m k')))
+
+let eij_equiv_surjective (#a : Type) (#src #trg : list a) (eij : eq_injection_l src trg)
+  : Lemma (Perm.surjective (eij_equiv_f eij))
+  =
+    Perm.surjectiveI (eij_equiv_f eij) (fun j ->
+      let k = mask_pull (eij_trg_mask eij) j in
+      Ll.mem_findi k eij)
+
+#push-options "--ifuel 0 --fuel 0"
+let eij_equiv_eq (#a : Type) (#src #trg : list a) (eij : eq_injection_l src trg) (i : Fin.fin (L.length src))
+  : Lemma (L.index src i == L.index (filter_mask (eij_trg_mask eij) trg) (eij_equiv_f eij i))
+  = L.lemma_index_memP eij i
+#pop-options
+
+let eij_trg_mask_len (#a : Type) (#src #trg : list a) (eij : eq_injection_l src trg)
+  : Lemma (mask_len (eij_trg_mask eij) == L.length src)
+  =
+    eij_equiv_injective eij;
+    Perm.fin_injective_le (L.length src) (mask_len (eij_trg_mask eij)) (eij_equiv_f eij);
+    eij_equiv_surjective eij;
+    Perm.fin_surjective_ge (L.length src) (mask_len (eij_trg_mask eij)) (eij_equiv_f eij)
+
+
 let bind_g_csm'_len
       (env : vprop_list)
       (f_csm : csm_t env) (f_prd : vprop_list)
@@ -94,9 +127,9 @@ let sub_ret_prd_f_eij
     (**) Ll.pat_append ();
     let n0    = length prd0 in
     let ncsm0 = mask_not (eij_trg_mask csm_f0) in
-    let f = sub_ret_prd_f' csm_f0 prd_f1 in
+    let f : Fin.fin (length prd1) -> _ = sub_ret_prd_f' csm_f0 prd_f1 in
     (**) assert (eq_injection_eq prd1 env f);
-    Perm.injectiveI #(Fin.fin (length prd1)) f (fun i i' ->
+    Perm.injectiveI f (fun i i' ->
       let j  = f i       in
       let k  = prd_f1 i  in
       let k' = prd_f1 i' in
