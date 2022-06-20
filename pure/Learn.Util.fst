@@ -38,3 +38,19 @@ let funext_on_eta_gtot (#a : Type) (#b: a -> Type) (f g : (x:a -> GTot (b x)))
                      (fun _ -> mapply (quote hp))
                      (fun _ -> trefl()));
            trefl())
+
+let arrow_ext
+      (#a : Type) (f g : a -> Type)
+      (pf : (x : a) -> squash (f x == g x))
+  : squash (((x : a) -> f x) == ((x : a) -> g x))
+  =
+    calc (==) {
+      (x : a) -> f x;
+    == { _ by (T.trefl ()) }
+      (x : a) -> (eta f) x;
+    == { funext_on_eta f g pf;
+         f_equal (fun f -> (x : a) -> f x) (eta f) (eta g) }
+      (x : a) -> (eta g) x;
+    == { _ by (T.trefl ()) }
+      (x : a) -> g x;
+    }

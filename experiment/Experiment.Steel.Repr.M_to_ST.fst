@@ -92,11 +92,14 @@ let repr_ST_of_M_req__Spec #a #pre #post req ens (tcs : tree_cond_Spec a pre pos
         TLogic.(
         apply (`conj_morph_iff);
           apply (`iff_refl);
+        let _ = intro () in
         apply (`forall_morph_iff); let sl0' = intro () in
         apply (`forall_morph_iff); let sl_frame = intro () in
         apply (`impl_morph_iff);
-          apply (`conj_morph_iff); apply (`iff_refl); smt ();
+          apply (`conj_morph_iff); apply (`iff_refl); let _ = intro () in smt ();
+        let _ = intro () in
         apply (`conj_morph_iff); apply (`iff_refl);
+        let _ = intro () in
         apply (`forall_morph_iff); let x = intro () in
         apply (`forall_morph_iff); let sl1' = intro () in
         smt ())

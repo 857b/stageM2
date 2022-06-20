@@ -105,6 +105,28 @@ let append_index (#ts0 #ts1 : ty_list) (xs0 : flist ts0) (xs1 : flist ts1)
   : Lemma L.(index (ts0@ts1) i == (if i < length ts0 then index ts0 i else index ts1 (i - length ts0)))
   = Ll.append_index ts0 ts1 i
 
+let append_nil_l
+      (#ts : ty_list) (xs : flist ts)
+  : Lemma (append nil xs == xs)
+          [SMTPat (append nil xs)]
+  = flist_extensionality (append nil xs) xs (fun i -> ())
+
+let append_assoc (#t0 #t1 #t2 : ty_list) (x0 : flist t0) (x1 : flist t1) (x2 : flist t2)
+  : Lemma (append x0 (append x1 x2) === append (append x0 x1) x2)
+  =
+    L.append_assoc t0 t1 t2;
+    flist_extensionality (append x0 (append x1 x2)) (append (append x0 x1) x2) (fun i -> ())
+
+let dlist_of_f_append
+      (#ts0 #ts1 : ty_list) (xs0 : flist ts0) (xs1 : flist ts1)
+  : Lemma (dlist_of_f (append xs0 xs1)
+        == Dl.append (dlist_of_f xs0) (dlist_of_f xs1))
+  = Dl.dlist_extensionality
+      (dlist_of_f (append xs0 xs1))
+      (Dl.append (dlist_of_f xs0) (dlist_of_f xs1))
+      (fun i -> Dl.append_index (dlist_of_f xs0) (dlist_of_f xs1) i;
+             append_index xs0 xs1 i)
+
 
 let splitAt_ty (ts0 ts1 : ty_list) (xs : flist L.(ts0@ts1))
   : Tot (flist ts0 & flist ts1) (decreases ts0)
@@ -249,6 +271,23 @@ let apply_pequiv_sym_eq_iff (#ts0 #ts1 : ty_list) (f : Perm.pequiv ts0 ts1) (xs 
   =
     apply_pequiv_sym_l f xs;
     apply_pequiv_sym_r f ys
+
+#push-options "--ifuel 0 --fuel 0"
+let apply_pequiv_trans
+      (#t0 #t1 #t2 : ty_list) (f : Perm.pequiv t0 t1) (g : Perm.pequiv t1 t2) (xs : flist t0)
+  : Lemma (apply_pequiv (Perm.pequiv_trans f g) xs == apply_pequiv g (apply_pequiv f xs))
+  = apply_r_comp (Perm.perm_cast _ g) f xs
+
+let apply_pequiv_append
+      (#t0 #t0' #t1 #t1' : ty_list) (f0 : Perm.pequiv t0 t0') (f1 : Perm.pequiv t1 t1')
+      (xs0 : flist t0) (xs1 : flist t1)
+  : Lemma (apply_pequiv (Perm.pequiv_append f0 f1) (append xs0 xs1)
+       == append (apply_pequiv f0 xs0) (apply_pequiv f1 xs1))
+  = flist_extensionality
+       (apply_pequiv (Perm.pequiv_append f0 f1) (append xs0 xs1))
+       (append (apply_pequiv f0 xs0) (apply_pequiv f1 xs1))
+       (fun i -> ())
+#pop-options
 
 
 (***** quantifiers *)

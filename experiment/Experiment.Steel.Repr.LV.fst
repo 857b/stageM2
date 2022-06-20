@@ -39,6 +39,21 @@ let eij_trg_mask_len (#a : Type) (#src #trg : list a) (eij : eq_injection_l src 
     eij_equiv_surjective eij;
     Perm.fin_surjective_ge (L.length src) (mask_len (eij_trg_mask eij)) (eij_equiv_f eij)
 
+#push-options "--ifuel 0 --fuel 0"
+let extract_eij_equiv
+      (#src #trg : vprop_list) (eij : eq_injection_l src trg) (sl : sl_f trg)
+  : Lemma (extract_vars (eij_equiv eij) (filter_sl (eij_trg_mask eij) sl) == eij_sl (L.index eij) sl)
+  = Fl.flist_extensionality
+      (extract_vars (eij_equiv eij) (filter_sl (eij_trg_mask eij) sl))
+      (eij_sl (L.index eij) sl)
+      (fun i ->
+        let m = eij_trg_mask eij in
+        L.lemma_index_memP eij i;
+        assert (extract_vars (eij_equiv eij) (filter_sl (eij_trg_mask eij) sl) i
+             == U.cast _ (sl (mask_pull m (mask_push m (L.index eij i)))))
+            by (trefl ()))
+#pop-options
+
 
 let bind_g_csm'_len
       (env : vprop_list)
@@ -84,6 +99,19 @@ let filter_bind_csm
     mask_not_comp_or f_csm g_csm;
     filter_mask_and (mask_not f_csm) (mask_not g_csm) env
 
+let filter_sl_bind_csm
+      (env : vprop_list)
+      (f_csm : csm_t env)
+      (g_csm : csm_t (filter_mask (mask_not f_csm) env))
+      (sl : sl_f env)
+  : Lemma (filter_bind_csm env f_csm g_csm;
+       filter_sl (mask_not (bind_csm env f_csm g_csm)) sl
+    == filter_sl (mask_not g_csm) (filter_sl (mask_not f_csm) sl))
+  =
+    mask_not_comp_or f_csm g_csm;
+    filter_mask_fl_and (mask_not f_csm) (mask_not g_csm) (vprop_list_sels_t env) sl
+
+
 let filter_bind_g_csm'
       (env : vprop_list)
       (f_csm : csm_t env) (f_prd : vprop_list)
@@ -111,6 +139,43 @@ let filter_bind_g_csm'
     == { filter_bind_csm env f_csm g_csm }
       filter_mask (mask_not (bind_csm env f_csm g_csm)) env;
     }
+
+let filter_sl_bind_g_csm'
+      (env : vprop_list)
+      (f_csm : csm_t env) (f_prd : vprop_list)
+      (g_csm : csm_t (filter_mask (mask_not f_csm) env))
+      (sl0 : sl_f f_prd) (sl1 : sl_f (filter_mask (mask_not f_csm) env))
+  : Lemma (filter_bind_g_csm' env f_csm f_prd g_csm; filter_bind_csm env f_csm g_csm;
+       filter_sl (mask_not (bind_g_csm' env f_csm f_prd g_csm)) (append_vars sl0 sl1)
+    == filter_sl (mask_not g_csm) sl1)
+  =
+    filter_bind_g_csm' env f_csm f_prd g_csm; filter_bind_csm env f_csm g_csm;
+    Ll.pat_append ();
+    let env1 = filter_mask (mask_not f_csm) env in
+    let m1 : Ll.vec (length f_prd + mask_len (mask_not f_csm)) bool
+      = Ll.repeat (length f_prd) true @ g_csm in
+    let m2 : Ll.vec (length f_prd + mask_len (mask_not f_csm)) bool
+      = Ll.repeat (length f_prd) false @ mask_not g_csm in
+    let rep0 = Ll.repeat (length f_prd) false in
+
+    filter_mask_append rep0 (mask_not g_csm) f_prd env1;
+    filter_mask_false rep0 f_prd (fun _ -> ());
+    assert_norm (vprop_list_sels_t [] == []);
+    
+    calc (===) {
+      filter_sl (mask_not (bind_g_csm' env f_csm f_prd g_csm)) (append_vars sl0 sl1);
+    == { }
+      filter_sl (mask_not m1) (append_vars sl0 sl1);
+    == { }
+      filter_sl m2 (append_vars sl0 sl1);
+    == { filter_mask_fl_append rep0 (mask_not g_csm) _ _ sl0 sl1 }
+      append_vars (filter_sl rep0 sl0) (filter_sl (mask_not g_csm) sl1);
+    == { Fl.nil_uniq (filter_sl rep0 sl0) }
+      append_vars #[] Fl.nil (filter_sl (mask_not g_csm) sl1);
+    == { }
+      filter_sl (mask_not g_csm) sl1;
+    }
+
 #pop-options
 
 (**) private let __end_bind_lem = ()

@@ -1,5 +1,8 @@
 module Learn.Util
 
+module T = FStar.Tactics
+
+
 val hide_prop : prop -> prop
 
 val hide_propI (p : prop) : Lemma (requires p) (ensures hide_prop p)
@@ -27,7 +30,13 @@ let eq2_trans #t (x z : t) (y : t) (p0 : squash (x == y)) (p1 : squash (y == z))
   = ()
 
 
-(* equivalent to [coerce_eq] *)
+/// Same as [assert_by_tactic] but returns a squash to allow [p] to be inferred
+let assert_by_tac (#p : Type) (t : unit -> T.Tac unit)
+  : Pure (squash p) (requires T.with_tactic t (squash p)) (ensures fun () -> True)
+  = ()
+
+
+/// equivalent to [coerce_eq]
 inline_for_extraction unfold
 let cast (#a b : Type) (x : a) : Pure b (requires a == b) (ensures fun y -> y == x)
   = x
@@ -75,6 +84,11 @@ let funext_eta_gtot (#a : Type) (#b : a -> Type) (f g : (x:a -> GTot (b x)))
                (eq : (x:a -> squash (f x == g x)))
   : Lemma (f == g)
   = funext_on_eta_gtot f g eq
+
+val arrow_ext
+      (#a : Type) (f g : a -> Type)
+      (pf : (x : a) -> squash (f x == g x))
+  : squash (((x : a) -> f x) == ((x : a) -> g x))
 
 
 /// [unit] for an arbitrary universe

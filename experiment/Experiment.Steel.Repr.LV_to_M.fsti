@@ -3,6 +3,8 @@ module Experiment.Steel.Repr.LV_to_M
 module U    = Learn.Util
 module L    = FStar.List.Pure
 module M    = Experiment.Steel.Repr.M
+module Ll   = Learn.List
+module Fl   = Learn.FList
 module Veq  = Experiment.Steel.VEquiv
 module Perm = Learn.Permutation
 
@@ -14,6 +16,7 @@ open Experiment.Steel.Repr.LV
 let res_env_f (env : vprop_list) (#a : Type) (csm : csm_t env) (prd : prd_t a) (x : a)
   : vprop_list
   = res_env env csm (prd x)
+
 
 let typ_to_M
       (env : vprop_list)
@@ -35,10 +38,17 @@ let eij_framed_equiv
   : vequiv_perm env L.(pre @ filter_mask (mask_not (eij_trg_mask csm_f)) env)
   =
     let m = eij_trg_mask csm_f in
-    filter_mask_perm_append m env;
     Perm.(pequiv_trans
-      (mask_perm_append m <: vequiv_perm env L.(filter_mask m env @ filter_mask (mask_not m) env))
+      (mask_pequiv_append m env)
       (pequiv_append (eij_equiv csm_f) (pequiv_refl (filter_mask (mask_not m) env))))
+
+val extract_eij_framed_equiv
+      (env : vprop_list) (pre : M.pre_t) (csm_f : eq_injection_l pre env)
+      (sl : sl_f env)
+  : Lemma (extract_vars (eij_framed_equiv env pre csm_f) sl
+        == append_vars (eij_sl (L.index csm_f) sl)
+                       (filter_sl (mask_not (eij_trg_mask csm_f)) sl))
+
 
 let repr_M_of_LV__tcs
       (env : vprop_list)
@@ -78,14 +88,25 @@ let sub_prd_framed_equiv
     let f0' : vequiv_perm L.(prd0 @ flt1 @ flt2) L.(prd1 @ flt2)
       = U.cast _ (Perm.pequiv_append f0 (Perm.pequiv_refl flt2))
     in
-    filter_mask_perm_append csm1 env1;
     let f1  : vequiv_perm env1 L.(flt1 @ flt2)
-       = Perm.perm_cast _ (mask_perm_append csm1)             in
+       = mask_pequiv_append csm1 env1 in
     let f1' : vequiv_perm L.(prd0 @ env1) L.(prd0 @ flt1 @ flt2)
       = Perm.pequiv_append (Perm.pequiv_refl prd0) f1
     in
     Perm.pequiv_trans f1' f0'
 #pop-options
+
+val extract_sub_prd_framed_equiv
+      (env : vprop_list) 
+      (csm0 : csm_t env) (prd0 : vprop_list)
+      (csm1 : csm_t (filter_mask (mask_not csm0) env)) (prd1 : vprop_list)
+      (veq  : vequiv_perm (sub_prd env csm0 prd0 csm1) prd1)
+      (sl0 : sl_f prd0) (sl1 : sl_f (filter_mask (mask_not csm0) env))
+  : Lemma (filter_bind_csm env csm0 csm1;
+       extract_vars (sub_prd_framed_equiv env csm0 prd0 csm1 prd1 veq) (append_vars sl0 sl1)
+    == append_vars (extract_vars veq (append_vars sl0 (filter_sl csm1 sl1)))
+                   (filter_sl (mask_not csm1) sl1))
+
 
 let repr_M_of_LV__tcs_sub
       (env : vprop_list)
@@ -113,6 +134,7 @@ val bind_g_csm'_res_env_f
 
 
 #push-options "--ifuel 1 --fuel 2"
+[@@ strict_on_arguments [5]] (* strict on [lc] *)
 let rec repr_M_of_LV
       (#env : vprop_list) (#a : Type u#a) (#t : M.prog_tree a)
       (#csm : csm_t env) (#prd : prd_t a)
@@ -138,3 +160,39 @@ let rec repr_M_of_LV
       in
       M.TCspec #a #pre #post #req #ens (repr_M_of_LV__tcs_sub env a pre post csm_f csm1 prd1 prd_f1)
 #pop-options
+
+
+(*** Soundness *)
+
+let res_env_split
+      (#env : vprop_list) (#csm : csm_t env) (#prd : vprop_list)
+      (sl : sl_f (res_env env csm prd))
+  : sl_f prd & sl_f (filter_mask (mask_not csm) env)
+  =
+    split_vars prd (filter_mask (mask_not csm) env) sl
+
+let res_env_app
+      (#env : vprop_list) (#csm : csm_t env) (#prd : vprop_list)
+      (sl1 : sl_f prd) (sl2 : sl_f (filter_mask (mask_not csm) env))
+  : sl_f (res_env env csm prd)
+  =
+    append_vars sl1 sl2
+
+let sound_M_of_LV
+      (#env : vprop_list) (#a : Type u#a) (#t : M.prog_tree a)
+      (#csm : csm_t env) (#prd : prd_t a)
+      (lc : lin_cond env t csm prd) (mc : lc_to_M lc)
+  : prop
+  =
+    forall (sl0 : sl_f env) .
+      (M.tree_req t mc sl0 <==> tree_req lc sl0) /\
+   (forall (res : a) (sl1 : sl_f (prd res)) (sl_rem : sl_f (filter_mask (mask_not csm) env)).
+      (M.tree_ens t mc sl0 res (res_env_app sl1 sl_rem) <==>
+      (tree_ens lc sl0 res sl1 /\
+       sl_rem == filter_sl (mask_not csm) sl0)))
+
+val repr_M_of_LV_sound
+      (#env : vprop_list) (#a : Type u#a) (#t : M.prog_tree a)
+      (#csm : csm_t env) (#prd : prd_t a)
+      (lc : lin_cond env t csm prd {lcsub_at_leaves lc})
+  : Lemma (sound_M_of_LV lc (repr_M_of_LV lc))

@@ -20,11 +20,15 @@ type ens_t (env : vprop_list) (a : Type) (prd : prd_t a) = sl_f env -> (x : a) -
 let res_env (env : vprop_list) (csm : csm_t env) (prd : vprop_list) : vprop_list =
   L.(prd @ (filter_mask (mask_not csm) env))
 
+let filter_sl
+      (#vs : vprop_list) (mask : mask_t vs) (xs : sl_f vs)
+  : sl_f (filter_mask mask vs)
+  = filter_mask_fl mask (vprop_list_sels_t vs) xs
+
 let res_sel (#env : vprop_list) (sl0 : sl_f env) (csm : csm_t env) (#prd : vprop_list) (sl1 : sl_f prd)
   : sl_f (res_env env csm prd)
   =
-    (**) Ll.pat_append ();
-    Fl.append sl1 (filter_mask_fl (mask_not csm) (vprop_list_sels_t env) sl0)
+    append_vars sl1 (filter_sl (mask_not csm) sl0)
 
 
 (****** [eq_injection] *)
@@ -86,6 +90,10 @@ let eij_equiv (#a : Type) (#src #trg : list a) (eij : eq_injection_l src trg)
     (**) Ll.list_extensionality src (Perm.apply_perm_r f trg') (fun i -> eij_equiv_eq eij i);
     f
 
+val extract_eij_equiv
+      (#src #trg : vprop_list) (eij : eq_injection_l src trg) (sl : sl_f trg)
+  : Lemma (extract_vars (eij_equiv eij) (filter_sl (eij_trg_mask eij) sl) == eij_sl (L.index eij) sl)
+
 
 (*** [lin_cond] *)
 
@@ -122,8 +130,19 @@ val filter_bind_csm
       (env : vprop_list)
       (f_csm : csm_t env)
       (g_csm : csm_t (filter_mask (mask_not f_csm) env))
-  : Lemma (filter_mask (mask_not (bind_csm env f_csm g_csm)) env
-        == filter_mask (mask_not g_csm) (filter_mask (mask_not f_csm) env))
+  : Lemma (eq2 #vprop_list
+           (filter_mask (mask_not (bind_csm env f_csm g_csm)) env)
+           (filter_mask (mask_not g_csm) (filter_mask (mask_not f_csm) env)))
+
+val filter_sl_bind_csm
+      (env : vprop_list)
+      (f_csm : csm_t env)
+      (g_csm : csm_t (filter_mask (mask_not f_csm) env))
+      (sl : sl_f env)
+  : Lemma (filter_bind_csm env f_csm g_csm;
+       filter_sl (mask_not (bind_csm env f_csm g_csm)) sl
+    == filter_sl (mask_not g_csm) (filter_sl (mask_not f_csm) sl))
+
 
 val filter_bind_g_csm'
       (env : vprop_list)
@@ -131,6 +150,16 @@ val filter_bind_g_csm'
       (g_csm : csm_t (filter_mask (mask_not f_csm) env))
   : Lemma (filter_mask (mask_not (bind_g_csm' env f_csm f_prd g_csm)) (res_env env f_csm f_prd)
         == filter_mask (mask_not (bind_csm env f_csm g_csm)) env)
+
+val filter_sl_bind_g_csm'
+      (env : vprop_list)
+      (f_csm : csm_t env) (f_prd : vprop_list)
+      (g_csm : csm_t (filter_mask (mask_not f_csm) env))
+      (sl0 : sl_f f_prd) (sl1 : sl_f (filter_mask (mask_not f_csm) env))
+  : Lemma (filter_bind_g_csm' env f_csm f_prd g_csm; filter_bind_csm env f_csm g_csm;
+       filter_sl (mask_not (bind_g_csm' env f_csm f_prd g_csm)) (append_vars sl0 sl1)
+    == filter_sl (mask_not g_csm) sl1)
+
 
 (**) private val __end_bind_lem : unit
 
@@ -266,14 +295,13 @@ and tree_ens
       res == x /\ sl1 == eij_sl (L.index csm_f) sl0
   | LCbind env #a #b #f #g f_csm f_prd cf g_csm g_prd cg ->
       (exists (x : a) (sl_itm : sl_f (f_prd x)) .
-        tree_ens cf sl0 x sl_itm ==> tree_ens (cg x) (res_sel sl0 f_csm sl_itm) res sl1)
+        tree_ens cf sl0 x sl_itm /\ tree_ens (cg x) (res_sel sl0 f_csm sl_itm) res sl1)
   | LCsub  env #a #f csm prd cf csm' prd' prd_f ->
       (exists (sl1' : sl_f (prd res)) . (
         (**) Ll.pat_append ();
         tree_ens cf sl0 res sl1' /\
         sl1 == extract_vars (Perm.perm_f_of_list (prd_f res))
-          (Fl.append sl1' (filter_mask_fl csm' _
-                                (filter_mask_fl (mask_not csm) (vprop_list_sels_t env) sl0)))))
+                            (append_vars sl1' (filter_sl csm' (filter_sl (mask_not csm) sl0)))))
 
 
 (***** Equivalence *)
@@ -485,7 +513,7 @@ let comp_sub_prd_f
     (**) filter_mask_or_append csm1 csm2 env1;
     let eq_flt_or
       : vequiv_perm flt12 L.(flt1 @ flt2)
-      = U.cast (Perm.perm_f (L.length flt12)) (mask_or_append_f csm1 csm2)
+      = Perm.perm_cast _ (mask_or_pequiv_append csm1 csm2 env1)
     in
     (**) L.append_assoc prd0 flt1 flt2;
     let f3 : vequiv_perm L.(prd0 @ flt1 @ flt2) prd2

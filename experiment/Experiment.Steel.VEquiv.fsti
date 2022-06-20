@@ -142,10 +142,19 @@ let veq_f (#pre #post : vprop_list) (veq : vequiv pre post) : veq_eq_t (L.length
 (*** Building [vequiv] *)
 
 [@@__vequiv__]
+let vequiv_refl_eq (v : vprop_list)
+  : veq_eq_t_list (L.length v) (L.length v)
+  = Ll.initi 0 (L.length v) (fun i -> Some (i <: Fin.fin (L.length v)))
+
+val vequiv_refl_sel_eq
+      (#v: vprop_list) (sl0 : sl_f v) (sl1 : sl_f v)
+  : squash (veq_sel_eq (veq_eq_sl (veq_of_list (vequiv_refl_eq v))) sl0 sl1 <==> sl1 == sl0)
+
+[@@__vequiv__]
 let vequiv_refl (v : vprop_list) : vequiv v v = {
   veq_req = (fun _ -> True);
   veq_ens = (fun _ _ -> True);
-  veq_eq  = Ll.initi 0 (L.length v) (fun i -> Some (i <: Fin.fin (L.length v)));
+  veq_eq  = vequiv_refl_eq v;
   veq_typ = ();
   veq_g   = (fun opened -> noop ())
 }
@@ -326,6 +335,11 @@ let vequiv_app
 let vequiv_of_perm_eq (#pre #post : vprop_list) (f : vequiv_perm pre post)
   : veq_eq_t (L.length pre) (L.length post)
   = mk_veq_eq (L.length pre) (L.length post) (fun i -> Some (f i))
+
+val vequiv_of_perm_sel_eq
+      (#pre #post : vprop_list) (f : vequiv_perm pre post)
+      (sl0 : sl_f pre) (sl1 : sl_f post)
+  : squash (veq_sel_eq (veq_eq_sl (vequiv_of_perm_eq f)) sl0 sl1 <==> sl1 == extract_vars f sl0)
 
 val vequiv_of_perm_g (#pre #post : vprop_list) (f : vequiv_perm pre post) (opened : Mem.inames)
   : SteelGhost unit opened (vprop_of_list pre) (fun () -> vprop_of_list post)

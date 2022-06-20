@@ -32,6 +32,14 @@ let veq_sel_eq_iff_partial_eq
 #pop-options
 
 
+let vequiv_refl_sel_eq
+      (#v: vprop_list) (sl0 : sl_f v) (sl1 : sl_f v)
+  : squash (veq_sel_eq (veq_eq_sl (veq_of_list (vequiv_refl_eq v))) sl0 sl1 <==> sl1 == sl0)
+  = introduce _ /\  _
+       with introduce _ ==> _ with _ .
+            Fl.flist_extensionality sl1 sl0 (fun i -> ())
+        and ()
+
 (***** [vequiv_trans] *)
 
 let vequiv_trans_eq1_restr_typ (#v0 #v1 #v2 : vprop_list) (e0 : vequiv v0 v1) (e1 : vequiv v1 v2)
@@ -214,6 +222,16 @@ let vequiv_app_g
 (***** [vequiv_of_perm] *)
 
 #push-options "--ifuel 0"
+let vequiv_of_perm_sel_eq
+      (#pre #post : vprop_list) (f : vequiv_perm pre post)
+      (sl0 : sl_f pre) (sl1 : sl_f post)
+  : squash (veq_sel_eq (veq_eq_sl (vequiv_of_perm_eq f)) sl0 sl1 <==> sl1 == extract_vars f sl0)
+  =
+    introduce _ /\ _
+      with introduce _ ==> _ with _ .
+           Fl.flist_extensionality sl1 (extract_vars f sl0) (fun i -> ())
+       and ()
+
 let vequiv_of_perm_g #pre #post f opened = steel_change_perm f
 #pop-options
 

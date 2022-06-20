@@ -19,6 +19,8 @@ type mask_t (#a : Type) (l : list a) =
 let mask_len (mask : list bool) : nat =
   count true mask
 
+val mask_len_le (mask : list bool) : Lemma (mask_len mask <= length mask)
+
 [@@__mask__]
 let mask_not (#n : nat) ($mask : vec n bool) : vec n bool
   = map not mask
@@ -138,6 +140,18 @@ val mask_comp_or_index
   : Lemma (index (mask_comp_or m0 m1) i == (index m0 i || index m1 (mask_push (mask_not m0) i)))
           [SMTPat (index (mask_comp_or m0 m1) i)]
 
+val mask_comp_and_index
+      (#len : nat) (m0 : vec len bool) (m1 : vec (mask_len m0) bool) (i : Fin.fin len)
+  : Lemma (index (mask_comp_and m0 m1) i == (index m0 i && index m1 (mask_push m0 i)))
+          [SMTPat (index (mask_comp_and m0 m1) i)]
+
+val mask_pull_comp_and
+      (#len : nat) (m0 : vec len bool) (m1 : vec (mask_len m0) bool) (i : Fin.fin (mask_len (mask_comp_and m0 m1)))
+  : Lemma (mask_pull (mask_comp_and m0 m1) i == mask_pull m0 (mask_pull m1 i))
+          [SMTPat (mask_pull (mask_comp_and m0 m1) i)]
+
+
+
 val mask_comp_or_assoc
       (#len : nat)
       (m0 : vec len bool)
@@ -201,12 +215,26 @@ let rec mask_or_append_f (#len : nat) (m0 : vec len bool) (m1 : vec (mask_len (m
       U.cast _ (mask_or_append_f m0 m1)
 #pop-options
 
-
-val filter_mask_perm_append_inv (#n : nat) (m : vec n bool)
+val mask_perm_append_inv (#n : nat) (m : vec n bool)
   : Lemma (Perm.inv_f (mask_perm_append m) == mask_perm_append' m)
+
+// ALT? definition of mask_perm_append
+val mask_perm_append'_index (#n : nat) (m : vec n bool) (i : Fin.fin n)
+  : Lemma (mask_perm_append' m i == (if index m i then mask_push m i else mask_len m + mask_push (mask_not m) i))
+
+val mask_perm_append_index (#n : nat) (m : vec n bool) (i : Fin.fin n)
+  : Lemma (mask_perm_append m i =
+          (if i < mask_len m then mask_pull m i else mask_pull (mask_not m) (i - mask_len m)))
 
 val filter_mask_perm_append (#a : Type) (#n : nat) (m : vec n bool) (l : vec n a)
   : Lemma (filter_mask m l @ filter_mask (mask_not m) l == Perm.apply_perm_r (mask_perm_append m) l)
+
+// ALT? directly define this version
+let mask_pequiv_append (#a : Type) (#n : nat) (m : vec n bool) (l : vec n a)
+  : Perm.pequiv l (filter_mask m l @ filter_mask (mask_not m) l)
+  =
+    (**) filter_mask_perm_append m l;
+    Perm.perm_cast _ (mask_perm_append m)
 
 val filter_mask_perm_append' (#a : Type) (#n : nat) (m : vec n bool) (l : vec n a)
   : Lemma (l == Perm.apply_perm_r (mask_perm_append' m) (filter_mask m l @ filter_mask (mask_not m) l))
@@ -215,6 +243,14 @@ val filter_mask_or_append
       (#a : Type) (#len : nat) (m0 : vec len bool) (m1 : vec (mask_len (mask_not m0)) bool) (l : vec len a)
   : Lemma (filter_mask m0 l @ filter_mask m1 (filter_mask (mask_not m0) l)
          == Perm.apply_perm_r (mask_or_append_f m0 m1) (filter_mask (mask_comp_or m0 m1) l))
+
+let mask_or_pequiv_append
+      (#a : Type) (#len : nat) (m0 : vec len bool) (m1 : vec (mask_len (mask_not m0)) bool) (l : vec len a)
+  : Perm.pequiv (filter_mask (mask_comp_or m0 m1) l)
+                (filter_mask m0 l @ filter_mask m1 (filter_mask (mask_not m0) l))
+  =
+    (**) filter_mask_or_append m0 m1 l;
+    Perm.perm_cast _ (mask_or_append_f m0 m1)
 
 
 [@@__mask__]
@@ -230,6 +266,15 @@ val filter_mask_dl_index (#len : nat) (mask : vec len bool) (ts : vec len Type) 
           (ensures  Dl.index (filter_mask_dl mask ts xs) i === Dl.index xs (mask_pull mask i))
           [SMTPat (Dl.index (filter_mask_dl mask ts xs) i)]
 
+val filter_mask_dl_append
+      (#n0 #n1 : nat) (m0 : vec n0 bool) (m1 : vec n1 bool)
+      (ts0 : vec n0 Type) (ts1 : vec n1 Type)
+      (xs0 : Dl.dlist ts0) (xs1 : Dl.dlist ts1)
+  : Lemma (filter_mask_append m0 m1 ts0 ts1;
+        filter_mask_dl #(n0 + n1) (m0 @ m1) (ts0 @ ts1) (Dl.append xs0 xs1)
+     == Dl.append (filter_mask_dl m0 ts0 xs0) (filter_mask_dl m1 ts1 xs1))
+
+
 [@@__mask__]
 noextract
 let filter_mask_fl (#len : nat) (mask : vec len bool) (ts : vec len Type) (xs : Fl.flist ts)
@@ -241,3 +286,21 @@ let filter_mask_f_dl_f (#len : nat) (mask : vec len bool) (ts : vec len Type) (x
   = Fl.flist_extensionality
          (filter_mask_fl mask ts xs) (Fl.flist_of_d (filter_mask_dl mask ts (Fl.dlist_of_f xs)))
          (fun i -> ())
+
+val filter_mask_fl_perm_append (#n : nat) (m : vec n bool) (ts : vec n Type) (xs : Fl.flist ts)
+  : Lemma (Fl.apply_pequiv (mask_pequiv_append m ts) xs
+        == Fl.append (filter_mask_fl m ts xs) (filter_mask_fl (mask_not m) ts xs))
+
+val filter_mask_fl_and
+      (#len : nat) (m0 : vec len bool) (m1 : vec (mask_len m0) bool) (ts : vec len Type)
+      (xs : Fl.flist ts)
+  : Lemma (filter_mask_and m0 m1 ts;
+        filter_mask_fl (mask_comp_and m0 m1) ts xs == filter_mask_fl m1 _ (filter_mask_fl m0 ts xs))
+
+val filter_mask_fl_append
+      (#n0 #n1 : nat) (m0 : vec n0 bool) (m1 : vec n1 bool)
+      (ts0 : vec n0 Type) (ts1 : vec n1 Type)
+      (xs0 : Fl.flist ts0) (xs1 : Fl.flist ts1)
+  : Lemma (filter_mask_append m0 m1 ts0 ts1;
+        filter_mask_fl #(n0 + n1) (m0 @ m1) (ts0 @ ts1) (Fl.append xs0 xs1)
+     == Fl.append (filter_mask_fl m0 ts0 xs0) (filter_mask_fl m1 ts1 xs1))
