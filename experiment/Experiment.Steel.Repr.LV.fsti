@@ -170,6 +170,15 @@ let sub_prd
   : vprop_list
   = L.(prd @ filter_mask csm' (filter_mask (mask_not csm) env))
 
+let sub_prd_sl
+      (#env : vprop_list) (sl0 : sl_f env)
+      (csm  : csm_t env)  (#prd : vprop_list) (sl1 : sl_f prd)
+      (csm' : csm_t (filter_mask (mask_not csm) env))
+      (#prd' : vprop_list) (prd_f : Perm.pequiv_list (sub_prd env csm prd csm') prd')
+  : sl_f prd'
+  = extract_vars (Perm.perm_f_of_list prd_f)
+                 (append_vars sl1 (filter_sl csm' (filter_sl (mask_not csm) sl0)))
+
 
 noeq
 type lin_cond : 
@@ -279,7 +288,8 @@ let rec tree_req
   | LCbind env #a #b #f #g f_csm f_prd cf g_csm g_prd cg ->
       tree_req cf sl0 /\
       (forall (x : a) (sl_itm : sl_f (f_prd x)) .
-        tree_ens cf sl0 x sl_itm ==> tree_req (cg x) (res_sel sl0 f_csm sl_itm))
+        tree_ens cf sl0 x sl_itm ==>
+        tree_req (cg x) (res_sel sl0 f_csm sl_itm))
   | LCsub  env #a #f csm prd cf csm' prd' prd_f ->
       tree_req cf sl0
 
@@ -292,16 +302,17 @@ and tree_ens
   | LCspec env #a #pre #post #req #ens csm_f ->
       ens (eij_sl (L.index csm_f) sl0) res sl1
   | LCret  env #a #x #sl_hint prd csm_f ->
-      res == x /\ sl1 == eij_sl (L.index csm_f) sl0
+      res == x /\
+      sl1 == eij_sl (L.index csm_f) sl0
   | LCbind env #a #b #f #g f_csm f_prd cf g_csm g_prd cg ->
       (exists (x : a) (sl_itm : sl_f (f_prd x)) .
-        tree_ens cf sl0 x sl_itm /\ tree_ens (cg x) (res_sel sl0 f_csm sl_itm) res sl1)
+        tree_ens cf sl0 x sl_itm /\
+        tree_ens (cg x) (res_sel sl0 f_csm sl_itm) res sl1)
   | LCsub  env #a #f csm prd cf csm' prd' prd_f ->
       (exists (sl1' : sl_f (prd res)) . (
         (**) Ll.pat_append ();
         tree_ens cf sl0 res sl1' /\
-        sl1 == extract_vars (Perm.perm_f_of_list (prd_f res))
-                            (append_vars sl1' (filter_sl csm' (filter_sl (mask_not csm) sl0)))))
+        sl1 == sub_prd_sl sl0 csm sl1' csm' (prd_f res)))
 
 
 (***** Equivalence *)

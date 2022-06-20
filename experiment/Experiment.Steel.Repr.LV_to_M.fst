@@ -242,7 +242,7 @@ let norm_sound_LV2M () : Tac unit =
                     `%Veq.vequiv_of_perm; `%Veq.vequiv_refl;
                     `%Veq.Mkvequiv?.veq_req; `%Veq.Mkvequiv?.veq_ens; `%Veq.Mkvequiv?.veq_eq; `%Veq.veq_ens1;
                     `%tree_req; `%tree_ens;
-                    `%res_env_app; `%res_env_f; `%res_env];
+                    `%res_env_app; `%res_env_f; `%res_env; `%sub_prd_sl];
         delta_attr [`%Learn.Tactics.Util.__tac_helper__];
         iota; zeta]
 
