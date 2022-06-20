@@ -19,16 +19,18 @@ let steel (a : Type) (pre : SE.pre_t) (post : SE.post_t a)
   : Type
   = SH.unit_steel a pre post req ens
 
+let mk_steel (fs : list flag) : Tac unit
+  = build_to_steel (make_flags_record fs)
+
+/// We use the workaround of [Issue#2485](https://github.com/FStarLang/FStar/issues/2485) to call [mk_steel]
+/// without retyping the generated term.
 unfold
 let to_steel
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
       (t : M.repr SH.KSteel a)
-      (g : __to_steel_goal a pre post req ens t)
+      (#[exact (`(_ by (mk_steel [])))] g : __to_steel_goal a pre post req ens t) ()
   : steel a pre post req ens
   = to_steel #a #pre #post #req #ens t g
-
-let mk_steel (fs : list flag) : Tac unit
-  = build_to_steel (make_flags_record fs)
 
 
 unfold

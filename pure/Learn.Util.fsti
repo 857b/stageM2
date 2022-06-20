@@ -35,6 +35,11 @@ let assert_by_tac (#p : Type) (t : unit -> T.Tac unit)
   : Pure (squash p) (requires T.with_tactic t (squash p)) (ensures fun () -> True)
   = ()
 
+/// [by_refl ()] is similar to [_ by (trefl ())] but it unfolds the local definitions
+let by_refl (#a : Type) (#x #y : a) ()
+  : Pure (squash (x == y)) (requires T.with_tactic T.trefl (squash (x == y))) (ensures fun () -> True)
+  = ()
+
 
 /// equivalent to [coerce_eq]
 inline_for_extraction unfold
