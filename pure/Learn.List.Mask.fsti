@@ -29,6 +29,11 @@ val mask_not_len (#n : nat) ($mask : vec n bool)
   : Lemma (mask_len (mask_not mask) = n - mask_len mask)
           [SMTPat (mask_len (mask_not mask))]
 
+let mask_le (#n : nat) (m0 m1 : vec n bool)
+  : prop
+  = forall (i : Fin.fin n) . {:pattern (index m0 i)} index m0 i ==> index m1 i
+
+
 [@@__mask__]
 let rec filter_mask (#a : Type) (#len : nat) (mask : vec len bool) (l : vec len a)
   : Tot (vec (mask_len mask) a) (decreases l)
@@ -71,6 +76,14 @@ let rec mask_comp_or (#len : nat) (m0 : vec len bool) (m1 : vec (mask_len (mask_
   | true  :: m0 -> true :: mask_comp_or #(len-1) m0 m1
   | false :: m0 -> let hd1 :: m1 = m1 in
                  hd1 :: mask_comp_or #(len-1) m0 m1
+
+[@@__mask__]
+let mask_diff (#n : nat) (m0 m1 : vec n bool)
+  = filter_mask (mask_not m0) m1
+
+[@@ __mask__]
+let mask_split_l (n0 n1 : nat) : vec (n0 + n1) bool
+  = repeat n0 true @ repeat n1 false
 
 
 (* TODO? optimize *)
@@ -166,6 +179,17 @@ val mask_not_comp_or
 val filter_mask_and
       (#a : Type) (#len : nat) (m0 : vec len bool) (m1 : vec (mask_len m0) bool) (l : vec len a)
   : Lemma (filter_mask (mask_comp_and m0 m1) l == filter_mask m1 (filter_mask m0 l))
+
+val filter_mask_diff_map2 (#a : Type) (#n : nat) (m0 m1 : vec n bool) (l : vec n a)
+  : Lemma (filter_mask (mask_diff m0 m1) (filter_mask (mask_not m0) l)
+        == filter_mask (map2 (fun x y -> not x && y) m0 m1) l)
+
+val filter_mask_diff_comm (#a : Type) (#n : nat) (m0 m1 : vec n bool) (l : vec n a)
+  : Lemma (filter_mask (mask_diff m0 m1) (filter_mask (mask_not m0) l)
+        == filter_mask (filter_mask m1 (mask_not m0)) (filter_mask m1 l))
+
+val filter_mask_split_l (#a : Type) (n0 n1 : nat) (l0 : vec n0 a) (l1 : vec n1 a)
+  : Lemma (filter_mask (mask_split_l n0 n1) (l0 @ l1) == l0)
 
 
 #push-options "--ifuel 1 --fuel 1"

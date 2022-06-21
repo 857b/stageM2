@@ -11,14 +11,18 @@ open Learn.List.Mask
 open Experiment.Steel.VPropList
 
 
+irreducible let __lin_cond__ : unit = ()
+
+
 type csm_t (env : vprop_list) = mask_t env
 type prd_t (a : Type) = a -> vprop_list
 
 type req_t (env : vprop_list) = sl_f env -> Type0
 type ens_t (env : vprop_list) (a : Type) (prd : prd_t a) = sl_f env -> (x : a) -> sl_f (prd x) -> Type0
 
+[@@ __lin_cond__]
 let res_env (env : vprop_list) (csm : csm_t env) (prd : vprop_list) : vprop_list =
-  L.(prd @ (filter_mask (mask_not csm) env))
+  L.(prd @ filter_mask (mask_not csm) env)
 
 let filter_sl
       (#vs : vprop_list) (mask : mask_t vs) (xs : sl_f vs)
@@ -48,10 +52,12 @@ type eq_injection (#a : Type) (src trg : list a) =
 type eq_injection_l (#a : Type) (src trg : list a) =
   l : Ll.vec (L.length src) (Fin.fin (L.length trg)) { is_eq_injection src trg (L.index l) }
 
+[@@ __lin_cond__]
 let eij_trg_mask_f (#a : Type) (#src #trg : list a) (eij : eq_injection_l src trg) (j : Fin.fin (L.length trg))
   : bool
   = L.mem j eij
 
+[@@ __lin_cond__]
 let eij_trg_mask (#a : Type) (#src #trg : list a) (eij : eq_injection_l src trg)
   : Ll.vec (L.length trg) bool
   = Ll.initi 0 (L.length trg) (eij_trg_mask_f eij)
@@ -97,6 +103,7 @@ val extract_eij_equiv
 
 (*** [lin_cond] *)
 
+[@@ __lin_cond__]
 let bind_g_csm'
       (env : vprop_list)
       (f_csm : csm_t env) (f_prd : vprop_list)
@@ -104,6 +111,7 @@ let bind_g_csm'
   : csm_t (res_env env f_csm f_prd)
   = L.(Ll.repeat (length f_prd) true @ g_csm)
 
+[@@ __lin_cond__]
 let bind_csm
       (env : vprop_list)
       (f_csm : csm_t env)
@@ -163,6 +171,7 @@ val filter_sl_bind_g_csm'
 
 (**) private val __end_bind_lem : unit
 
+[@@ __lin_cond__]
 let sub_prd
       (env : vprop_list)
       (csm : csm_t env) (prd : vprop_list)
@@ -272,6 +281,14 @@ let match_lin_cond
   | LCsub  env #a #f csm prd cf csm' prd' prd_f          -> c_LCsub  a f csm prd cf csm' prd' prd_f
 
 
+[@@ __lin_cond__]
+let csm_all (env : vprop_list) : csm_t env
+  = Ll.repeat (L.length env) true
+
+type top_lin_cond (#a : Type) (t : M.prog_tree a) (pre : vprop_list) (post : M.post_t a)
+  = lin_cond pre t (csm_all pre) post
+
+
 (*** Semantics *)
 
 [@@ strict_on_arguments [5]] (* strict on [ct] *)
@@ -352,6 +369,7 @@ type lcsubp_tr
 (***** [LCret] *)
 
 #push-options "--ifuel 0 --fuel 0"
+[@@ __lin_cond__]
 let sub_ret_prd_f'
       (#env   : vprop_list)
       (#prd0  : vprop_list) (csm_f0 : eq_injection_l prd0 env)
@@ -381,6 +399,7 @@ val sub_ret_prd_f_eij
       (prd_f1 : vequiv_perm (sub_prd env (eij_trg_mask csm_f0) prd0 csm1) prd1)
   : Lemma (is_eq_injection prd1 env (sub_ret_prd_f' csm_f0 prd_f1))
 
+[@@ __lin_cond__]
 let sub_ret_prd_f
       (#env   : vprop_list)
       (#prd0  : vprop_list) (csm_f0 : eq_injection_l prd0 env)
@@ -399,6 +418,7 @@ val sub_ret_prd_f_eij_trg_eq
       (prd_f1 : vequiv_perm (sub_prd env (eij_trg_mask csm_f0) prd0 csm1) prd1)
   : Lemma (bind_csm env (eij_trg_mask csm_f0) csm1 == eij_trg_mask (sub_ret_prd_f csm_f0 (prd_f1)))
 
+[@@ __lin_cond__]
 let lcsubp_LCret
       (env    : vprop_list) (a : Type u#a) (x : a) (sl_hint : M.post_t a)
       (prd0   : prd_t a) (csm_f0 : eq_injection_l (prd0 x) env)
@@ -414,6 +434,7 @@ let lcsubp_LCret
 
 (***** [LCbind] *)
 
+[@@ __lin_cond__]
 let sub_bind_csm
       (#env  : vprop_list)
       (f_csm : csm_t env)
@@ -423,6 +444,7 @@ let sub_bind_csm
   = mask_comp_or g_csm csm1
 
 #push-options "--ifuel 0 --fuel 0"
+[@@ __lin_cond__]
 let lcsubp_LCbind_prd_f
       (#env   : vprop_list) (#b : Type u#a)
       (f_csm  : csm_t env) (f_prd : vprop_list)
@@ -449,6 +471,7 @@ type lcsubp_LCbind_rc_g
              (bind_g_csm' env f_csm (f_prd x) g_csm) g_prd (cg x)
              csm1 prd1 (lcsubp_LCbind_prd_f f_csm (f_prd x) g_csm g_prd csm1 prd1 prd_f1))
 
+[@@ __lin_cond__]
 let lcsubp_LCbind
       (env : vprop_list)
       (a : Type u#a) (b : Type u#a) (f : M.prog_tree a) (g : a -> M.prog_tree b)
@@ -474,6 +497,7 @@ let lcsubp_LCbind
 
 (***** [LCsub] *)
 
+[@@ __lin_cond__]
 let comp_sub_csm
       (#env : vprop_list)
       (csm0 : csm_t env)
@@ -492,6 +516,7 @@ let bind_bind_csm
   = mask_comp_or_assoc csm0 csm1 csm2
 
 #push-options "--ifuel 0 --fuel 0"
+[@@ __lin_cond__]
 let comp_sub_prd_f
       (#env : vprop_list)
       (#csm0 : csm_t env) (#prd0 : vprop_list)
@@ -534,6 +559,7 @@ let comp_sub_prd_f
     Perm.perm_f_to_list f4
 #pop-options
 
+[@@ __lin_cond__]
 let lcsubp_LCsub
       (env : vprop_list) (a : Type u#a) (f : M.prog_tree a)
       (csm0 : csm_t env) (prd0 : prd_t a)

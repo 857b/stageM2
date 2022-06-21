@@ -4,7 +4,7 @@ module Perm = Learn.Permutation
 
 open FStar.Tactics
 open FStar.List.Pure
-
+open Learn.List
 
 #push-options "--ifuel 1 --fuel 1"
 
@@ -153,6 +153,27 @@ let rec filter_mask_and #a #len m0 m1 l
   | [], [], [] -> ()
   | true :: m0, _ :: m1, _ :: l | false :: m0, m1, _ :: l -> filter_mask_and #a #(len-1) m0 m1 l
 
+let rec filter_mask_diff_map2 (#a : Type) (#n : nat) (m0 m1 : vec n bool) (l : vec n a)
+  : Lemma (ensures   filter_mask (mask_diff m0 m1) (filter_mask (mask_not m0) l)
+                  == filter_mask (map2 (fun x y -> not x && y) m0 m1) l)
+          (decreases n)
+  = match m0, m1, l with
+  | [], [], [] -> ()
+  | _ :: m0, _ :: m1, x :: xs -> filter_mask_diff_map2 #a #(n-1) m0 m1 xs
+
+let rec filter_mask_diff_comm (#a : Type) (#n : nat) (m0 m1 : vec n bool) (l : vec n a)
+  : Lemma (ensures   filter_mask (mask_diff m0 m1) (filter_mask (mask_not m0) l)
+                  == filter_mask (filter_mask m1 (mask_not m0)) (filter_mask m1 l))
+          (decreases n)
+  = match m0, m1, l with
+  | [], [], [] -> ()
+  | _ :: m0, _ :: m1, x :: xs -> filter_mask_diff_comm #a #(n-1) m0 m1 xs
+
+let filter_mask_split_l (#a : Type) (n0 n1 : nat) (l0 : vec n0 a) (l1 : vec n1 a)
+  =
+    filter_mask_append (repeat n0 true) (repeat n1 false) l0 l1;
+    filter_mask_true   (repeat n0  true) l0 (fun _ -> ());
+    filter_mask_false  (repeat n1 false) l1 (fun _ -> ())
 
 #push-options "--z3rlimit 20"
 

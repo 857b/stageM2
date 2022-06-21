@@ -103,6 +103,22 @@ let memP_map_elim (#a #b: Type) (f: a -> Tot b) (y: b) (l: list a)
   : Lemma (requires memP y (map f l)) (ensures (exists (x : a) . memP x l /\ f x == y))
   = FStar.List.memP_map_elim f y l
 
+(* [map2] *)
+
+let rec map2_length (#a1 #a2 #b: Type) (f: a1 -> a2 -> b) (l1:list a1) (l2:list a2)
+  : Lemma (requires length l1 == length l2) (ensures length (map2 f l1 l2) == length l1)
+          (decreases l1)
+          [SMTPat (length (map2 f l1 l2))]
+  = match l1, l2 with
+  | [], [] -> ()
+  | x :: xs, y :: ys -> map2_length f xs ys
+
+let rec map2_index (#a1 #a2 #b: Type) (f: a1 -> a2 -> b) (l1:list a1) (l2:list a2) (i : Fin.fin (length l1))
+  : Lemma (requires length l1 == length l2)
+          (ensures index (map2 f l1 l2) i == f (index l1 i) (index l2 i))
+          (decreases i)
+          [SMTPat (index (map2 f l1 l2) i)]
+  = if i > 0 then map2_index f (tl l1) (tl l2) (i-1)
 
 (* [append] *)
 

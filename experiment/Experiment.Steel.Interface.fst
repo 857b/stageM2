@@ -71,6 +71,7 @@ type failure_goal_shape =
   | GShape_truth_refl_list
   | GShape_vprop
   | GShape_tree_cond
+  | GShape_lin_cond
 
 noeq
 type failure_enum =
@@ -81,6 +82,9 @@ type failure_enum =
   | Fail_shape_unification : nat -> nat -> failure_enum
   | Fail_to_repr_t
   | Fail_SMT_fallback_inj
+  | Fail_eq_injection
+  | Fail_pequiv_len
+  | Fail_dependency : (what : string) -> (on : binder) -> failure_enum
 
 noeq
 type info =
@@ -114,6 +118,11 @@ let info_to_string (fr : flags_record) (i : info) : Tac string =
       end
   | Info_location s -> s
 
+let failure_enum_to_string (f : failure_enum) : Tac string =
+  match f with
+  | Fail_dependency what on -> "Fail_dependency: "^what^" depends on "^term_to_string (binder_to_term on)
+  | _ -> let f = f in term_to_string (quote f)
+
 private
 let rec concat_sep (sep : string) (l : list string)
   : Tot string (decreases l)
@@ -123,6 +132,5 @@ let rec concat_sep (sep : string) (l : list string)
   | x :: y :: tl -> x^sep^concat_sep sep (y :: tl)
 
 let failure_to_string (fr : flags_record) (f : failure_t) : Tac string =
-  let enum = f.fail_enum in
-  let msg = term_to_string (quote enum) in
-  concat_sep "\n" (msg :: map (info_to_string fr) f.fail_info)
+  concat_sep "\n" (failure_enum_to_string f.fail_enum
+                  :: map (info_to_string fr) f.fail_info)
