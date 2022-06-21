@@ -135,6 +135,7 @@ val bind_g_csm'_res_env_f
 
 #push-options "--ifuel 1 --fuel 2"
 [@@ strict_on_arguments [5]] (* strict on [lc] *)
+inline_for_extraction
 let rec repr_M_of_LV
       (#env : vprop_list) (#a : Type u#a) (#t : M.prog_tree a)
       (#csm : csm_t env) (#prd : prd_t a)
@@ -161,6 +162,19 @@ let rec repr_M_of_LV
       M.TCspec #a #pre #post #req #ens (repr_M_of_LV__tcs_sub env a pre post csm_f csm1 prd1 prd_f1)
 #pop-options
 
+#push-options "--ifuel 0 --fuel 0"
+inline_for_extraction
+let repr_M_of_LV_top
+      (#a : Type u#a) (#t : M.prog_tree a) (#pre : M.pre_t) (#post : M.post_t a)
+      (lc : top_lin_cond t pre post)
+  : Pure (M.tree_cond t pre (U.eta post))
+         (requires lcsub_at_leaves lc) (ensures fun _ -> True)
+  =
+    U.funext_eta (res_env_f pre (csm_all pre) post) (U.eta post)
+                 (U.by_refl ()) (U.by_refl ())
+      (fun x -> filter_mask_false (mask_not (csm_all pre)) pre (fun i -> ()));
+    repr_M_of_LV lc
+#pop-options
 
 (*** Soundness *)
 
@@ -186,7 +200,7 @@ let sound_M_of_LV
   =
     forall (sl0 : sl_f env) .
       (M.tree_req t mc sl0 <==> tree_req lc sl0) /\
-   (forall (res : a) (sl1 : sl_f (prd res)) (sl_rem : sl_f (filter_mask (mask_not csm) env)).
+   (forall (res : a) (sl1 : sl_f (prd res)) (sl_rem : sl_f (filter_mask (mask_not csm) env)) .
       (M.tree_ens t mc sl0 res (res_env_app sl1 sl_rem) <==>
       (tree_ens lc sl0 res sl1 /\
        sl_rem == filter_sl (mask_not csm) sl0)))
@@ -196,3 +210,12 @@ val repr_M_of_LV_sound
       (#csm : csm_t env) (#prd : prd_t a)
       (lc : lin_cond env t csm prd {lcsub_at_leaves lc})
   : Lemma (sound_M_of_LV lc (repr_M_of_LV lc))
+
+val repr_M_of_LV_top_sound
+      (#a : Type u#a) (#t : M.prog_tree a) (#pre : M.pre_t) (#post : M.post_t a)
+      (lc : top_lin_cond t pre post {lcsub_at_leaves lc})
+  : Lemma (let mc = repr_M_of_LV_top lc in
+      forall (sl0 : sl_f pre) . (M.tree_req t mc sl0 <==> tree_req lc sl0)  /\
+     (forall (x : a) (sl1 : sl_f (post x)) .
+        M.tree_ens t mc sl0 x sl1 <==> tree_ens lc sl0 x sl1)
+  )

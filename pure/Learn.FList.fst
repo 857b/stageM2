@@ -111,6 +111,12 @@ let append_nil_l
           [SMTPat (append nil xs)]
   = flist_extensionality (append nil xs) xs (fun i -> ())
 
+let append_nil_r
+      (#ts : ty_list) (xs : flist ts)
+  : Lemma (append xs nil == xs)
+          [SMTPat (append xs nil)]
+  = flist_extensionality (append xs nil) xs (fun i -> ())
+
 let append_assoc (#t0 #t1 #t2 : ty_list) (x0 : flist t0) (x1 : flist t1) (x2 : flist t2)
   : Lemma (append x0 (append x1 x2) === append (append x0 x1) x2)
   =

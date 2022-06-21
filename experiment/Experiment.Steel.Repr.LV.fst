@@ -282,8 +282,8 @@ let sub_ret_prd_f_eij_trg_eq
 
 
 let norm_lcsbl (norm_atlv : bool) : Tac unit =
-      norm [delta_only [`%lc_sub_push; `%lc_sub_push_aux;
-                        `%lcsubp_LCret; `%lcsubp_LCbind; `%lcsubp_LCsub]; iota; zeta];
+      norm [delta_only [`%lc_sub_push; `%lc_sub_push_aux]; zeta]; norm [iota];
+      norm [delta_only [`%lcsubp_LCret; `%lcsubp_LCbind; `%lcsubp_LCsub]; iota; zeta];
       if norm_atlv then (norm [delta_only [`%lcsub_at_leaves]; zeta]; norm [iota])
 
 let rew_lcsub_at_leaves_csm

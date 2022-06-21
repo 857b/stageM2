@@ -14,6 +14,7 @@ module F      = Experiment.Steel.Notations
 module M      = Experiment.Steel.Repr.M
 module MC     = Experiment.Steel.Combinators
 module ST     = Experiment.Steel.Repr.ST
+module LV     = Experiment.Steel.Repr.LV
 module SF     = Experiment.Steel.Repr.SF
 module SH     = Experiment.Steel.Steel
 module Fun    = Experiment.Repr.Fun
@@ -22,7 +23,6 @@ module Veq    = Experiment.Steel.VEquiv
 module M2ST   = Experiment.Steel.Repr.M_to_ST
 module ST2SF  = Experiment.Steel.Repr.ST_to_SF.Spec
 module SF2Fun = Experiment.Steel.Repr.SF_to_Fun
-
 
 open Steel.Effect
 open Steel.Effect.Atomic
@@ -424,7 +424,7 @@ let test3_steel (r0 r1 : ref U32.t)
       (requires fun sl0 -> U32.v (sl0 0) < 42)
       (ensures fun sl0 () sl1 -> U32.v (sl1 1) == U32.v (sl0 0) + 1)
       (test3_M r0 r1)
-  = _ by (solve_by_wp F.(make_flags_record [Timer]))
+  = _ by (solve_by_wp F.default_flags (timer_start "" true))
 
 (*let _ = fun r0 r1 ->
   assert (U.print_util (test3_steel r0 r1))
@@ -683,3 +683,24 @@ let test_smt_fallback (r0 r1 : ref U32.t)
   = F.(to_steel (
     return ()
     ) #(_ by (mk_steel [Dump Stage_WP])) ())
+
+////////// test LV //////////
+
+//[@@ handle_smt_goals ]
+//let tac () = T.dump "SMT query"
+
+inline_for_extraction
+let test3_LV (r0 r1 : ref U32.t)
+  : F.steel unit
+      (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
+      (requires fun h0 -> U32.v (sel r0 h0) < 42)
+      (ensures fun h0 () h1 -> U32.v (sel r1 h1) == U32.v (sel r0 h0) + 1)
+  = F.(to_steel (test3_M r0 r1) #(_ by (mk_steel [O_LV; Timer; Extract])) ())
+// time specs     : 104ms (35%)
+// time lin_cond  : 44ms  (15%)
+// time sub_push  : 29ms  ( 9%)
+// time LV2SF     : 60ms  (20%)
+// time SF2Fun    : 4ms   ( 1%)
+// time Fun_wp    : 19ms  ( 6%)
+// time extract   : 32ms  (10%)
+// total time : 292ms

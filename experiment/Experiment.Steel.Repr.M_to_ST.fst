@@ -13,7 +13,7 @@ open FStar.Calc
 (***** Spec *)
 
 let norm_M2ST () : Tac unit
-  = norm [delta_only [`%repr_ST_of_M; `%repr_ST_of_M_Spec; `%post_ST_of_M; `%bind;
+  = norm [delta_only [`%repr_ST_of_M; `%repr_ST_of_M_Spec; `%post_sl_t; `%bind;
                         `%tree_req; `%tree_ens; `%const_post; `%frame_post;
                         `%M.tree_req; `%M.tree_ens; `%M.spec_req; `%M.spec_ens;
                         `%Mksequiv?.seq_req; `%Mksequiv?.seq_ens; `%Mksequiv?.seq_eq;

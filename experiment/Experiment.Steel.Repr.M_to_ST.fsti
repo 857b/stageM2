@@ -11,9 +11,6 @@ open Experiment.Steel.Repr.ST
 
 (*** Repr.M --> Repr.ST *)
 
-let post_ST_of_M (#a : Type) (post : M.post_t a) : post_t a
-  = fun (x : a) -> vprop_list_sels_t (post x)
-
 let sequiv_of_vequiv (#pre #post : vprop_list) (e : Veq.vequiv pre post)
   : sequiv (vprop_list_sels_t pre) (vprop_list_sels_t post)
   = {
@@ -26,24 +23,24 @@ let sequiv_of_vequiv (#pre #post : vprop_list) (e : Veq.vequiv pre post)
 let repr_ST_of_M_Spec
       (a : Type) (pre : M.pre_t) (post : M.post_t a) (req : M.req_t pre) (ens : M.ens_t pre a post)
       (tcs : tree_cond_Spec a pre post)
-  : prog_tree a (vprop_list_sels_t tcs.tcs_pre) (post_ST_of_M tcs.tcs_post)
+  : prog_tree a (vprop_list_sels_t tcs.tcs_pre) (post_sl_t tcs.tcs_post)
   =
     Tequiv (vprop_list_sels_t tcs.tcs_pre)
            (vprop_list_sels_t L.(pre @ tcs.tcs_frame))
            (sequiv_of_vequiv tcs.tcs_pre_eq);;
     (**) L.map_append Mkvprop'?.t pre tcs.tcs_frame;
-    x <-- Tframe a (vprop_list_sels_t pre) (post_ST_of_M post) (vprop_list_sels_t tcs.tcs_frame)
-        (Tspec a (vprop_list_sels_t pre) (post_ST_of_M post) req ens);
+    x <-- Tframe a (vprop_list_sels_t pre) (post_sl_t post) (vprop_list_sels_t tcs.tcs_frame)
+        (Tspec a (vprop_list_sels_t pre) (post_sl_t post) req ens);
     (**) L.map_append Mkvprop'?.t (post x) tcs.tcs_frame;
     Tequiv (vprop_list_sels_t L.(post x @ tcs.tcs_frame))
            (vprop_list_sels_t (tcs.tcs_post x))
            (sequiv_of_vequiv (tcs.tcs_post_eq x));;
-    Tret _ x (post_ST_of_M tcs.tcs_post)
+    Tret _ x (post_sl_t tcs.tcs_post)
 
 [@@ strict_on_arguments [4]] (* strict on c *)
 let rec repr_ST_of_M (#a : Type) (t : M.prog_tree u#a a)
                      (#pre0 : M.pre_t) (#post0 : M.post_t a) (c : M.tree_cond t pre0 post0)
-  : Tot (prog_tree a (vprop_list_sels_t pre0) (post_ST_of_M post0))
+  : Tot (prog_tree a (vprop_list_sels_t pre0) (post_sl_t post0))
         (decreases t)
   = match c with
   | TCspec #a #pre #post #req #ens  tcs ->
@@ -52,7 +49,7 @@ let rec repr_ST_of_M (#a : Type) (t : M.prog_tree u#a a)
              repr_ST_of_M_Spec a tr.r_pre tr.r_post tr.r_req tr.r_ens tcs
   | TCret #a #x #_  pre post  e ->
              Tequiv (vprop_list_sels_t pre) (vprop_list_sels_t (post x)) (sequiv_of_vequiv e);;
-             Tret _ x (post_ST_of_M post)
+             Tret _ x (post_sl_t post)
   | TCbind #a #b #f #g  pre itm post  cf cg ->
              x <-- repr_ST_of_M f cf;
              repr_ST_of_M (g x) (cg x)

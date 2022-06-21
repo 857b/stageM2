@@ -429,3 +429,28 @@ let rec repr_M_of_LV_sound
       assert (lc == LCsub env csm0' prd0' (LCspec env #a #pre #post #req #ens csm_f) csm1' prd1 prd_f1');
       sound_repr_M_of_LV__LCsub_LCspec env a pre post req ens csm_f csm1' prd1 prd_f1'
 #pop-options
+
+#push-options "--ifuel 0 --fuel 1"
+let repr_M_of_LV_top_sound
+      (#a : Type u#a) (#t : M.prog_tree a) (#pre : M.pre_t) (#post : M.post_t a)
+      (lc : top_lin_cond t pre post {lcsub_at_leaves lc})
+  =
+    let mc  = repr_M_of_LV_top lc in
+    let rem = filter_mask (mask_not (csm_all pre)) pre in
+    filter_mask_false (mask_not (csm_all pre)) pre (fun i -> ());
+    assert (sl_f rem == Fl.flist []);
+    repr_M_of_LV_sound lc;
+    introduce forall (sl0 : sl_f pre) (x : a) (sl1 : sl_f (post x)) .
+        M.tree_ens t mc sl0 x sl1 <==> tree_ens lc sl0 x sl1
+      with
+        let sl_rem = filter_sl (mask_not (csm_all pre)) sl0 in
+        calc (<==>) {
+          M.tree_ens t mc sl0 x sl1;
+        <==> { }
+          M.tree_ens t mc sl0 x (res_env_app #pre #(csm_all pre) sl1 Fl.nil);
+        <==> { }
+          tree_ens lc sl0 x sl1 /\ Fl.nil == sl_rem;
+        <==> { Fl.nil_uniq sl_rem }
+          tree_ens lc sl0 x sl1;
+        }
+#pop-options

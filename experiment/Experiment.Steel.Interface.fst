@@ -8,6 +8,7 @@ open FStar.Tactics
 type stage =
   | Stage_M
   | Stage_ST
+  | Stage_LV : (sub_push : bool) -> stage
   | Stage_SF
   | Stage_Fun
   | Stage_WP
@@ -22,6 +23,7 @@ type flag =
   | O_Flatten
   | O_ST2SF
   | O_Elim_Ret
+  | O_LV
 
 [@@ Learn.Tactics.Util.__tac_helper__]
 type prog_M_to_Fun_opt = {
@@ -37,6 +39,7 @@ type flags_record = {
   f_flmsg : bool;
   f_extr  : bool;
   o_M2Fun : prog_M_to_Fun_opt;
+  o_LV    : bool;
 }
 
 let default_flags : flags_record = {
@@ -48,7 +51,8 @@ let default_flags : flags_record = {
     o_flatten  = false;
     o_ST2SF    = false;
     o_elim_ret = false
-  }
+  };
+  o_LV    = false;
 }
 
 let rec record_flag (pos : bool) (r : flags_record) (f : flag)
@@ -62,6 +66,7 @@ let rec record_flag (pos : bool) (r : flags_record) (f : flag)
   | O_Flatten  -> {r with o_M2Fun = {r.o_M2Fun with o_flatten  = pos}}
   | O_ST2SF    -> {r with o_M2Fun = {r.o_M2Fun with o_flatten  = pos; o_ST2SF = pos}}
   | O_Elim_Ret -> {r with o_M2Fun = {r.o_M2Fun with o_elim_ret = pos}}
+  | O_LV       -> {r with o_LV    = pos}
 
 let make_flags_record : list flag -> flags_record =
   L.fold_left (record_flag true) default_flags

@@ -109,7 +109,8 @@ let test_build_pequiv_list
 // TODO? propagate a partial [prd]
 
 let __normal_lc : list norm_step = [
-  delta_only [`%L.map; `%L.length; `%Ll.initi; `%L.mem; `%L.op_At; `%L.append; `%L.splitAt;
+  delta_only [`%L.map; `%L.length; `%L.mem; `%L.op_At; `%L.append; `%L.splitAt; `%L.count;
+              `%Ll.initi; `%Ll.repeat;
               `%Mktuple2?._1; `%Mktuple2?._2];
   delta_attr [`%__cond_solver__; `%__lin_cond__; `%__mask__];
   iota; zeta; primops
@@ -295,7 +296,7 @@ and build_lin_cond fr : Tac unit
 #push-options "--ifuel 0 --fuel 0"
 [@@ __cond_solver__]
 let __build_top_lin_cond
-      (#a : Type) (t : M.prog_tree a) (pre : vprop_list) (post : M.post_t a)
+      (#a : Type) (t : M.prog_tree a) (pre : M.pre_t) (post : M.post_t a)
       (csm0 : csm_t pre) (prd0 : prd_t a)
       (lc : lin_cond pre t csm0 prd0)
       (veq : (x : a) -> Perm.pequiv_list L.(prd0 x @ filter_mask (mask_not csm0) pre) (post x))

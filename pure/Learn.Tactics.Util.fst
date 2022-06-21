@@ -10,24 +10,30 @@ irreducible let __tac_helper__ : unit = ()
 
 
 type timer = {
+  init_ms     : int;
   start_ms    : int;
   timer_name  : string;
   timer_print : bool;
 }
 
 let timer_start (name : string) (timer_print) : Tac timer =
-  { start_ms = curms (); timer_name = name; timer_print }
+  let init_ms = curms () in
+  { init_ms; start_ms = init_ms; timer_name = name; timer_print }
 
 let timer_stop_msg (t : timer) (end_ms : int) : Tac unit =
-  if t.timer_print then
-    print ("time "^t.timer_name^": "^string_of_int (end_ms - t.start_ms)^"ms")
+  print ("time "^t.timer_name^": "^string_of_int (end_ms - t.start_ms)^"ms")
 
 let timer_stop (t : timer) : Tac unit =
-  timer_stop_msg t (curms ())
+  let end_ms = curms () in
+  if t.timer_print
+  then begin
+    timer_stop_msg t end_ms;
+    print ("total time : "^string_of_int (end_ms - t.init_ms)^"ms")
+  end
 
 let timer_enter (t : timer) (name : string) : Tac timer =
   let cms = curms () in
-  timer_stop_msg t cms;
+  if t.timer_print then timer_stop_msg t cms;
   { t with start_ms = cms; timer_name = name }
 
 

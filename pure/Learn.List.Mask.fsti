@@ -193,6 +193,8 @@ val filter_mask_split_l (#a : Type) (n0 n1 : nat) (l0 : vec n0 a) (l1 : vec n1 a
 
 
 #push-options "--ifuel 1 --fuel 1"
+
+[@@__mask__]
 let rec mask_perm_append (#n : nat) (m : vec n bool)
   : Tot (Perm.perm_f n)
   = match m with
@@ -207,6 +209,7 @@ let rec mask_perm_append (#n : nat) (m : vec n bool)
           (perm_f_move_head (mask_len m) (mask_len (mask_not m)))
           (U.cast _ (perm_f_cons (mask_perm_append m))))
 
+[@@__mask__]
 let rec mask_perm_append' (#n : nat) (m : vec n bool)
   : Tot (Perm.perm_f n)
   = match m with
@@ -221,6 +224,7 @@ let rec mask_perm_append' (#n : nat) (m : vec n bool)
           (U.cast _ (perm_f_cons (mask_perm_append' m)))
           (perm_f_move_to_head (mask_len m) (mask_len (mask_not m))))
 
+[@@__mask__]
 let rec mask_or_append_f (#len : nat) (m0 : vec len bool) (m1 : vec (mask_len (mask_not m0)) bool)
   : Tot (Perm.perm_f (mask_len (mask_comp_or m0 m1))) (decreases m0)
   = match m0, m1 with
@@ -268,6 +272,7 @@ val filter_mask_or_append
   : Lemma (filter_mask m0 l @ filter_mask m1 (filter_mask (mask_not m0) l)
          == Perm.apply_perm_r (mask_or_append_f m0 m1) (filter_mask (mask_comp_or m0 m1) l))
 
+[@@__mask__]
 let mask_or_pequiv_append
       (#a : Type) (#len : nat) (m0 : vec len bool) (m1 : vec (mask_len (mask_not m0)) bool) (l : vec len a)
   : Perm.pequiv (filter_mask (mask_comp_or m0 m1) l)

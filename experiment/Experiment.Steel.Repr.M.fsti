@@ -22,6 +22,9 @@ irreducible let __repr_M__ : unit = ()
 type pre_t = vprop_list
 type post_t (a : Type) = a -> vprop_list
 
+let post_sl_t (#a : Type) (pt : post_t a) : a -> Fl.ty_list
+  = fun (x : a) -> vprop_list_sels_t (pt x)
+
 type req_t (pre : pre_t) = sl_f pre -> Type0
 type ens_t (pre : pre_t) (a : Type) (post : post_t a) = sl_f pre -> (x : a) -> sl_f (post x) -> Type0
 

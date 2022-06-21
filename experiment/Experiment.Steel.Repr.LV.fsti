@@ -285,7 +285,7 @@ let match_lin_cond
 let csm_all (env : vprop_list) : csm_t env
   = Ll.repeat (L.length env) true
 
-type top_lin_cond (#a : Type) (t : M.prog_tree a) (pre : vprop_list) (post : M.post_t a)
+type top_lin_cond (#a : Type) (t : M.prog_tree a) (pre : M.pre_t) (post : M.post_t a)
   = lin_cond pre t (csm_all pre) post
 
 
@@ -605,7 +605,7 @@ let rec lin_cond_size
 #push-options "--ifuel 1 --fuel 0 --z3rlimit 20"
 (**) private val ___begin_lc_sub_push : unit
 
-[@@ strict_on_arguments [5]] (* strict on [ct] *)
+//[@@ strict_on_arguments [5]] (* strict on [ct] *)
 let rec lc_sub_push
       (#env : vprop_list) (#a : Type u#a) (#t : M.prog_tree a) (#csm : csm_t env) (#prd : prd_t a)
       (ct : lin_cond env t csm prd)
