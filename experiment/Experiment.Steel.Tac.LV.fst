@@ -219,6 +219,21 @@ let __build_LCbind
 #pop-options
 
 [@@ __cond_solver__]
+let __build_LCbindP
+      (env : vprop_list)
+      (a : Type u#a) (b : Type u#a) (wp : pure_wp a) (g : a -> M.prog_tree b)
+      (csm0 : (x : a) -> csm_t env) (prd0 : (x : a) -> prd_t b)
+      (cg : (x : a) -> lin_cond env (g x) (csm0 x) (prd0 x))
+      (csm : csm_t env) (prd : prd_t b)
+      // Since we use [__defer_sig_unification], it is probably not necessary to do this indirection,
+      // but it allows to point the dependency on x in the failure message
+      (eqs : (x : a) -> squash (csm == csm0 x /\ prd == prd0 x))
+  : lin_cond env (M.TbindP a b wp g) csm prd
+  =
+    LCbindP env #a #b #wp #g csm prd (fun x -> eqs x; cg x)
+
+
+[@@ __cond_solver__]
 let __defer_sig_unification
       (#env : vprop_list) (#a : Type) (#t : M.prog_tree a)
       (#csm0 : csm_t env) (#prd0 : prd_t a)
@@ -262,6 +277,21 @@ let rec build_LCbind fr : Tac unit
       cs_try trefl fr ctx (fun m -> fail (m (Fail_dependency "csm" x) []));
       cs_try trefl fr ctx (fun m -> fail (m (Fail_dependency "prd" x) []))
 
+and build_LCbindP fr : Tac unit
+  =
+    apply (`__build_LCbindP);
+    // cg
+    let x = intro () in
+    build_lin_cond fr;
+    // 
+    // [g_csm <- ...], [g_prd <- ...]
+    let x = intro () in
+    norm_lc ();
+    split ();
+      let ctx () = [Info_location "in the bindP statement"] in
+      cs_try trefl fr ctx (fun m -> fail (m (Fail_dependency "csm" x) []));
+      cs_try trefl fr ctx (fun m -> fail (m (Fail_dependency "prd" x) []))
+
 and build_lin_cond fr : Tac unit
   =
     let build_tac : flags_record -> Tac unit =
@@ -276,7 +306,7 @@ and build_lin_cond fr : Tac unit
       | Tv_FVar fv | Tv_UInst fv _ ->
           let nd = inspect_fv fv in
           match_M_prog_tree fr dummy_ctx nd
-            build_LCspec build_LCret build_LCbind (fun _ -> fail "TODO") (fun _ -> fail "TODO")
+            build_LCspec build_LCret build_LCbind build_LCbindP (fun _ -> fail "TODO")
       | r -> fail_shape ()
     in
     // changes [lin_cond env t ?csm0 ?prd0]

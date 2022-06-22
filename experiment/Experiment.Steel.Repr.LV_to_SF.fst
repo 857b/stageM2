@@ -26,13 +26,15 @@ let rec repr_SF_of_LV_sound
     (fun (*LCret*)  a x sl_hint prd csm_f -> fun sl0 -> ())
     begin fun (*LCbind*) a b f g f_csm f_prd cf g_csm g_prd cg -> fun sl0 ->
       repr_SF_of_LV_sound cf sl0;
-      let ih_g (x : a) (sl1 : sl_f (f_prd x))
-        : Lemma (let sl1' = res_sel sl0 f_csm sl1 in
-                 sound_SF_of_LV (cg x) sl1' (repr_SF_of_LV (cg x) sl1'))
-                [SMTPat (res_sel sl0 f_csm sl1)]
-        = repr_SF_of_LV_sound (cg x) (res_sel sl0 f_csm sl1)
-      in
-      ()
+      introduce forall (x : a) (sl1 : sl_f (f_prd x)) .
+          let sl1' = res_sel sl0 f_csm sl1 in
+          sound_SF_of_LV (cg x) sl1' (repr_SF_of_LV (cg x) sl1')
+        with repr_SF_of_LV_sound (cg x) (res_sel sl0 f_csm sl1)
+    end
+    begin fun (*LCbindP*) a b wp g csm prd cg -> fun sl0 ->
+      FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp;
+      introduce forall (x : a) . sound_SF_of_LV (cg x) sl0 (repr_SF_of_LV (cg x) sl0)
+        with repr_SF_of_LV_sound (cg x) sl0
     end
     begin fun (*LCsub*)  a f csm0 prd0 cf csm1 prd1 prd_f1 -> fun sl0 ->
       repr_SF_of_LV_sound cf sl0

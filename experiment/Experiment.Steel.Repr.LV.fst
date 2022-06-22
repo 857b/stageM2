@@ -283,7 +283,7 @@ let sub_ret_prd_f_eij_trg_eq
 
 let norm_lcsbl (norm_atlv : bool) : Tac unit =
       norm [delta_only [`%lc_sub_push; `%lc_sub_push_aux]; zeta]; norm [iota];
-      norm [delta_only [`%lcsubp_LCret; `%lcsubp_LCbind; `%lcsubp_LCsub]; iota; zeta];
+      norm [delta_only [`%lcsubp_LCret; `%lcsubp_LCbind; `%lcsubp_LCbindP; `%lcsubp_LCsub]; iota; zeta];
       if norm_atlv then (norm [delta_only [`%lcsub_at_leaves]; zeta]; norm [iota])
 
 let rew_lcsub_at_leaves_csm
@@ -310,6 +310,10 @@ let rec lc_sub_push_at_leaves
               split ();
                 apply_lemma (``@lc_sub_push_at_leaves);
                 let _ = forall_intro () in apply_lemma (``@lc_sub_push_at_leaves))
+  | LCbindP env #a #b #wp #g csm0 prd0 cg ->
+      assert (lcsub_at_leaves (lc_sub_push (LCbindP env #a #b #wp #g csm0 prd0 cg)))
+          by (norm_lcsbl true;
+              let _ = forall_intro () in apply_lemma (``@lc_sub_push_at_leaves))
   | LCsub  env csm prd cf csm' prd' prd_f ->
       lc_sub_push_aux_at_leaves _ cf csm' prd' prd_f
 
@@ -353,6 +357,12 @@ and lc_sub_push_aux_at_leaves
                   apply (`rew_lcsub_at_leaves_csm);
                   apply_lemma (`lc_sub_push_aux_at_leaves);
                   apply_lemma (`bind_g_csm'_or))
+    end
+    begin fun (*LCbindP*) a b wp g csm0 prd0 cg -> fun csm1 prd1 prd_f ->
+      assert (goal (LCbindP env #a #b #wp #g csm0 prd0 cg) csm1 prd1 prd_f)
+          by (norm_lcsbl true;
+              let _ = forall_intro () in
+              apply_lemma (`lc_sub_push_aux_at_leaves))
     end
     begin fun (*LCsub*)  a f csm0 prd0 cf csm1 prd1 prd_f1 -> fun csm2 prd2 prd_f2 ->
       assert (goal (LCsub env #a #f csm0 prd0 cf csm1 prd1 prd_f1) csm2 prd2 prd_f2)

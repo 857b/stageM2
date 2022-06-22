@@ -349,6 +349,21 @@ let sound_repr_M_of_LV__LCbind
               l_to_r [`filter_sl_bind_g_csm'; `filter_sl_bind_csm];
               smt ()
               ))
+
+let sound_repr_M_of_LV__LCbindP
+      (env : vprop_list)
+      (a : Type u#a) (b : Type u#a) (wp : pure_wp a) (g : a -> M.prog_tree b)
+      (csm : csm_t env) (prd : prd_t b)
+      (cg : (x : a) -> lin_cond env (g x) csm prd)
+
+      (_ : squash (lcsub_at_leaves (LCbindP env #a #b #wp #g csm prd cg)))
+      (h_g : (x : a) -> squash (sound_repr_M_of_LV (cg x)))
+  : squash (sound_repr_M_of_LV (LCbindP env #a #b #wp #g csm prd cg))
+  =
+    FStar.Classical.forall_intro_squash_gtot h_g;
+    FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp;
+    intro_sound_M_of_LV _ _ (fun sl0 -> ()) (fun sl0 y sl2 sl_rem -> ())
+
 #pop-options
 
 // FIXME: without `--ide_id_info_off` the interactive mode takes a lot of time
@@ -424,6 +439,10 @@ let rec repr_M_of_LV_sound
         (repr_M_of_LV_sound cf)
         (fun (x : a) -> repr_M_of_LV_sound (cg x))
     end
+    begin fun (*LCbindP*) a b wp g csm prd cg -> fun _ ->
+      sound_repr_M_of_LV__LCbindP env a b wp g csm prd cg ()
+        (fun (x : a) -> repr_M_of_LV_sound (cg x))
+    end
     begin fun (*LCsub*)  a0 f0 csm0 prd0 cf csm1 prd1 prd_f1 -> fun _ ->
       match_lin_cond cf
         (fun a f csm0 prd0 cf ->
@@ -436,9 +455,10 @@ let rec repr_M_of_LV_sound
         let M.Mkspec_r pre post req ens = s in
         sound_repr_M_of_LV__LCsub_LCspec env a sp pre post req ens sh csm_f csm1 prd1 prd_f1
       end
-      (fun (*LCret*)  a x sl_hint prd csm_f -> fun _ _ _ _ -> false_elim ())
-      (fun (*LCbind*) a b f g f_csm f_prd cf g_csm g_prd cg -> fun _ _ _ _ -> false_elim ())
-      (fun (*LCsub*)  a0 f0 csm0 prd0 cf csm1 prd1 prd_f1 -> fun _ _ _ _ -> false_elim ())
+      (fun (*LCret*)   a x sl_hint prd csm_f -> fun _ _ _ _ -> false_elim ())
+      (fun (*LCbind*)  a b f g f_csm f_prd cf g_csm g_prd cg -> fun _ _ _ _ -> false_elim ())
+      (fun (*LCbindP*) a b wp g csm prd cg -> fun _ _ _ _ -> false_elim ())
+      (fun (*LCsub*)   a0 f0 csm0 prd0 cf csm1 prd1 prd_f1 -> fun _ _ _ _ -> false_elim ())
       csm1 prd1 prd_f1 ()
     end ()
 #pop-options

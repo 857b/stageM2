@@ -375,6 +375,34 @@ let test_LCbind (v0 v1 v2 v3 : vprop') (vx0 vx1 : int -> vprop')
     build_LCbind test_flags
   )
 
+let test_LCbindP_0 (v0 v1 : vprop') (vx0 : int -> vprop') (wp : pure_wp int)
+  : lin_cond_r [v0; v1]
+        (M.TbindP int int wp (fun x -> specT int [v0] (fun y -> [vx0 y])))
+  = _ by (
+    norm_test (); apply (`Mklin_cond_r);
+    build_LCbindP test_flags
+  )
+
+let test_LCbindP_1 (v0 v1 : vprop') (vx0 : int -> vprop') (wp : pure_wp int)
+  : lin_cond_r [v0; v1]
+        (M.TbindP int int wp (fun x -> specT int [v0] (fun y -> [vx0 y])))
+  = _ by (
+    norm_test (); apply (`Mklin_cond_r);
+    apply (`LV.LCbindP);
+    let x = intro () in
+    build_lin_cond test_flags
+  )
+
+[@@ expect_failure [228]]
+let test_LCbindP_2 (vx0 : int -> vprop') (wp : pure_wp int)
+  : lin_cond_r []
+        (M.TbindP int int wp (fun x -> specT int [] (fun y -> [vx0 x])))
+  = _ by (
+    norm_test (); apply (`Mklin_cond_r);
+    build_LCbindP test_flags
+  )
+
+
 let test_lin_cond0 (v : int -> vprop') (vx : int -> int -> vprop')
   : LV.top_lin_cond
       (M.Tbind int int (specT int [v 0] (fun x -> [v 3; vx 0 x]))

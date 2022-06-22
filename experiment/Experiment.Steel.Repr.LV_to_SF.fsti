@@ -28,6 +28,8 @@ let rec repr_SF_of_LV
                (repr_SF_of_LV cf sl0)
                (fun (x : a) (sl1 : sl_f (f_prd x)) ->
                   repr_SF_of_LV (cg x) (res_sel sl0 f_csm sl1))
+  | LCbindP env #a #b #wp #g csm prd cg ->
+      SF.TbindP a b (M.post_sl_t prd) wp (fun (x : a) -> repr_SF_of_LV (cg x) sl0)
   | LCsub  env csm0 prd0 cf csm1 prd1 prd_f ->
       SF.Tbind a a (M.post_sl_t prd0) (M.post_sl_t prd1)
                (repr_SF_of_LV cf sl0)

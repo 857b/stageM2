@@ -154,6 +154,8 @@ let rec repr_M_of_LV
           (fun (x : a) ->
             (**) bind_g_csm'_res_env_f env b f_csm (f_prd x) g_csm g_prd;
             repr_M_of_LV (cg x))
+  | LCbindP env #a #b #wp #g csm prd cg ->
+      M.TCbindP #a #b #wp #g env (res_env_f env csm prd) (fun x -> repr_M_of_LV (cg x))
   | LCsub env #a0 #f0 csm0 prd0 cf csm1 prd1 prd_f1 ->
       let LCspec env #a #sp s sh csm_f = cf in
       let prd_f1 (x : a) : Perm.pequiv_list (sub_prd env (eij_trg_mask csm_f) (s.spc_post x) csm1) (prd1 x)

@@ -154,7 +154,7 @@ type prog_tree : (a : Type u#a) -> Type u#(max (a+1) 3) =
   // A specification of the subprogram, used to represent function calls
   | Tspec  : (a : Type u#a) -> (sp : spec_r a -> Type u#(max a 2)) ->
              prog_tree a
-  // return, with a hint for introducing dependencies in the returned value
+  // return, with a hint for introducing dependencies on the returned value
   | Tret   : (a : Type u#a) -> (x : a) -> (sl_hint : post_t a) ->
              prog_tree a
   // bind
