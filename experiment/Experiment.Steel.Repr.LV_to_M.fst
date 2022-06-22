@@ -257,10 +257,11 @@ let tac_sound_LV2M () : Tac unit =
 
 let sound_repr_M_of_LV__LCspec
       (env : vprop_list)
-      (a : Type u#a) (pre : M.pre_t) (post : M.post_t a)
-      (req : M.req_t pre) (ens : M.ens_t pre a post)
+      (a : Type u#a) (sp : M.spec_r a -> Type u#(max a 2))
+      (pre : M.pre_t) (post : M.post_t a) (req : M.req_t pre) (ens : M.ens_t pre a post)
+      (sh : sp (M.Mkspec_r pre post req ens))
       (csm_f : eq_injection_l pre env)
-  : squash (sound_repr_M_of_LV (LCspec env #a #pre #post #req #ens csm_f))
+  : squash (sound_repr_M_of_LV (LCspec env #a #sp (M.Mkspec_r pre post req ens) sh csm_f))
   =
     intro_sound_M_of_LV _ _
       (fun sl0 ->
@@ -354,15 +355,16 @@ let sound_repr_M_of_LV__LCbind
 #push-options "--fuel 0 --ifuel 0 --ide_id_info_off"
 let sound_repr_M_of_LV__LCsub_LCspec
       (env : vprop_list)
-      (a : Type u#a) (pre : M.pre_t) (post : M.post_t a)
-      (req : M.req_t pre) (ens : M.ens_t pre a post)
+      (a : Type u#a) (sp : M.spec_r a -> Type u#(max a 2))
+      (pre : M.pre_t) (post : M.post_t a) (req : M.req_t pre) (ens : M.ens_t pre a post)
+      (sh : sp (M.Mkspec_r pre post req ens))
       (csm_f : eq_injection_l pre env)
       (csm1 : csm_t (filter_mask (mask_not (eij_trg_mask csm_f)) env))
       (prd1 : prd_t a)
       (prd_f1 : (x : a) -> Perm.pequiv_list (sub_prd env (eij_trg_mask csm_f) (post x) csm1) (prd1 x))
   : (let lc = LCsub env (eij_trg_mask csm_f) post
-                     (LCspec env #a #pre #post #req #ens csm_f)
-                     csm1 prd1 prd_f1
+                    (LCspec env #a #sp (M.Mkspec_r pre post req ens) sh csm_f)
+                    csm1 prd1 prd_f1
      in squash (lcsub_at_leaves lc /\ sound_repr_M_of_LV lc))
   = introduce _ /\ _
     with _ by (norm [delta_only [`%lcsub_at_leaves]; iota; zeta]; trivial ())
@@ -401,33 +403,44 @@ let sound_repr_M_of_LV__LCsub_LCspec
 #pop-options
 
 
-#push-options "--ifuel 1 --fuel 1"
+#push-options "--ifuel 0 --fuel 1"
 let rec repr_M_of_LV_sound
       (#env : vprop_list) (#a : Type u#a) (#t : M.prog_tree a)
       (#csm : csm_t env) (#prd : prd_t a)
       (lc : lin_cond env t csm prd {lcsub_at_leaves lc})
   : Lemma (ensures sound_M_of_LV lc (repr_M_of_LV lc)) (decreases lc)
-  = match lc with
-  | LCspec env #a #pre #post #req #ens csm_f ->
-      sound_repr_M_of_LV__LCspec env a pre post req ens csm_f
-  | LCret env #a #x #sl_hint prd csm_f ->
+  = match_lin_cond lc
+      (fun a t csm prd lc -> squash (lcsub_at_leaves lc) ->
+         squash (sound_M_of_LV lc (repr_M_of_LV lc)))
+    begin fun (*LCspec*) a sp s sh csm_f -> fun _ ->
+      let M.Mkspec_r pre post req ens = s in
+      sound_repr_M_of_LV__LCspec env a sp pre post req ens sh csm_f
+    end
+    begin fun (*LCret*)  a x sl_hint prd csm_f -> fun _ ->
       sound_repr_M_of_LV__LCret env a x sl_hint prd csm_f
-  | LCbind env #a #b #f #g f_csm f_prd cf g_csm g_prd cg ->
+    end
+    begin fun (*LCbind*) a b f g f_csm f_prd cf g_csm g_prd cg -> fun _ ->
       sound_repr_M_of_LV__LCbind env a b f g f_csm f_prd cf g_csm g_prd cg ()
         (repr_M_of_LV_sound cf)
         (fun (x : a) -> repr_M_of_LV_sound (cg x))
-  | LCsub env #a0 #f0 csm0 prd0 cf csm1 prd1 prd_f1 ->
-      let LCspec env #a #pre #post #req #ens csm_f = cf in
-      let csm0' = eij_trg_mask csm_f in
-      let prd0' = post in
-      let csm1' : csm_t (filter_mask (mask_not csm0) env) = csm1 in
-      U.arrow_ext #a (fun (x : a) -> Perm.pequiv_list (sub_prd env csm0' (prd0' x) csm1') (prd1 x))
-                     (fun (x : a) -> Perm.pequiv_list (sub_prd env csm0  (prd0  x) csm1 ) (prd1 x))
-                     (fun x -> ());
-      let prd_f1' : (x : a) -> Perm.pequiv_list (sub_prd env csm0' (prd0' x) csm1') (prd1 x)
-        = U.cast _ prd_f1 in
-      assert (lc == LCsub env csm0' prd0' (LCspec env #a #pre #post #req #ens csm_f) csm1' prd1 prd_f1');
-      sound_repr_M_of_LV__LCsub_LCspec env a pre post req ens csm_f csm1' prd1 prd_f1'
+    end
+    begin fun (*LCsub*)  a0 f0 csm0 prd0 cf csm1 prd1 prd_f1 -> fun _ ->
+      match_lin_cond cf
+        (fun a f csm0 prd0 cf ->
+           (csm1   : csm_t (filter_mask (mask_not csm0) env)) -> (prd1 : prd_t a) ->
+           (prd_f1 : ((x : a) -> Perm.pequiv_list (sub_prd env csm0 (prd0 x) csm1) (prd1 x))) ->
+           (let lc = LCsub env #a #f csm0 prd0 cf csm1 prd1 prd_f1 in
+            squash (lcsub_at_leaves lc) ->
+            squash (sound_M_of_LV lc (repr_M_of_LV lc))))
+      begin fun (*LCspec*) a sp s sh csm_f -> fun csm1 prd1 prd_f1 _ ->
+        let M.Mkspec_r pre post req ens = s in
+        sound_repr_M_of_LV__LCsub_LCspec env a sp pre post req ens sh csm_f csm1 prd1 prd_f1
+      end
+      (fun (*LCret*)  a x sl_hint prd csm_f -> fun _ _ _ _ -> false_elim ())
+      (fun (*LCbind*) a b f g f_csm f_prd cf g_csm g_prd cg -> fun _ _ _ _ -> false_elim ())
+      (fun (*LCsub*)  a0 f0 csm0 prd0 cf csm1 prd1 prd_f1 -> fun _ _ _ _ -> false_elim ())
+      csm1 prd1 prd_f1 ()
+    end ()
 #pop-options
 
 #push-options "--ifuel 0 --fuel 1"

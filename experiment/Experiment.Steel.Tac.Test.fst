@@ -37,7 +37,7 @@ let _ : elem_index #int 4 L.(0 :: ([1;3] @ [4;2;7]))
 
 unfold
 let specT (a : Type) (pre : M.pre_t) (post : M.post_t a) : M.prog_tree a
-  = M.Tspec a pre post (fun _ -> True) (fun _ _ _ -> True)
+  = M.Tspec a (M.spec_r_exact (M.Mkspec_r pre post (fun _ -> True) (fun _ _ _ -> True)))
 
 let rec repeat_n (n : nat) (t : M.prog_tree unit) : M.prog_tree unit
   = if n = 0 then M.Tret unit () (fun _ -> [])
@@ -58,28 +58,29 @@ let test_TCspec_u (v0 v1 : vprop') : squash True =
         let _ =
           build (`(M.tree_cond (specT int [(`@v0)] (fun _ -> [(`@v1)]))
                                [(`@v0)] (`#post')))
-          (fun () -> norm_test (); build_TCspec test_flags false false)
+          (fun () -> norm_test (); build_TCspec test_flags false)
         in ())
 
 let test_TCspec_p (v0 v1 v2 : vprop') (vx : int -> vprop')
   : M.tree_cond (specT int [v0; v1] (fun x -> [v0; vx x]))
                 ([v0; v1; v2]) (fun x -> [v2; vx x; v0])
-  = _ by (norm_test (); let _ = build_TCspec test_flags false true in ())
+  = _ by (norm_test (); let _ = build_TCspec test_flags true in ())
 
 
 let test_TCspecS_u (v0 v1 : vprop') : squash True =
   _ by (let post' = fresh_uvar (Some (`(M.post_t int))) in
         let _ =
-          build (`(M.tree_cond (M.TspecS int (VUnit (`@v0)) (fun _ -> VUnit (`@v1)) (fun _ -> True) (fun _ _ _ -> True))
+          build (`(M.tree_cond (M.Tspec int
+                                  (M.spec_r_steel (VUnit (`@v0)) (fun _ -> VUnit (`@v1)) (fun _ -> True) (fun _ _ _ -> True)))
                                [(`@v0)] (`#post')))
-          (fun () -> norm_test (); build_TCspec test_flags true false)
+          (fun () -> norm_test (); build_TCspec test_flags false)
         in ())
 
 let test_TCspecS_p (v0 v1 v2 : vprop') (vx : int -> vprop')
-  : M.tree_cond (M.TspecS int (VUnit v0 `star` VUnit v1) (fun x -> VUnit v0 `star` VUnit (vx x))
-                            (fun _ -> True) (fun _ _ _ -> True))
+  : M.tree_cond (M.Tspec int (M.spec_r_steel (VUnit v0 `star` VUnit v1) (fun x -> VUnit v0 `star` VUnit (vx x))
+                            (fun _ -> True) (fun _ _ _ -> True)))
                 ([v0; v1; v2]) (fun x -> [v2; vx x; v0])
-  = _ by (norm_test (); let _ = build_TCspec test_flags true true in ())
+  = _ by (norm_test (); let _ = build_TCspec test_flags true in ())
 
 
 let test_TCret_u (v0 v1 : vprop') : squash True =
@@ -105,12 +106,12 @@ let test_TCbind_u (v0 v1 : vprop') (vx0 : int -> vprop') : squash True =
           (fun () ->
             norm_test ();
             apply (`M.TCbind);
-            let _ = build_TCspec test_flags false false in
+            let _ = build_TCspec test_flags false in
             let x = intro () in
             norm_cond_sol ();
             let post1 = fresh_uvar None in
             apply_raw (`(__defer_post_unification (`#post1)));
-            let _ = build_TCspec test_flags false false in
+            let _ = build_TCspec test_flags false in
             norm_cond_sol (); trefl ()
           )
         in ())
@@ -123,10 +124,10 @@ let test_TCbind_p (v0 v1 : vprop') (vx0 vx1 : int -> vprop')
   = _ by (
     norm_test ();
     apply (`M.TCbind);
-    let _ = build_TCspec test_flags false false in
+    let _ = build_TCspec test_flags false in
     let x = intro () in
     norm_cond_sol ();
-    let _ = build_TCspec test_flags false true in
+    let _ = build_TCspec test_flags true in
     ()
   )
 
@@ -144,7 +145,7 @@ let test_TCbindP_u (v0 v1 : vprop') (vx0 : int -> vprop') (wp : pure_wp int) : s
             let x = intro () in
             let post1 = fresh_uvar None in
             apply_raw (`(__defer_post_unification (`#post1)));
-            let _ = build_TCspec test_flags false false in
+            let _ = build_TCspec test_flags false in
             norm_cond_sol (); trefl ()
           )
         in ())
@@ -158,7 +159,7 @@ let test_TCbindP_p (v0 v1 : vprop') (vx0 : int -> vprop') (wp : pure_wp int)
     norm_test ();
     apply (`M.TCbindP);
     let x = intro () in
-    let _ = build_TCspec test_flags false true in ()
+    let _ = build_TCspec test_flags true in ()
   )
 
 

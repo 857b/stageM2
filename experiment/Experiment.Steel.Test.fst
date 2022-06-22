@@ -165,9 +165,10 @@ let test0_cond (r : ref nat) (v : vprop')
   = _ by T.(
     norm __normal_M;
     apply (`M.TCbind);
-     (let u_p0 = fresh_uvar None in
+     (let u_s  = fresh_uvar None in
+      let u_p0 = fresh_uvar None in
       let u_p1 = fresh_uvar None in
-      exact (`(M.TCspec (M.Mktree_cond_Spec
+      apply (`(M.TCspec #nat #(M.spec_r_exact (`#u_s)) (`#u_s) M.SpecExact (M.Mktree_cond_Spec
           [vptr' (`@r) full_perm; (`@v)] (fun _ -> [vptr' (`@r) full_perm; (`@v)]) [(`@v)] (`#u_p0) (`#u_p1))));
        (unshelve u_p0; norm normal_vp; exact (`test0_equiv (`@r) (`@v)));
        (unshelve u_p1;
@@ -696,11 +697,30 @@ let test3_LV (r0 r1 : ref U32.t)
       (requires fun h0 -> U32.v (sel r0 h0) < 42)
       (ensures fun h0 () h1 -> U32.v (sel r1 h1) == U32.v (sel r0 h0) + 1)
   = F.(to_steel (test3_M r0 r1) #(_ by (mk_steel [O_LV; Timer; Extract])) ())
-// time specs     : 104ms (35%)
-// time lin_cond  : 44ms  (15%)
-// time sub_push  : 29ms  ( 9%)
-// time LV2SF     : 60ms  (20%)
-// time SF2Fun    : 4ms   ( 1%)
-// time Fun_wp    : 19ms  ( 6%)
-// time extract   : 32ms  (10%)
-// total time : 292ms
+// time specs     : 101ms
+// time lin_cond  : 41ms
+// time sub_push  : 31ms
+// time LV2SF     : 59ms
+// time SF2Fun    : 3ms
+// time Fun_wp    : 18ms
+// time extract   : 40ms
+// total time : 293ms
+
+inline_for_extraction
+let test3_LV' (r0 r1 : ref U32.t)
+  : F.steel unit
+      (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
+      (requires fun h0 -> U32.v (sel r0 h0) < 42)
+      (ensures fun h0 () h1 -> U32.v (sel r1 h1) == U32.v (sel r0 h0) + 1)
+  = F.(to_steel (
+      x <-- call read r0;
+      call (write r1) U32.(x +%^ 1ul)
+    ) #(_ by (mk_steel [O_LV; Timer; Extract])) ())
+// time specs     : 106ms
+// time lin_cond  : 184ms
+// time sub_push  : 36ms
+// time LV2SF     : 61ms
+// time SF2Fun    : 3ms
+// time Fun_wp    : 18ms
+// time extract   : 151ms
+// total time : 559ms

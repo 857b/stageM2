@@ -303,7 +303,7 @@ let rec lc_sub_push_at_leaves
       (ct : lin_cond env t csm prd)
   : Lemma (ensures lcsub_at_leaves (lc_sub_push ct)) (decreases %[ct; 1])
   = match ct with
-  | LCspec _ _ | LCret  _ _ _ -> ()
+  | LCspec _ _ _ _ | LCret  _ _ _ -> ()
   | LCbind env f_csm f_prd cf g_csm g_prd cg ->
       assert (lcsub_at_leaves (lc_sub_push (LCbind env f_csm f_prd cf g_csm g_prd cg)))
           by (norm_lcsbl true;
@@ -327,8 +327,8 @@ and lc_sub_push_aux_at_leaves
          (csm' : csm_t (filter_mask (mask_not csm) env)) -> (prd' : prd_t a) ->
          (prd_f : ((x : a) -> Perm.pequiv_list (sub_prd env csm (prd x) csm') (prd' x))) ->
          squash (goal ct csm' prd' prd_f))
-    begin fun (*LCspec*) a pre post req ens csm_f -> fun csm' prd' prd_f ->
-      assert (goal (LCspec env #a #pre #post #req #ens csm_f) csm' prd' prd_f)
+    begin fun (*LCspec*) a sp s sh csm_f -> fun csm' prd' prd_f ->
+      assert (goal (LCspec env #a #sp s sh csm_f) csm' prd' prd_f)
           by (norm_lcsbl true; trivial ())
     end
     begin fun (*LCret*)  a x sl_hint prd csm_f -> fun csm' prd' prd_f ->

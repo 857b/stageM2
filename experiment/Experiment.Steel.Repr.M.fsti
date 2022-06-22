@@ -125,15 +125,34 @@ val repr_steel_of_steel_ghost
 
 (*** [prog_tree] *)
 
+[@@ Learn.Tactics.Util.__tac_helper__]
+inline_for_extraction noeq
+type spec_r (a : Type u#a) = {
+  spc_pre  : pre_t;
+  spc_post : post_t a;
+  spc_req  : req_t spc_pre;
+  spc_ens  : ens_t spc_pre a spc_post;
+}
+
+type spec_r_exact (#a : Type u#a) (s0 : spec_r a) : (s : spec_r a) -> Type u#(max a 2) =
+  | SpecExact : spec_r_exact s0 s0
+
 noeq
-type prog_tree : (a : Type u#a) -> Type u#(max (a+1) 2) =
+type spec_r_steel (#a : Type u#a) (pre : SE.pre_t) (post : SE.post_t a)
+                  (req : SE.req_t pre) (ens : SE.ens_t pre a post)
+  : (s : spec_r a) -> Type u#(max a 2) =
+  | SpecSteel : (tr : to_repr_t a pre post req ens) ->
+                spec_r_steel pre post req ens
+                   ({ spc_pre  = tr.r_pre;
+                      spc_post = tr.r_post;
+                      spc_req  = tr.r_req;
+                      spc_ens  = tr.r_ens })
+                               
+
+noeq
+type prog_tree : (a : Type u#a) -> Type u#(max (a+1) 3) =
   // A specification of the subprogram, used to represent function calls
-  | Tspec  : (a : Type u#a) -> (pre : pre_t) -> (post : post_t a) ->
-             (req : req_t pre) -> (ens : ens_t pre a post) ->
-             prog_tree a
-  // A Steel specification, used to represent calls to Steel functions
-  | TspecS : (a : Type u#a) -> (pre : SE.pre_t) -> (post : SE.post_t a) ->
-             (req : SE.req_t pre) -> (ens : SE.ens_t pre a post) ->
+  | Tspec  : (a : Type u#a) -> (sp : spec_r a -> Type u#(max a 2)) ->
              prog_tree a
   // return, with a hint for introducing dependencies in the returned value
   | Tret   : (a : Type u#a) -> (x : a) -> (sl_hint : post_t a) ->
@@ -171,16 +190,11 @@ type tree_cond_Spec (a : Type) (pre : pre_t) (post : post_t a) = {
 }
 
 noeq
-type tree_cond : (#a : Type u#a) -> (t : prog_tree a) -> (pre : pre_t) -> (post : post_t a) -> Type u#(max (a+1) 2) =
-  | TCspec  : (#a : Type u#a) -> (#pre : pre_t) -> (#post : post_t a) ->
-              (#req : req_t pre) -> (#ens : ens_t pre a post) ->
-              (tcs : tree_cond_Spec a pre post) ->
-              tree_cond (Tspec a pre post req ens) tcs.tcs_pre tcs.tcs_post
-  | TCspecS : (#a : Type u#a) -> (#pre : SE.pre_t) -> (#post : SE.post_t a) ->
-              (#req : SE.req_t pre) -> (#ens : SE.ens_t pre a post) ->
-              (tr  : to_repr_t a pre post req ens) ->
-              (tcs : tree_cond_Spec a tr.r_pre tr.r_post) ->
-              tree_cond (TspecS a pre post req ens) tcs.tcs_pre tcs.tcs_post
+type tree_cond : (#a : Type u#a) -> (t : prog_tree a) -> (pre : pre_t) -> (post : post_t a) -> Type u#(max (a+1) 3) =
+  | TCspec  : (#a : Type u#a) -> (#sp : (spec_r a -> Type u#(max a 2))) ->
+              (s : spec_r a) -> (sh : sp s) ->
+              (tcs : tree_cond_Spec a s.spc_pre s.spc_post) ->
+              tree_cond (Tspec a sp) tcs.tcs_pre tcs.tcs_post
   | TCret   : (#a : Type u#a) -> (#x : a) -> (#sl_hint : post_t a) ->
               (pre : pre_t) -> (post : post_t a) ->
               (p : Veq.vequiv pre (post x)) ->
@@ -244,8 +258,7 @@ let rec tree_cond_has_shape
       (#post_n : nat) (s : shape_tree (L.length pre) post_n)
   : Pure prop (requires True) (ensures fun p -> p ==> (forall (x : a) . L.length (post0 x) = post_n)) (decreases c)
   = match c with
-  | TCspec #a #pre #post tcs -> tree_cond_has_shape_Spec a pre post tcs s
-  | TCspecS #a tr tcs -> tree_cond_has_shape_Spec a tr.r_pre tr.r_post tcs s
+  | TCspec spc _ tcs -> tree_cond_has_shape_Spec a spc.spc_pre spc.spc_post tcs s
   | TCret #a pre post e ->
       (match s with
       | Sret pre_n post_n e' ->
@@ -375,10 +388,8 @@ let rec tree_req (#a : Type u#a) (t : prog_tree a)
                  (sl0 : sl_f pre)
   : Tot Type0 (decreases t) =
   match c with
-  | TCspec #_ #pre #_ #req #ens  tcs ->
-             spec_req tcs req ens sl0
-  | TCspecS #_ tr tcs ->
-             spec_req tcs tr.r_req tr.r_ens sl0
+  | TCspec s _ tcs ->
+             spec_req tcs s.spc_req s.spc_ens sl0
   | TCret #_ #_  _ _  e ->
              return_req e sl0
   | TCbind #_ #_ #f #g  pre itm _  cf cg ->
@@ -393,10 +404,8 @@ and tree_ens (#a : Type u#a) (t : prog_tree a)
              (sl0 : sl_f pre) (res : a) (sl1 : sl_f (post res))
   : Tot Type0 (decreases t) =
   match c with
-  | TCspec #a #pre #post #_ #ens  tcs ->
-             spec_ens tcs ens sl0 res sl1
-  | TCspecS #_ tr tcs ->
-             spec_ens tcs tr.r_ens sl0 res sl1
+  | TCspec s _  tcs ->
+             spec_ens tcs s.spc_ens sl0 res sl1
   | TCret #a #x  _ _  e ->
              return_ens x e sl0 res sl1
   | TCbind #_ #_ #f #g  pre itm post  cf cg ->

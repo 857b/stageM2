@@ -194,14 +194,14 @@ type lin_cond :
      (env : vprop_list) ->
      (#a : Type u#a) -> (t : M.prog_tree a) ->
      (csm : csm_t env) -> (prd : prd_t a) ->
-     Type u#(max (a+1) 2)
+     Type u#(max (a+1) 3)
   =
   | LCspec :
       (env : vprop_list) ->
-      (#a : Type u#a) -> (#pre : M.pre_t) -> (#post : M.post_t a) ->
-      (#req : M.req_t pre) -> (#ens : M.ens_t pre a post) ->
-      (csm_f : eq_injection_l pre env) ->
-      lin_cond env (M.Tspec a pre post req ens) (eij_trg_mask csm_f) post
+      (#a : Type u#a) -> (#sp : (M.spec_r a -> Type u#(max a 2))) ->
+      (s : M.spec_r a) -> (sh : sp s) ->
+      (csm_f : eq_injection_l s.spc_pre env) ->
+      lin_cond env (M.Tspec a sp) (eij_trg_mask csm_f) s.spc_post
   | LCret :
       (env : vprop_list) ->
       (#a : Type u#a) -> (#x : a) -> (#sl_hint : M.post_t a) ->
@@ -235,13 +235,13 @@ let match_lin_cond
       (ct0 : lin_cond env t0 csm0 prd0)
       (r : (a : Type u#a) -> (t : M.prog_tree a) -> (csm : csm_t env) -> (prd : prd_t a) ->
            (ct : lin_cond env t csm prd) -> Type u#r)
-      (c_LCspec : (a : Type u#a) -> (pre : M.pre_t) -> (post : M.post_t a) ->
-                  (req : M.req_t pre) -> (ens : M.ens_t pre a post) ->
-                  (csm_f : eq_injection_l pre env) ->
-                  Pure (r _ _ _ _ (LCspec env #a #pre #post #req #ens csm_f))
-                       (requires a0 == a /\ t0 == M.Tspec a pre post req ens /\
-                                 csm0 == eij_trg_mask csm_f /\ prd0 == post /\
-                                 ct0 == LCspec env #a #pre #post #req #ens csm_f)
+      (c_LCspec : (a : Type u#a) ->  (sp : (M.spec_r a -> Type u#(max a 2))) ->
+                  (s : M.spec_r a) -> (sh : sp s) ->
+                  (csm_f : eq_injection_l s.spc_pre env) ->
+                  Pure (r _ _ _ _ (LCspec env #a #sp s sh csm_f))
+                       (requires a0 == a /\ t0 == M.Tspec a sp /\
+                                 csm0 == eij_trg_mask csm_f /\ prd0 == s.spc_post /\
+                                 ct0 == LCspec env #a #sp s sh csm_f)
                        (ensures fun _ -> True))
       (c_LCret  : (a : Type u#a) -> (x : a) -> (sl_hint : M.post_t a) ->
                   (prd : prd_t a) -> (csm_f : eq_injection_l (prd x) env) ->
@@ -275,7 +275,7 @@ let match_lin_cond
                        (ensures fun _ -> True))
   : r _ _ _ _ ct0
   = match ct0 as ct returns r _ _ _ _ ct with
-  | LCspec env #a #pre #post #req #ens csm_f             -> c_LCspec a pre post req ens csm_f
+  | LCspec env #a #sp s sh csm_f                         -> c_LCspec a sp s sh csm_f
   | LCret  env #a #x #sl_hint prd csm_f                  -> c_LCret  a x sl_hint prd csm_f
   | LCbind env #a #b #f #g f_csm f_prd cf g_csm g_prd cg -> c_LCbind a b f g f_csm f_prd cf g_csm g_prd cg
   | LCsub  env #a #f csm prd cf csm' prd' prd_f          -> c_LCsub  a f csm prd cf csm' prd' prd_f
@@ -298,8 +298,8 @@ let rec tree_req
       (sl0 : sl_f env)
   : Tot Type0 (decreases ct)
   = match ct with
-  | LCspec env #a #pre #post #req #ens csm_f ->
-      req (eij_sl (L.index csm_f) sl0)
+  | LCspec env s _ csm_f ->
+      s.spc_req (eij_sl (L.index csm_f) sl0)
   | LCret  env #a #x #sl_hint prd csm_f ->
       True
   | LCbind env #a #b #f #g f_csm f_prd cf g_csm g_prd cg ->
@@ -316,8 +316,8 @@ and tree_ens
       (sl0 : sl_f env) (res : a) (sl1 : sl_f (prd res))
   : Tot Type0 (decreases ct)
   = match ct with
-  | LCspec env #a #pre #post #req #ens csm_f ->
-      ens (eij_sl (L.index csm_f) sl0) res sl1
+  | LCspec env s _ csm_f ->
+      s.spc_ens (eij_sl (L.index csm_f) sl0) res sl1
   | LCret  env #a #x #sl_hint prd csm_f ->
       res == x /\
       sl1 == eij_sl (L.index csm_f) sl0
@@ -352,7 +352,7 @@ let rec lcsub_at_leaves
       (ct : lin_cond env t csm prd)
   : Tot prop (decreases ct)
   = match ct with
-  | LCspec _ _ | LCret _ _ _ | LCsub  _ _ _ (LCspec _ _) _ _ _ ->
+  | LCspec _ _ _ _ | LCret _ _ _ | LCsub  _ _ _ (LCspec _ _ _ _) _ _ _ ->
            True
   | LCbind _ #a _ _ cf _ _ cg ->
            lcsub_at_leaves cf /\ (forall (x : a) . lcsub_at_leaves (cg x))
@@ -611,7 +611,7 @@ let rec lc_sub_push
       (ct : lin_cond env t csm prd)
   : Tot (lcsubp_tr ct) (decreases %[ct; 1])
   = match ct with
-  | LCspec _ _ | LCret  _ _ _ -> ct
+  | LCspec _ _ _ _ | LCret  _ _ _ -> ct
   | LCbind env f_csm f_prd cf g_csm g_prd cg ->
       LCbind env f_csm f_prd (lc_sub_push cf) g_csm g_prd (fun x -> lc_sub_push (cg x))
   | LCsub  env csm prd cf csm' prd' prd_f ->
@@ -624,7 +624,7 @@ and lc_sub_push_aux
       (prd_f : ((x : a) -> Perm.pequiv_list (sub_prd env csm (prd x) csm') (prd' x)))
   : Tot (lcsubp_tr (LCsub env _ _ ct csm' prd' prd_f)) (decreases %[ct; 0])
   = match ct with
-  | LCspec _ _ ->
+  | LCspec _ _ _ _ ->
       LCsub _ _ _ ct csm' prd' prd_f
   | LCret  _ #a #x #sl_hint prd0 csm_f0 ->
       lcsubp_LCret env a x sl_hint prd0 csm_f0 csm' prd'

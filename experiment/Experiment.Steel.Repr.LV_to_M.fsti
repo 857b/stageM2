@@ -142,8 +142,8 @@ let rec repr_M_of_LV
       (lc : lin_cond env t csm prd)
   : Pure (lc_to_M lc) (requires lcsub_at_leaves lc) (ensures fun _ -> True) (decreases lc)
   = match lc with
-  | LCspec env #a #pre #post #req #ens csm_f ->
-      M.TCspec #a #pre #post #req #ens (repr_M_of_LV__tcs env a pre post csm_f)
+  | LCspec env #a #sp s sh csm_f ->
+      M.TCspec #a #sp s sh  (repr_M_of_LV__tcs env a s.spc_pre s.spc_post csm_f)
   | LCret env #a #x #sl_hint prd csm_f ->
       M.TCret #a #x #sl_hint
           env (fun x' -> L.(prd x' @ filter_mask (mask_not (eij_trg_mask csm_f)) env))
@@ -155,11 +155,11 @@ let rec repr_M_of_LV
             (**) bind_g_csm'_res_env_f env b f_csm (f_prd x) g_csm g_prd;
             repr_M_of_LV (cg x))
   | LCsub env #a0 #f0 csm0 prd0 cf csm1 prd1 prd_f1 ->
-      let LCspec env #a #pre #post #req #ens csm_f = cf in
-      let prd_f1 (x : a) : Perm.pequiv_list (sub_prd env (eij_trg_mask csm_f) (post x) csm1) (prd1 x)
+      let LCspec env #a #sp s sh csm_f = cf in
+      let prd_f1 (x : a) : Perm.pequiv_list (sub_prd env (eij_trg_mask csm_f) (s.spc_post x) csm1) (prd1 x)
             = U.cast _ (prd_f1 x)
       in
-      M.TCspec #a #pre #post #req #ens (repr_M_of_LV__tcs_sub env a pre post csm_f csm1 prd1 prd_f1)
+      M.TCspec #a #sp s sh (repr_M_of_LV__tcs_sub env a s.spc_pre s.spc_post csm_f csm1 prd1 prd_f1)
 #pop-options
 
 #push-options "--ifuel 0 --fuel 0"

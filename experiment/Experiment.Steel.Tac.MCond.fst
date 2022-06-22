@@ -470,99 +470,48 @@ let rec shape_tree_of_pre (#pre_n : nat) (#post_n : nat) (ps : pre_shape_tree pr
 
 [@@ __tac_helper__]
 let __build_TCspec_u
-      (#a : Type) (#pre : M.pre_t) (#post : M.post_t a) (#req : M.req_t pre) (#ens : M.ens_t pre a post)
+      (#a : Type) (#sp : M.spec_r a -> Type)
+      (#s : M.spec_r a) (sh : sp s)
       (#pre' : M.pre_t)
-      (cs0 : vequiv_sol false pre pre')
+      (cs0 : vequiv_sol false s.spc_pre pre')
 
-      (pre_n   : extract_term (L.length pre))
-      (post_n  : (x : a) -> extract_term (L.length (post x)))
+      (pre_n   : extract_term (L.length s.spc_pre))
+      (post_n  : (x : a) -> extract_term (L.length (s.spc_post x)))
       (pre'_n  : extract_term (L.length pre'))
-      (post'_n : (x : a) -> extract_term L.(length (post x @ VeqPrt?.unmatched cs0)))
+      (post'_n : (x : a) -> extract_term L.(length (s.spc_post x @ VeqPrt?.unmatched cs0)))
       (frame_n : extract_term (L.length (VeqPrt?.unmatched cs0)))
       (p0 : __extract_vequiv (vequiv_sol_prt cs0))
 
-  : M.tree_cond (M.Tspec a pre post req ens) pre' (fun (x : a) -> L.(post x @ VeqPrt?.unmatched cs0))
+  : M.tree_cond (M.Tspec a sp) pre' (fun (x : a) -> L.(s.spc_post x @ VeqPrt?.unmatched cs0))
   =
     let frame = VeqPrt?.unmatched cs0 in
-    M.TCspec M.({
+    M.TCspec s sh M.({
       tcs_pre     = pre';
-      tcs_post    = (fun x -> L.(post x @ frame));
+      tcs_post    = (fun x -> L.(s.spc_post x @ frame));
       tcs_frame   = frame;
       tcs_pre_eq  = vequiv_sol_prt cs0;
-      tcs_post_eq = (fun x -> Veq.vequiv_refl L.(post x @ frame))
+      tcs_post_eq = (fun x -> Veq.vequiv_refl L.(s.spc_post x @ frame))
     })
 
 [@@ __tac_helper__]
 let __build_TCspec_p
-      (#a : Type) (#pre : M.pre_t) (#post : M.post_t a) (#req : M.req_t pre) (#ens : M.ens_t pre a post)
+      (#a : Type) (#sp : M.spec_r a -> Type)
+      (#s : M.spec_r a) (sh : sp s)
       (#pre' : M.pre_t) (#post' : M.post_t a)
-      (cs0 : vequiv_sol false pre pre')
-      (cs1 : (x : a) -> vequiv_sol true (post' x) L.(post x @ VeqPrt?.unmatched cs0))
+      (cs0 : vequiv_sol false s.spc_pre pre')
+      (cs1 : (x : a) -> vequiv_sol true (post' x) L.(s.spc_post x @ VeqPrt?.unmatched cs0))
 
-      (pre_n   : extract_term (L.length pre))
-      (post_n  : (x : a) -> extract_term (L.length (post x)))
+      (pre_n   : extract_term (L.length s.spc_pre))
+      (post_n  : (x : a) -> extract_term (L.length (s.spc_post x)))
       (pre'_n  : extract_term (L.length pre'))
       (post'_n : (x : a) -> extract_term L.(length (post' x)))
       (frame_n : extract_term (L.length (VeqPrt?.unmatched cs0)))
       (p0 : __extract_vequiv (vequiv_sol_prt cs0))
       (p1 : (x : a) -> __extract_vequiv (vequiv_sol_all (cs1 x)))
 
-  : M.tree_cond (M.Tspec a pre post req ens) pre' post'
+  : M.tree_cond (M.Tspec a sp) pre' post'
   =
-    M.TCspec M.({
-      tcs_pre     = pre';
-      tcs_post    = post';
-      tcs_frame   = VeqPrt?.unmatched cs0;
-      tcs_pre_eq  = vequiv_sol_prt cs0;
-      tcs_post_eq = (fun x -> vequiv_sol_all (cs1 x))
-    })
-
-// TODO? currently, one cannot factorize the tree_cond_spec part of TCspec & TCspecS
-// since there are constraints on tcs_pre & tcs_post
-[@@ __tac_helper__]
-let __build_TCspecS_u
-      (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
-      (#pre' : M.pre_t)
-      (tr  : M.to_repr_t a pre post req ens)
-      (cs0 : vequiv_sol false tr.r_pre pre')
-
-      (pre_n   : extract_term (L.length tr.r_pre))
-      (post_n  : (x : a) -> extract_term (L.length (tr.r_post x)))
-      (pre'_n  : extract_term (L.length pre'))
-      (post'_n : (x : a) -> extract_term L.(length (tr.r_post x @ VeqPrt?.unmatched cs0)))
-      (frame_n : extract_term (L.length (VeqPrt?.unmatched cs0)))
-      (p0 : __extract_vequiv (vequiv_sol_prt cs0))
-
-  : M.tree_cond (M.TspecS a pre post req ens) pre' (fun (x : a) -> L.(tr.r_post x @ VeqPrt?.unmatched cs0))
-  =
-    let frame = VeqPrt?.unmatched cs0 in
-    M.TCspecS tr M.({
-      tcs_pre     = pre';
-      tcs_post    = (fun x -> L.(tr.r_post x @ frame));
-      tcs_frame   = frame;
-      tcs_pre_eq  = vequiv_sol_prt cs0;
-      tcs_post_eq = (fun x -> Veq.vequiv_refl L.(tr.r_post x @ frame))
-    })
-
-[@@ __tac_helper__]
-let __build_TCspecS_p
-      (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
-      (#pre' : M.pre_t) (#post' : M.post_t a)
-      (tr  : M.to_repr_t a pre post req ens)
-      (cs0 : vequiv_sol false tr.r_pre pre')
-      (cs1 : (x : a) -> vequiv_sol true (post' x) L.(tr.r_post x @ VeqPrt?.unmatched cs0))
-
-      (pre_n   : extract_term (L.length tr.r_pre))
-      (post_n  : (x : a) -> extract_term (L.length (tr.r_post x)))
-      (pre'_n  : extract_term (L.length pre'))
-      (post'_n : (x : a) -> extract_term L.(length (post' x)))
-      (frame_n : extract_term (L.length (VeqPrt?.unmatched cs0)))
-      (p0 : __extract_vequiv (vequiv_sol_prt cs0))
-      (p1 : (x : a) -> __extract_vequiv (vequiv_sol_all (cs1 x)))
-
-  : M.tree_cond (M.TspecS a pre post req ens) pre' post'
-  =
-    M.TCspecS tr M.({
+    M.TCspec s sh M.({
       tcs_pre     = pre';
       tcs_post    = post';
       tcs_frame   = VeqPrt?.unmatched cs0;
@@ -608,33 +557,29 @@ let __build_TCret_p
     M.TCret #a #x pre post (vequiv_sol_all cs)
 
 
-let build_TCspec fr (is_Steel : bool) (post : bool) : Tac shape_tree_t
+let build_TCspec fr (post : bool) : Tac shape_tree_t
   =
     if post then begin
-      if is_Steel then (
-        apply_raw (`__build_TCspecS_p);
-        build_to_repr_t fr (fun () -> [Info_location "in the TCspecS statement"]);
-        norm_cond_sol ()
-      ) else
-        apply_raw (`__build_TCspec_p);
+      apply_raw (`__build_TCspec_p);
+      // s
+      dismiss ();
+      // sh
+      build_spec_r fr (fun () -> [Info_location "in the spec statement"]);
+      // cs0
+      norm_cond_sol ();
       build_vequiv_sol fr (fun () -> [Info_location "before the spec statement"]) false;
+      // cs1
       norm_cond_sol ();
       let x = intro () in
       build_vequiv_sol fr (fun () -> [Info_location "after the spec statement"]) true
     end else begin
-      // FIXME : why apply_raw shelves cs0 ?
-      let cs0 = fresh_uvar None in
-      if is_Steel then (
-        let tr = fresh_uvar None in
-        apply_raw (`(__build_TCspecS_u (`#tr) (`#cs0)));
-        unshelve tr;
-        build_to_repr_t fr (fun () -> [Info_location "in the TCspecS statement"]);
-        unshelve cs0;
-        norm_cond_sol ()
-      ) else (
-        apply_raw (`(__build_TCspec_u (`#cs0)));
-        unshelve cs0
-      );
+      apply_raw (`__build_TCspec_u);
+      // s
+      dismiss ();
+      // sh
+      build_spec_r fr (fun () -> [Info_location "in the spec statement"]);
+      // cs0
+      norm_cond_sol ();
       build_vequiv_sol fr (fun () -> [Info_location "before the spec statement"]) false
     end;
 
@@ -696,7 +641,7 @@ and build_TCif fr (post : bool) : Tac shape_tree_t
 
 and build_tree_cond fr (post : bool) : Tac shape_tree_t
   =
-    let build_tac : bool -> Tac shape_tree_t =
+    let build_tac : flags_record -> bool -> Tac shape_tree_t =
       let goal = cur_goal () in
       let args = (collect_app goal)._2 in
       let fail_shape () =
@@ -706,22 +651,13 @@ and build_tree_cond fr (post : bool) : Tac shape_tree_t
       else let hd = (collect_app (L.index args 1)._1)._1 in
       match inspect hd with
       | Tv_FVar fv | Tv_UInst fv _ ->
-          // TODO? better solution to match
           let nd = inspect_fv fv in
-          if Nil? nd then (let _ = fail_shape () in fail "unreachable");
-          begin match L.last nd with
-          | "Tspec"  -> build_TCspec  fr false
-          | "TspecS" -> build_TCspec  fr true
-          | "Tret"   -> build_TCret   fr
-          | "Tbind"  -> build_TCbind  fr
-          | "TbindP" -> build_TCbindP fr
-          | "Tif"    -> build_TCif    fr
-          | _ -> fail_shape ()
-          end
+          match_M_prog_tree fr dummy_ctx nd
+            build_TCspec build_TCret build_TCbind build_TCbindP build_TCif
       | r -> fail_shape ()
     in
     if post
-    then build_tac true
+    then build_tac fr true
     else begin
       // If post is false, the post is an uvar [post0] that may be independent of some bound variables the current
       // [M.prog_tree] and pre can depend on.
@@ -734,7 +670,7 @@ and build_tree_cond fr (post : bool) : Tac shape_tree_t
       // Changes the goal [tree_cond_sol t pre ?post0] into [tree_cond_sol t pre ?post1] and [?post0 == ?post1]
       apply_raw (`(__defer_post_unification (`#post1)));
       // Solves [tree_cond_sol t pre post1]
-      let shp = build_tac false in
+      let shp = build_tac fr false in
       // [?post1] is now inferred as [post1] and we are presented with a goal [?post0 == post1].
       // We normalize [post1] and assign the result to [?post0].
       norm_cond_sol ();

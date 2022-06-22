@@ -1,5 +1,6 @@
 module Experiment.Steel.Combinators
 
+module U   = Learn.Util
 module L   = FStar.List.Pure
 module SE  = Steel.Effect
 module SH  = Experiment.Steel.Steel
@@ -11,7 +12,7 @@ open Steel.Effect.Atomic
 open Experiment.Steel.VPropList
 open Experiment.Steel.Repr.M
 
-#push-options "--ifuel 1"
+#push-options "--ifuel 1 --ide_id_info_off"
 
 /// We define a "monad" (which does not satisfy the monad laws) on [M.repr]. 
 
@@ -23,7 +24,7 @@ let repr_of_steel_steel
       (a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
       (tcs : tree_cond_Spec a pre post)
       ($f : repr_steel_t SH.KSteel a pre post req ens)
-  : (let c = TCspec #a #pre #post #req #ens tcs in
+  : (let c = TCspec #a #(spec_r_exact (Mkspec_r pre post req ens)) _ SpecExact tcs in
      repr_steel_t SH.KSteel a tcs.tcs_pre tcs.tcs_post (tree_req _ c) (tree_ens _ c))
   = SH.steel_f (fun () ->
     (**) tcs.tcs_pre_eq.veq_g _;
@@ -38,7 +39,7 @@ let repr_of_steel_ghost_steel
       (a : Type) (opened : Mem.inames) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
       (tcs : tree_cond_Spec a pre post)
       ($f : repr_steel_t (SH.KGhost opened) a pre post req ens)
-  : (let c = TCspec #a #pre #post #req #ens tcs in
+  : (let c = TCspec #a #(spec_r_exact (Mkspec_r pre post req ens)) _ SpecExact tcs in
      repr_steel_t (SH.KGhost opened) a tcs.tcs_pre tcs.tcs_post (tree_req _ c) (tree_ens _ c))
   = SH.ghost_f #opened (fun () ->
     (**) tcs.tcs_pre_eq.veq_g _;
@@ -57,7 +58,7 @@ let tree_of_steel_r
       (#pre : pre_t) (#post : post_t a) (#req : req_t pre) (#ens : ens_t pre a post)
       ($f : repr_steel_t ek a pre post req ens)
   : prog_tree a
-  = Tspec a pre post req ens
+  = Tspec a (spec_r_exact (Mkspec_r pre post req ens))
 
 [@@ __repr_M__]
 inline_for_extraction noextract
@@ -68,7 +69,7 @@ let repr_of_steel_r
   = {
     repr_tree  = tree_of_steel_r f;
     repr_steel = (fun pre'0 post'0 c ->
-                    let TCspec tcs = c in
+                    let TCspec _ _ tcs = c in
                     repr_of_steel_steel a pre post req ens tcs f)
   }
 
@@ -81,7 +82,7 @@ let repr_of_steel_ghost_r
   = {
     repr_tree  = tree_of_steel_r f;
     repr_steel = (fun pre'0 post'0 c ->
-                    let TCspec tcs = c in
+                    let TCspec _ _ tcs = c in
                     repr_of_steel_ghost_steel a opened pre post req ens tcs f)
   }
 
@@ -91,7 +92,7 @@ let tree_of_steel
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
       ($f : SH.unit_steel a pre post req ens)
   : prog_tree a
-  = TspecS a pre post req ens
+  = Tspec a (spec_r_steel pre post req ens)
 
 [@@ __repr_M__]
 inline_for_extraction noextract
@@ -102,7 +103,8 @@ let repr_of_steel
   = {
     repr_tree  = tree_of_steel f;
     repr_steel = (fun pre'0 post'0 c ->
-                    let TCspecS tr tcs = c in
+                    let TCspec #a #sp s sh tcs = c in
+                    let SpecSteel tr = U.cast (spec_r_steel pre post req ens s) sh in
                     repr_of_steel_steel a tr.r_pre tr.r_post tr.r_req tr.r_ens
                                         tcs (repr_steel_of_steel tr f))
   }
@@ -115,9 +117,10 @@ let repr_of_steel_ghost
       ($f : SH.unit_steel_ghost a opened pre post req ens)
   : repr (SH.KGhost opened) a
   = {
-    repr_tree  = TspecS a pre post req ens;
+    repr_tree  = Tspec a (spec_r_steel pre post req ens);
     repr_steel = (fun pre'0 post'0 c ->
-                    let TCspecS tr tcs = c in
+                    let TCspec #a #sp s sh tcs = c in
+                    let SpecSteel tr = U.cast (spec_r_steel pre post req ens s) sh in
                     repr_of_steel_ghost_steel a opened tr.r_pre tr.r_post tr.r_req tr.r_ens
                                         tcs (repr_steel_of_steel_ghost tr f))
   }

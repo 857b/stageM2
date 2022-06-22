@@ -43,10 +43,8 @@ let rec repr_ST_of_M (#a : Type) (t : M.prog_tree u#a a)
   : Tot (prog_tree a (vprop_list_sels_t pre0) (post_sl_t post0))
         (decreases t)
   = match c with
-  | TCspec #a #pre #post #req #ens  tcs ->
-             repr_ST_of_M_Spec a pre post req ens tcs
-  | TCspecS #a tr tcs ->
-             repr_ST_of_M_Spec a tr.r_pre tr.r_post tr.r_req tr.r_ens tcs
+  | TCspec #a {spc_pre; spc_post; spc_req; spc_ens} _ tcs ->
+             repr_ST_of_M_Spec a spc_pre spc_post spc_req spc_ens tcs
   | TCret #a #x #_  pre post  e ->
              Tequiv (vprop_list_sels_t pre) (vprop_list_sels_t (post x)) (sequiv_of_vequiv e);;
              Tret _ x (post_sl_t post)

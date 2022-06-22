@@ -370,6 +370,13 @@ let build_to_repr_t fr ctx : Tac unit
 #pop-options
 (**) private val __end_opt_1 : unit
 
+/// Solves a goal [sp ?s] where [sp] is as [spec_r_exact] [spec_r_steel]
+let build_spec_r fr ctx : Tac unit =
+  try apply (`M.SpecExact)
+  with | _ ->
+      apply (`M.SpecSteel);
+      build_to_repr_t fr ctx
+
 
 (*** Building an injection *)
 
@@ -707,3 +714,23 @@ let checked_pre_partial_injection
   =
     (**) check_map_to_eq_spec src trg ij;
     ij
+
+
+(*** Misc *)
+
+let match_M_prog_tree (#a : Type) fr ctx (n : name)
+      (c_Tspec : a) (c_Tret : a) (c_Tbind : a) (c_TbindP : a) (c_Tif : a)
+  : Tac a
+  =
+    let fail_shape ()
+      = cs_raise fr ctx (fun m -> fail (m (Fail_goal_shape GShape_M_prog_tree)
+                                       [Info_other ("got "^implode_qn n)]))
+    in
+    if Nil? n then fail_shape ()
+    else match (L.last n) with
+    | "Tspec"  -> c_Tspec
+    | "Tret"   -> c_Tret
+    | "Tbind"  -> c_Tbind
+    | "TbindP" -> c_TbindP
+    | "Tif"    -> c_Tif
+    | _        -> fail_shape ()

@@ -230,7 +230,7 @@ let __normal_M : list norm_step = [
 
 let __normal_ST : list norm_step = [
   delta_only [`%M2ST.repr_ST_of_M; `%M2ST.repr_ST_of_M_Spec; `%ST.bind; `%M.post_sl_t;
-              `%Vpl.vprop_list_sels_t; `%L.map; `%SE.Mkvprop'?.t;
+              `%Vpl.vprop_list_sels_t; `%L.map;
               `%ST.const_post; `%ST.frame_post; `%L.op_At; `%L.append;
               `%ST.flatten_prog; `%ST.flatten_prog_aux; `%ST.flatten_prog_k_id;
 
@@ -248,7 +248,7 @@ let __normal_lc_sub_push : list norm_step = [
              [`%LV.lc_sub_push; `%LV.lc_sub_push_aux;
               `%Perm.perm_f_to_list; `%Perm.perm_f_of_list;
               `%Perm.comp; `%Perm.mk_perm_f; `%Perm.perm_f_append; `%Perm.perm_f_cons; `%Perm.id_n]);
-  delta_attr [`%LV.__lin_cond__; `%Learn.List.Mask.__mask__];
+  delta_attr [`%LV.__lin_cond__; `%Learn.List.Mask.__mask__; `%__tac_helper__];
   delta_qualifier ["unfold"];
   iota; zeta; primops
 ]
@@ -262,7 +262,7 @@ let __normal_LV2SF : list norm_step = [
               `%Fl.dlist_of_f; `%Fl.apply_perm_r; `%Fl.append;
               `%Dl.initi;
               `%Perm.perm_f_of_list; `%Perm.mk_perm_f]);
-  delta_attr [`%Learn.List.Mask.__mask__];
+  delta_attr [`%Learn.List.Mask.__mask__; `%__tac_helper__];
   delta_qualifier ["unfold"];
   iota; zeta; primops
 ]

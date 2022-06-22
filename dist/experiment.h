@@ -14,6 +14,8 @@ void Experiment_Steel_Test_Extract_test3(uint32_t *r0, uint32_t *r1);
 
 void Experiment_Steel_Test_Extract_test3_LV(uint32_t *r0, uint32_t *r1);
 
+void Experiment_Steel_Test_Extract_test3_LV_(uint32_t *r0, uint32_t *r1);
+
 uint32_t Experiment_Steel_Test_Extract_test_ghost(uint32_t *r);
 
 

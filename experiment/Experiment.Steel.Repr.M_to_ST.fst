@@ -122,11 +122,8 @@ let rec repr_ST_of_M_req (#a : Type) (t : M.prog_tree a)
   : Lemma (ensures M.tree_req t c sl0 <==> tree_req (repr_ST_of_M t c) sl0)
           (decreases t)
   = match c as c returns squash (M.tree_req t c sl0 <==> tree_req (repr_ST_of_M t c) sl0) with
-  | TCspec #a #pre #post #req #ens  tcs ->
-             repr_ST_of_M_req__Spec req ens tcs sl0
-
-  | TCspecS #a #pre #post #req #ens  tr tcs ->
-             repr_ST_of_M_req__Spec tr.r_req tr.r_ens tcs sl0
+  | TCspec #a s _ tcs ->
+             repr_ST_of_M_req__Spec s.spc_req s.spc_ens tcs sl0
 
   | TCret #a #x #sl_hint  pre post  e ->
              let c = TCret #a #x #sl_hint pre post e in
@@ -191,11 +188,8 @@ and repr_ST_of_M_ens (#a : Type) (t : M.prog_tree a)
   : Lemma (ensures M.tree_ens t c sl0 res sl1 <==> tree_ens (repr_ST_of_M t c) sl0 res sl1)
           (decreases t)
   = match c as c returns squash (M.tree_ens t c sl0 res sl1 <==> tree_ens (repr_ST_of_M t c) sl0 res sl1) with
-    | TCspec #a #pre #post #req #ens  tcs ->
-             repr_ST_of_M_ens__Spec req ens tcs sl0 res sl1
-
-  | TCspecS #a #pre #post #req #ens  tr tcs ->
-             repr_ST_of_M_ens__Spec tr.r_req tr.r_ens tcs sl0 res sl1
+  | TCspec #a s _ tcs ->
+             repr_ST_of_M_ens__Spec s.spc_req s.spc_ens tcs sl0 res sl1
 
   | TCret #a #x #sl_hint  pre post  e ->
              let c = TCret #a #x #sl_hint pre post e in
@@ -266,14 +260,10 @@ let rec repr_ST_of_M_shape
    : Lemma (requires M.tree_cond_has_shape c s)
            (ensures  prog_has_shape (repr_ST_of_M t c) (shape_ST_of_M s))
    = match c with
-   | TCspec #a #pre #post #req #ens tcs ->
+   | TCspec #a #sp {spc_pre; spc_post; spc_req; spc_ens} sh tcs ->
+            let spc = {spc_pre; spc_post; spc_req; spc_ens} in
             let M.Sspec pre_n post_n pre'_n post'_n frame_n e0' e1' = s in
-            assert (prog_has_shape' (repr_ST_of_M t (TCspec #a #pre #post #req #ens tcs))
-                                    (shape_ST_of_M (M.Sspec pre_n post_n pre'_n post'_n frame_n e0' e1')))
-                by (norm repr_ST_of_M_shape__norm; smt ())
-   | TCspecS #a #pre #post #req #ens tr tcs ->
-            let M.Sspec pre_n post_n pre'_n post'_n frame_n e0' e1' = s in
-            assert (prog_has_shape' (repr_ST_of_M t (TCspecS #a #pre #post #req #ens tr tcs))
+            assert (prog_has_shape' (repr_ST_of_M t (TCspec #a #sp spc sh tcs))
                                     (shape_ST_of_M (M.Sspec pre_n post_n pre'_n post'_n frame_n e0' e1')))
                 by (norm repr_ST_of_M_shape__norm; smt ())
    | TCret #a #x #sl_hint  pre post p ->

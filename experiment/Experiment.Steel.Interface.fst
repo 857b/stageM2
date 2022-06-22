@@ -77,6 +77,7 @@ type failure_goal_shape =
   | GShape_vprop
   | GShape_tree_cond
   | GShape_lin_cond
+  | GShape_M_prog_tree
 
 noeq
 type failure_enum =
@@ -96,6 +97,7 @@ type info =
   | Info_goal : typ -> info
   | Info_original_exn : exn -> info
   | Info_location : string -> info
+  | Info_other : string -> info
 
 noeq
 type failure_t = {
@@ -122,6 +124,7 @@ let info_to_string (fr : flags_record) (i : info) : Tac string =
       | exn -> "original exception: "^shorten_string fr (term_to_string (quote exn))
       end
   | Info_location s -> s
+  | Info_other s -> s
 
 let failure_enum_to_string (f : failure_enum) : Tac string =
   match f with

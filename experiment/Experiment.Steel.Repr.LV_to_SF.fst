@@ -22,7 +22,7 @@ let rec repr_SF_of_LV_sound
   = match_lin_cond lc
       (fun a t csm prd lc -> (sl0 : sl_f env) ->
            squash (Pervasives.norm normal_SF_of_LV (sound_SF_of_LV lc sl0 (repr_SF_of_LV lc sl0))))
-    (fun (*LCspec*) a pre post req ens csm_f -> fun sl0 -> ())
+    (fun (*LCspec*) a sp s sh csm_f -> fun sl0 -> ())
     (fun (*LCret*)  a x sl_hint prd csm_f -> fun sl0 -> ())
     begin fun (*LCbind*) a b f g f_csm f_prd cf g_csm g_prd cg -> fun sl0 ->
       repr_SF_of_LV_sound cf sl0;

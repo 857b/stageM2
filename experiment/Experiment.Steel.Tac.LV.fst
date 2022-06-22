@@ -112,7 +112,7 @@ let __normal_lc : list norm_step = [
   delta_only [`%L.map; `%L.length; `%L.mem; `%L.op_At; `%L.append; `%L.splitAt; `%L.count;
               `%Ll.initi; `%Ll.repeat;
               `%Mktuple2?._1; `%Mktuple2?._2];
-  delta_attr [`%__cond_solver__; `%__lin_cond__; `%__mask__];
+  delta_attr [`%__tac_helper__; `%__cond_solver__; `%__lin_cond__; `%__mask__];
   iota; zeta; primops
 ]
 
@@ -233,11 +233,16 @@ let __defer_sig_unification
 let build_LCspec fr : Tac unit
   =
     apply (`LCspec);
+    // sh
+    build_spec_r fr (fun () -> [Info_location "in the spec statement"]);
+    // csm_f
+    norm_lc ();
     build_eq_injection_l fr (fun () -> [Info_location "before the spec statement"])
 
 let build_LCret fr : Tac unit
   =
     apply (`__build_LCret);
+    // csm_f
     build_eq_injection_l fr (fun () -> [Info_location "at the return statement"])
 
 let rec build_LCbind fr : Tac unit
@@ -269,18 +274,9 @@ and build_lin_cond fr : Tac unit
       else let hd = (collect_app (L.index args 2)._1)._1 in
       match inspect hd with
       | Tv_FVar fv | Tv_UInst fv _ ->
-          // TODO? better solution to match
           let nd = inspect_fv fv in
-          if Nil? nd then (let _ = fail_shape () in fail "unreachable");
-          begin match L.last nd with
-          | "Tspec"  -> build_LCspec
-          | "TspecS" -> fail "TODO"
-          | "Tret"   -> build_LCret
-          | "Tbind"  -> build_LCbind
-          | "TbindP" -> fail "TODO"
-          | "Tif"    -> fail "TODO"
-          | _ -> fail_shape ()
-          end
+          match_M_prog_tree fr dummy_ctx nd
+            build_LCspec build_LCret build_LCbind (fun _ -> fail "TODO") (fun _ -> fail "TODO")
       | r -> fail_shape ()
     in
     // changes [lin_cond env t ?csm0 ?prd0]
