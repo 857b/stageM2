@@ -347,7 +347,7 @@ let build_to_repr_t fr ctx : Tac unit
                    apply_rew ctx_req eq0
         | Inl _  -> trefl ()
       end;
-      cs_try trefl fr ctx_req (fun m -> fail (m Fail_elem_index []));
+      cs_try trefl fr ctx_req (fun m -> fail (m Fail_to_repr_t []));
 
     (* [r_ens] *)
     let ctx_ens = ctx_app_loc ctx "in the ensures" in
@@ -365,7 +365,7 @@ let build_to_repr_t fr ctx : Tac unit
         | Inr () -> apply_rew ctx_ens eq1
         | Inl _  -> trefl ()
       end;
-      cs_try trefl fr ctx_ens (fun m -> fail (m Fail_elem_index []))
+      cs_try trefl fr ctx_ens (fun m -> fail (m Fail_to_repr_t []))
 
 #pop-options
 (**) private val __end_opt_1 : unit

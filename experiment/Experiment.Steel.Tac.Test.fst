@@ -35,6 +35,26 @@ let _ : elem_index #int 4 L.(0 :: ([1;3] @ [4;2;7]))
 
 #pop-options
 
+
+let test_build_to_repr_t_0 (r r' : ref nat)
+  : M.to_repr_t int (vptr r) (fun x -> vptr r') (fun h0 -> sel r h0 < 10) (fun h0 x h1 -> sel r h0 + x < sel r' h1)
+  = _ by (build_to_repr_t default_flags dummy_ctx)
+
+#push-options "--silent"
+
+[@@ expect_failure [228]]
+let test_build_to_repr_t_1 (r : ref nat) (p : (a : Type) -> (x : a) -> prop)
+  : M.to_repr_t int (vptr r) (fun x -> emp) (fun h0 -> p _ h0) (fun h0 x h1 -> True)
+  = _ by (build_to_repr_t default_flags dummy_ctx)
+
+[@@ expect_failure [228]]
+let test_build_to_repr_t_2 (r r' : ref nat)
+  : M.to_repr_t int (vptr r `star` vptr r') (fun x -> emp) (fun h0 -> (h0 (vptr r `star` vptr r'))._1 <= 10) (fun h0 x h1 -> True)
+  = _ by (build_to_repr_t default_flags dummy_ctx)
+
+#pop-options
+
+
 unfold
 let specT (a : Type) (pre : M.pre_t) (post : M.post_t a) : M.prog_tree a
   = M.Tspec a (M.spec_r_exact (M.Mkspec_r pre post (fun _ -> True) (fun _ _ _ -> True)))
