@@ -175,6 +175,16 @@ let filter_mask_split_l (#a : Type) (n0 n1 : nat) (l0 : vec n0 a) (l1 : vec n1 a
     filter_mask_true   (repeat n0  true) l0 (fun _ -> ());
     filter_mask_false  (repeat n1 false) l1 (fun _ -> ())
 
+let mask_or_sym (#n : nat) (m0 m1 : vec n bool)
+  : Lemma (mask_or m0 m1 == mask_or m1 m0)
+  = list_extensionality (mask_or m0 m1) (mask_or m1 m0) (fun i -> ())
+
+let mask_comp_or_mask_diff (#n : nat) (m0 m1 : vec n bool)
+  : Lemma (mask_comp_or m0 (mask_diff m0 m1) == mask_or m0 m1)
+  = list_extensionality (mask_comp_or m0 (mask_diff m0 m1)) (mask_or m0 m1) (fun i -> ())
+
+
+
 #push-options "--z3rlimit 20"
 
 let rec mask_perm_append_inv (#n : nat) (m : vec n bool)

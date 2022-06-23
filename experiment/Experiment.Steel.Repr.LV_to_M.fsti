@@ -133,7 +133,7 @@ val bind_g_csm'_res_env_f
         == res_env_f env (bind_csm env f_csm g_csm) g_prd)
 
 
-#push-options "--ifuel 1 --fuel 2"
+#push-options "--ifuel 1 --fuel 2 --z3rlimit 30"
 [@@ strict_on_arguments [5]] (* strict on [lc] *)
 inline_for_extraction
 let rec repr_M_of_LV
@@ -156,6 +156,10 @@ let rec repr_M_of_LV
             repr_M_of_LV (cg x))
   | LCbindP env #a #b #wp #g csm prd cg ->
       M.TCbindP #a #b #wp #g env (res_env_f env csm prd) (fun x -> repr_M_of_LV (cg x))
+  | LCif  env #a #guard #thn #els cms prd cthn cels ->
+      M.TCif #a #guard #thn #els env (res_env_f env csm prd)
+          (repr_M_of_LV cthn)
+          (repr_M_of_LV cels)
   | LCsub env #a0 #f0 csm0 prd0 cf csm1 prd1 prd_f1 ->
       let LCspec env #a #sp s sh csm_f = cf in
       let prd_f1 (x : a) : Perm.pequiv_list (sub_prd env (eij_trg_mask csm_f) (s.spc_post x) csm1) (prd1 x)

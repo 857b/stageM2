@@ -36,6 +36,10 @@ let rec repr_SF_of_LV_sound
       introduce forall (x : a) . sound_SF_of_LV (cg x) sl0 (repr_SF_of_LV (cg x) sl0)
         with repr_SF_of_LV_sound (cg x) sl0
     end
+    begin fun (*LCif*)   a guard thn els csm prd cthn cels -> fun sl0 ->
+      repr_SF_of_LV_sound cthn sl0;
+      repr_SF_of_LV_sound cels sl0
+    end
     begin fun (*LCsub*)  a f csm0 prd0 cf csm1 prd1 prd_f1 -> fun sl0 ->
       repr_SF_of_LV_sound cf sl0
     end sl0

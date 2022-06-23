@@ -447,3 +447,25 @@ let test_lin_cond__fail1 (vx : int -> vprop')
              (fun x -> M.Tret int 0 (fun _ -> [])))
       [] (fun x -> [])
   = _ by (norm_test (); build_top_lin_cond test_flags)
+
+
+let test_lin_cond__if_0 (v0 v1 v2 : vprop')
+  : LV.top_lin_cond
+        (M.Tif _ true (specT int [v0] (fun _ -> [v1])) (specT int [v0] (fun _ -> [v1])))
+        [v0; v2] (fun _ -> [v1; v2])
+  = _ by (norm_test (); build_top_lin_cond test_flags)
+
+let test_lin_cond__if_1 (v : int -> vprop')
+  : LV.top_lin_cond
+        (M.Tif _ true (specT int [v 0] (fun _ -> [v 0]))
+                      (specT int [v 1] (fun _ -> [v 1])))
+        [v 0; v 1; v 2] (fun _ -> [v 0; v 1; v 2])
+  = _ by (norm_test (); build_top_lin_cond test_flags)
+
+[@@ expect_failure [228]]
+let test_lin_cond__if_2 (v : int -> vprop')
+  : LV.top_lin_cond
+        (M.Tif _ true (specT int [v 0] (fun _ -> [v 1]))
+                      (specT int []    (fun _ -> [])))
+        [v 0] (fun _ -> [v 1])
+  = _ by (norm_test (); build_top_lin_cond test_flags)

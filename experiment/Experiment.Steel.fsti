@@ -437,26 +437,26 @@ let solve_by_wp (fr : flags_record) (t : timer) : Tac unit
       (* lc0 *)
       let t = timer_enter t "lin_cond  " in
       norm __normal_M;
-      if fr.f_dump Stage_M then dump "at stage M";
+      if fr.f_dump Stage_M then dump1 "at stage M";
       TcLV.build_top_lin_cond fr;
 
       (* lc1 *)
       let t = timer_enter t "sub_push  " in
       dismiss ();
       TcLV.norm_lc ();
-      if fr.f_dump (Stage_LV false) then dump "at stage LV (before sub_push)";
+      if fr.f_dump (Stage_LV false) then dump1 "at stage LV (before sub_push)";
       norm __normal_lc_sub_push;
-      if fr.f_dump (Stage_LV  true) then dump "at stage LV (after sub_push)";
+      if fr.f_dump (Stage_LV  true) then dump1 "at stage LV (after sub_push)";
       trefl ();
 
       (* t_Fun *)
       dismiss ();
       let t = timer_enter t "LV2SF     " in
       norm __normal_LV2SF;
-      if fr.f_dump Stage_SF then dump "at stage SF";
+      if fr.f_dump Stage_SF then dump1 "at stage SF";
       let t = timer_enter t "SF2Fun    " in
       norm __normal_Fun;
-      if fr.f_dump Stage_Fun then dump "at stage Fun";
+      if fr.f_dump Stage_Fun then dump1 "at stage Fun";
       trefl ();
 
       t
@@ -474,20 +474,20 @@ let solve_by_wp (fr : flags_record) (t : timer) : Tac unit
       (* TODO? stage prog_M_to_Fun to avoid duplication *)
       let t = timer_enter t "normal_M  " in
       norm __normal_M;
-      if fr.f_dump Stage_M then dump "at stage M";
+      if fr.f_dump Stage_M then dump1 "at stage M";
       let t = timer_enter t "normal_ST " in
       norm __normal_ST;
-      if fr.f_dump Stage_ST then dump "at stage ST";
+      if fr.f_dump Stage_ST then dump1 "at stage ST";
       let t = timer_enter t "normal_SF " in
       norm __normal_SF;
-      if fr.f_dump Stage_SF then dump "at stage SF";
+      if fr.f_dump Stage_SF then dump1 "at stage SF";
       let t = timer_enter t "normal_Fun" in
       norm __normal_Fun;
       if opt.o_elim_ret then begin
         norm __normal_Fun_elim_returns_0;
         norm __normal_Fun_elim_returns_1
       end;
-      if fr.f_dump Stage_Fun then dump "at stage Fun";
+      if fr.f_dump Stage_Fun then dump1 "at stage Fun";
       let t = timer_enter t "misc      " in
       trefl ();
 
@@ -498,7 +498,7 @@ let solve_by_wp (fr : flags_record) (t : timer) : Tac unit
     let t = timer_enter t "Fun_wp    " in
     norm __normal_M;
     norm __normal_Fun_spec;
-    if fr.f_dump Stage_WP then dump "at stage WP";
+    if fr.f_dump Stage_WP then dump1 "at stage WP";
     smt ();
 
     (* ext *)
@@ -509,7 +509,7 @@ let solve_by_wp (fr : flags_record) (t : timer) : Tac unit
       norm __normal_extract;
       t
     end else t in
-    if fr.f_dump Stage_Extract then dump "at stage Extract";
+    if fr.f_dump Stage_Extract then dump1 "at stage Extract";
     trefl ();
     timer_stop t
 

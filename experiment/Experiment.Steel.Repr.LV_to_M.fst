@@ -364,6 +364,21 @@ let sound_repr_M_of_LV__LCbindP
     FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp;
     intro_sound_M_of_LV _ _ (fun sl0 -> ()) (fun sl0 y sl2 sl_rem -> ())
 
+
+let sound_repr_M_of_LV__LCif
+      (env : vprop_list)
+      (a : Type u#a) (guard : bool) (thn els : M.prog_tree a)
+      (csm : csm_t env) (prd : prd_t a)
+      (cthn : lin_cond env thn csm prd)
+      (cels : lin_cond env els csm prd)
+
+      (_ : squash (lcsub_at_leaves (LCif env #a #guard #thn #els csm prd cthn cels)))
+      (h_thn : squash (sound_repr_M_of_LV cthn))
+      (h_els : squash (sound_repr_M_of_LV cels))
+  : squash (sound_repr_M_of_LV (LCif env #a #guard #thn #els csm prd cthn cels))
+  =
+    intro_sound_M_of_LV _ _ (fun sl0 -> ()) (fun sl0 y sl2 sl_rem -> ())
+
 #pop-options
 
 // FIXME: without `--ide_id_info_off` the interactive mode takes a lot of time
@@ -443,6 +458,11 @@ let rec repr_M_of_LV_sound
       sound_repr_M_of_LV__LCbindP env a b wp g csm prd cg ()
         (fun (x : a) -> repr_M_of_LV_sound (cg x))
     end
+    begin fun (*LCif*)   a guard thn els csm prd cthn cels -> fun _ ->
+      sound_repr_M_of_LV__LCif env a guard thn els csm prd cthn cels ()
+        (repr_M_of_LV_sound cthn)
+        (repr_M_of_LV_sound cels)
+    end
     begin fun (*LCsub*)  a0 f0 csm0 prd0 cf csm1 prd1 prd_f1 -> fun _ ->
       match_lin_cond cf
         (fun a f csm0 prd0 cf ->
@@ -458,6 +478,7 @@ let rec repr_M_of_LV_sound
       (fun (*LCret*)   a x sl_hint prd csm_f -> fun _ _ _ _ -> false_elim ())
       (fun (*LCbind*)  a b f g f_csm f_prd cf g_csm g_prd cg -> fun _ _ _ _ -> false_elim ())
       (fun (*LCbindP*) a b wp g csm prd cg -> fun _ _ _ _ -> false_elim ())
+      (fun (*LCif*)    a guard thn els csm prd cthn cels -> fun _ _ _ _ -> false_elim ())
       (fun (*LCsub*)   a0 f0 csm0 prd0 cf csm1 prd1 prd_f1 -> fun _ _ _ _ -> false_elim ())
       csm1 prd1 prd_f1 ()
     end ()

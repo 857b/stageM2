@@ -109,7 +109,7 @@ let test_build_pequiv_list
 // TODO? propagate a partial [prd]
 
 let __normal_lc : list norm_step = [
-  delta_only [`%L.map; `%L.length; `%L.mem; `%L.op_At; `%L.append; `%L.splitAt; `%L.count;
+  delta_only [`%L.map; `%L.length; `%L.mem; `%L.op_At; `%L.append; `%L.splitAt; `%L.count; `%L.map2;
               `%Ll.initi; `%Ll.repeat;
               `%Mktuple2?._1; `%Mktuple2?._2];
   delta_attr [`%__tac_helper__; `%__cond_solver__; `%__lin_cond__; `%__mask__];
@@ -122,18 +122,27 @@ let norm_lc () : Tac unit =
 
 #push-options "--fuel 0 --ifuel 0"
 
+[@@ __mask__]
+unfold
+let filter_diff (#a : Type) (#n : nat) (m0 m1 : Ll.vec n bool) (l : Ll.vec n a) : list a
+  = filter_mask (mask_diff m0 m1) (filter_mask (mask_not m0) l)
+
+[@@ __cond_solver__]
+let pequiv_list_refl (#a : Type) (l : list a)
+  : Perm.pequiv_list l l
+  = Perm.perm_f_to_list (Perm.pequiv_refl l)
+
 [@@ __cond_solver__]
 let lcsub_add_csm
       (env : vprop_list) (#a : Type) (t : M.prog_tree a)
       (csm0 : csm_t env) (prd0 : prd_t a)
       (lc : lin_cond env t csm0 prd0)
       (csm1 : csm_t env) (prd1 : prd_t a)
-      (prd1_f : (x : a) -> Perm.pequiv_list
-                L.(prd0 x @ filter_mask (mask_diff csm0 csm1) (filter_mask (mask_not csm0) env))
-                (prd1 x))
-  : lin_cond env t (mask_comp_or csm0 (mask_diff csm0 csm1)) prd1
+      (prd1_f : (x : a) -> Perm.pequiv_list L.(prd0 x @ filter_diff csm0 csm1 env) (prd1 x))
+  : lin_cond env t (mask_or csm0 csm1) prd1
   =
     let csm' = mask_diff csm0 csm1 in
+    (**) mask_comp_or_mask_diff csm0 csm1;
     LCsub env csm0 prd0 lc csm' prd1 prd1_f
 
 /// [LCret] with [prd = sl_hint]
@@ -145,6 +154,14 @@ let __build_LCret
   : lin_cond env (M.Tret a x sl_hint) (eij_trg_mask csm_f) sl_hint
   = LCret env #a #x #sl_hint sl_hint csm_f
 
+/// To infer a [Tbind], we first infer the left side [f] then the right side [g] in the resulting environment.
+/// In order to use [LCbind], we must ensure that [g] consumes all the [vprop'] produced by [f] (that is, the first
+/// part of the resulting environment) and that the other consumed [vprop'] ([g_csm]) and all the variables produced
+/// by [g] ([g_prd], which includes the subset of [f_prd] that was not consumed by the first inferred signature)
+/// are independent of the bound variable [x].
+/// By independence of [g_csm], we mean that the consumption of a [vprop'] cannot depend on [x], the [vprop']
+/// themselves are necessarily independent of [x] since they are from [env].
+/// We use a [LCsub] on [g] to force the consumption of [f_prd]. The independence is ensured by [eqs].
 [@@ __cond_solver__]
 let __build_LCbind
       (env : vprop_list)
@@ -156,11 +173,10 @@ let __build_LCbind
       (g_csm : csm_t (filter_mask (mask_not f_csm) env)) (g_prd : prd_t b)
       (eqs : (x : a) -> squash (
             let n0 = L.length (f_prd x) in
-            L.splitAt_length n0 (g_csm0 x);
-            let m : Ll.vec n0 bool = (L.splitAt n0 (g_csm0 x))._1 in
-            let add = filter_mask (mask_not m) (f_prd x) in
+            (**) L.splitAt_length n0 (g_csm0 x);
+            let g_csm0_f_prd : Ll.vec n0 bool = (L.splitAt n0 (g_csm0 x))._1 in
             eq2 #(list bool) g_csm (L.splitAt (L.length (f_prd x)) (g_csm0 x))._2 /\
-            g_prd == (fun (y : b) -> L.(g_prd0 x y @ add))))
+            g_prd == (fun (y : b) -> L.(g_prd0 x y @ filter_mask (mask_not g_csm0_f_prd) (f_prd x)))))
   : lin_cond env (M.Tbind a b f g) (bind_csm env f_csm g_csm) g_prd
   =
     LCbind env #a #b #f #g
@@ -197,6 +213,7 @@ let __build_LCbind
               }
             end);
 
+        (**) mask_comp_or_mask_diff (g_csm0 x) g_csm1;
         lcsub_add_csm env1 (g x) (g_csm0 x) (g_prd0 x) (cg x) g_csm1 g_prd
           (fun (y : b) ->
             calc (==) {
@@ -205,7 +222,7 @@ let __build_LCbind
               L.(g_prd0 x y @ filter_mask (mask_not g_csm0a) (f_prd x));
             };
             calc (==) {
-              filter_mask (mask_diff (g_csm0 x) g_csm1) (filter_mask (mask_not (g_csm0 x)) env1) <: vprop_list;
+              filter_diff (g_csm0 x) g_csm1 env1 <: vprop_list;
             == { filter_mask_diff_comm (g_csm0 x) g_csm1 env1 }
               filter_mask (filter_mask g_csm1 (mask_not (g_csm0 x))) (filter_mask g_csm1 env1);
             == { }
@@ -215,8 +232,7 @@ let __build_LCbind
                  filter_mask_split_l n0 n1 (f_prd x) (filter_mask (mask_not f_csm) env) }
               filter_mask (mask_not g_csm0a) (f_prd x);
             };
-            Perm.perm_f_to_list (Perm.pequiv_refl (g_prd y))))
-#pop-options
+            pequiv_list_refl (g_prd y)))
 
 [@@ __cond_solver__]
 let __build_LCbindP
@@ -231,6 +247,39 @@ let __build_LCbindP
   : lin_cond env (M.TbindP a b wp g) csm prd
   =
     LCbindP env #a #b #wp #g csm prd (fun x -> eqs x; cg x)
+
+/// To infer a [Tif], we first infer independently the two branches.
+/// In order to use [LCif] we then use a [LCsub] on each branch so that they have the same signature.
+/// We use the union ([mask_or]) of the consumed [vprop'] of the two branch.
+/// For the produced variables, we requires an equivalence between:
+/// - the [vprop'] produced by [thn] concatenated with the [vprop'] of [env] consumed by [els] but not by [thn]
+/// - the [vprop'] produced by [els] concatenated with the [vprop'] of [env] consumed by [thn] but not by [els]
+/// We arbitrarily choose the first as the production of [LCif] and we use the equivalence to change the signature
+/// of [els].
+[@@ __cond_solver__]
+let __build_LCif
+      (env : vprop_list)
+      (a : Type u#a) (guard : bool) (thn els : M.prog_tree a)
+      (thn_csm : csm_t env) (thn_prd : prd_t a)
+      (cthn : lin_cond env thn thn_csm thn_prd)
+      (els_csm : csm_t env) (els_prd : prd_t a)
+      (cels : lin_cond env els els_csm els_prd)
+      (veq : (x : a) -> Perm.pequiv_list L.(els_prd x @ filter_diff els_csm thn_csm env)
+                                        L.(thn_prd x @ filter_diff thn_csm els_csm env))
+  : lin_cond env (M.Tif a guard thn els)
+                 (mask_or thn_csm els_csm) L.(fun x -> thn_prd x @ filter_diff thn_csm els_csm env)
+  =
+    let prd (x : a) = L.(thn_prd x @ filter_diff thn_csm els_csm env) in
+    (**) mask_or_sym thn_csm els_csm;
+    LCif env #a #guard #thn #els
+         (mask_or thn_csm els_csm) prd
+         (lcsub_add_csm env thn thn_csm thn_prd cthn
+                        els_csm prd
+                        (fun x -> pequiv_list_refl (prd x)))
+         (lcsub_add_csm env els els_csm els_prd cels
+                        thn_csm prd veq)
+
+#pop-options
 
 
 [@@ __cond_solver__]
@@ -292,6 +341,18 @@ and build_LCbindP fr : Tac unit
       cs_try trefl fr ctx (fun m -> fail (m (Fail_dependency "csm" x) []));
       cs_try trefl fr ctx (fun m -> fail (m (Fail_dependency "prd" x) []))
 
+and build_LCif fr : Tac unit
+  =
+    apply (`__build_LCif);
+    // cthn
+    build_lin_cond fr;
+    // cels
+    build_lin_cond fr;
+    // veq
+    let c = intro () in
+    norm_lc ();
+    build_pequiv_list fr (fun () -> [Info_location "at the end of the if statement"])
+
 and build_lin_cond fr : Tac unit
   =
     let build_tac : flags_record -> Tac unit =
@@ -306,7 +367,7 @@ and build_lin_cond fr : Tac unit
       | Tv_FVar fv | Tv_UInst fv _ ->
           let nd = inspect_fv fv in
           match_M_prog_tree fr dummy_ctx nd
-            build_LCspec build_LCret build_LCbind build_LCbindP (fun _ -> fail "TODO")
+            build_LCspec build_LCret build_LCbind build_LCbindP build_LCif
       | r -> fail_shape ()
     in
     // changes [lin_cond env t ?csm0 ?prd0]
@@ -328,7 +389,7 @@ let __build_top_lin_cond
       (veq : (x : a) -> Perm.pequiv_list L.(prd0 x @ filter_mask (mask_not csm0) pre) (post x))
   : top_lin_cond t pre post
   =
-    (**) Ll.list_extensionality (mask_comp_or csm0 (mask_diff csm0 (csm_all pre))) (csm_all pre) (fun i -> ());
+    (**) Ll.list_extensionality (mask_or csm0 (csm_all pre)) (csm_all pre) (fun i -> ());
     lcsub_add_csm pre t csm0 prd0 lc (csm_all pre) post
       (fun x ->
         (**) filter_mask_true (mask_diff csm0 (csm_all pre)) (filter_mask (mask_not csm0) pre) (fun i -> ());

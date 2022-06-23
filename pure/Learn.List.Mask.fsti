@@ -29,6 +29,10 @@ val mask_not_len (#n : nat) ($mask : vec n bool)
   : Lemma (mask_len (mask_not mask) = n - mask_len mask)
           [SMTPat (mask_len (mask_not mask))]
 
+[@@ __mask__]
+let mask_or (#n : nat) (m0 m1 : vec n bool) : vec n bool
+  = map2 ( || ) m0 m1
+
 let mask_le (#n : nat) (m0 m1 : vec n bool)
   : prop
   = forall (i : Fin.fin n) . {:pattern (index m0 i)} index m0 i ==> index m1 i
@@ -191,6 +195,12 @@ val filter_mask_diff_comm (#a : Type) (#n : nat) (m0 m1 : vec n bool) (l : vec n
 val filter_mask_split_l (#a : Type) (n0 n1 : nat) (l0 : vec n0 a) (l1 : vec n1 a)
   : Lemma (filter_mask (mask_split_l n0 n1) (l0 @ l1) == l0)
 
+val mask_or_sym (#n : nat) (m0 m1 : vec n bool)
+  : Lemma (mask_or m0 m1 == mask_or m1 m0)
+
+val mask_comp_or_mask_diff (#n : nat) (m0 m1 : vec n bool)
+  : Lemma (mask_comp_or m0 (mask_diff m0 m1) == mask_or m0 m1)
+
 
 #push-options "--ifuel 1 --fuel 1"
 
@@ -281,6 +291,8 @@ let mask_or_pequiv_append
     (**) filter_mask_or_append m0 m1 l;
     Perm.perm_cast _ (mask_or_append_f m0 m1)
 
+
+(*** [filter_mask_dl], [filter_mask_fl] *)
 
 [@@__mask__]
 let rec filter_mask_dl (#len : nat) (mask : vec len bool) (ts : vec len Type) (xs : Dl.dlist ts)

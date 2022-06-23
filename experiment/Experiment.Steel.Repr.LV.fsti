@@ -224,6 +224,12 @@ type lin_cond :
       (csm : csm_t env) -> (prd : prd_t b) ->
       (cg : ((x : a) -> lin_cond env (g x) csm prd)) ->
       lin_cond env (M.TbindP a b wp g) csm prd
+  | LCif :
+      (env : vprop_list) ->
+      (#a : Type u#a) -> (#guard : bool) -> (#thn : M.prog_tree a) -> (#els : M.prog_tree a) ->
+      (csm : csm_t env) -> (prd : prd_t a) ->
+      (cthn : lin_cond env thn csm prd) -> (cels : lin_cond env els csm prd) ->
+      lin_cond env (M.Tif a guard thn els) csm prd
   | LCsub :
       (env : vprop_list) -> (#a : Type u#a) -> (#f : M.prog_tree a) ->
       (csm : csm_t env) -> (prd : prd_t a) ->
@@ -278,6 +284,15 @@ let match_lin_cond
                                   csm0 == csm /\ prd0 == prd /\
                                   ct0 == LCbindP env #a #b #wp #g csm prd cg)
                         (ensures fun _ -> True))
+      (c_LCif   : (a : Type u#a) -> (guard : bool) -> (thn : M.prog_tree a) -> (els : M.prog_tree a) ->
+                  (csm : csm_t env) -> (prd : prd_t a) ->
+                  (cthn : lin_cond env thn csm prd {cthn << ct0}) ->
+                  (cels : lin_cond env els csm prd {cels << ct0}) ->
+                  Pure (r _ _ _ _ (LCif env #a #guard #thn #els csm prd cthn cels))
+                       (requires a0 == a /\ t0 == M.Tif a guard thn els /\
+                                 csm0 == csm /\ prd0 == prd /\
+                                 ct0 == LCif env #a #guard #thn #els csm prd cthn cels)
+                       (ensures fun _ -> True))
       (c_LCsub  : (a : Type u#a) -> (f : M.prog_tree a) ->
                   (csm : csm_t env) -> (prd : prd_t a) ->
                   (cf : lin_cond env f csm prd {cf << ct0}) ->
@@ -294,6 +309,7 @@ let match_lin_cond
   | LCret   env #a #x #sl_hint prd csm_f                  -> c_LCret   a x sl_hint prd csm_f
   | LCbind  env #a #b #f #g f_csm f_prd cf g_csm g_prd cg -> c_LCbind  a b f g f_csm f_prd cf g_csm g_prd cg
   | LCbindP env #a #b #wp #g csm prd cg                   -> c_LCbindP a b wp g csm prd cg
+  | LCif    env #a #guard #thn #els csm prd cthn cels     -> c_LCif    a guard thn els csm prd cthn cels
   | LCsub   env #a #f csm prd cf csm' prd' prd_f          -> c_LCsub   a f csm prd cf csm' prd' prd_f
 
 
@@ -325,6 +341,8 @@ let rec tree_req
         tree_req (cg x) (res_sel sl0 f_csm sl_itm))
   | LCbindP env #a #b #wp #g csm prd cg ->
       wp (fun x -> tree_req (cg x) sl0)
+  | LCif   env #a #guard csm prd cthn cels ->
+      if guard then tree_req cthn sl0 else tree_req cels sl0
   | LCsub  env #a #f csm prd cf csm' prd' prd_f ->
       tree_req cf sl0
 
@@ -345,6 +363,8 @@ and tree_ens
         tree_ens (cg x) (res_sel sl0 f_csm sl_itm) res sl1)
   | LCbindP env #a #b #wp #g csm prd cg ->
       (exists (x:a) . as_ensures wp x /\ tree_ens (cg x) sl0 res sl1)
+  | LCif   env #a #guard csm prd cthn cels ->
+      if guard then tree_ens cthn sl0 res sl1 else tree_ens cels sl0 res sl1
   | LCsub  env #a #f csm prd cf csm' prd' prd_f ->
       (exists (sl1' : sl_f (prd res)) . (
         (**) Ll.pat_append ();
@@ -378,6 +398,8 @@ let rec lcsub_at_leaves
            lcsub_at_leaves cf /\ (forall (x : a) . lcsub_at_leaves (cg x))
   | LCbindP _ #a _ _ cg ->
            (forall (x : a) . lcsub_at_leaves (cg x))
+  | LCif   _ _ _ cthn cels ->
+           lcsub_at_leaves cthn /\ lcsub_at_leaves cels
   | LCsub  _ _ _ _ _ _ _ ->
            False
 
@@ -534,6 +556,24 @@ let lcsubp_LCbindP
     LCbindP env #a #b #wp #g (bind_csm env csm0 csm1) prd1 rc_g
 
 
+(***** [LCif] *)
+
+[@@ __lin_cond__]
+let lcsubp_LCif
+      (env : vprop_list)
+      (a : Type u#a) (guard : bool) (thn : M.prog_tree a) (els : M.prog_tree a)
+      (csm0 : csm_t env) (prd0 : prd_t a)
+      (cthn : lin_cond env thn csm0 prd0) (cels : lin_cond env els csm0 prd0)
+      (csm1 : csm_t (filter_mask (mask_not csm0) env)) (prd1 : prd_t a)
+      (prd_f1 : (x : a) -> Perm.pequiv_list (sub_prd env csm0 (prd0 x) csm1) (prd1 x))
+
+      (rc_thn : lcsubp_tr (LCsub env csm0 prd0 cthn csm1 prd1 prd_f1))
+      (rc_els : lcsubp_tr (LCsub env csm0 prd0 cels csm1 prd1 prd_f1))
+  : lcsubp_tr (LCsub env _ _ (LCif env #a #guard #thn #els csm0 prd0 cthn cels) csm1 prd1 prd_f1)
+  =
+    LCif env #a #guard #thn #els (bind_csm env csm0 csm1) prd1 rc_thn rc_els
+
+
 (***** [LCsub] *)
 
 [@@ __lin_cond__]
@@ -655,6 +695,8 @@ let rec lc_sub_push
       LCbind env f_csm f_prd (lc_sub_push cf) g_csm g_prd (fun x -> lc_sub_push (cg x))
   | LCbindP env #a #b #wp csm0 prd0 cg ->
       LCbindP env #a #b #wp csm0 prd0 (fun x -> lc_sub_push (cg x))
+  | LCif   env #a #guard #thn #els csm0 prd0 cthn cels ->
+      LCif env #a #guard #thn #els csm0 prd0 (lc_sub_push cthn) (lc_sub_push cels)
   | LCsub  env csm prd cf csm' prd' prd_f ->
       lc_sub_push_aux cf csm' prd' prd_f
 
@@ -693,6 +735,10 @@ and lc_sub_push_aux
   | LCbindP env #a #b #wp #g csm0 prd0 cg ->
       lcsubp_LCbindP env a b wp g csm0 prd0 cg csm' prd' prd_f
         (fun x -> lc_sub_push_aux #env #b #(g x) #csm0 #prd0 (cg x) csm' prd' prd_f)
+  | LCif   env #a #guard #thn #els csm0 prd0 cthn cels ->
+      lcsubp_LCif env a guard thn els csm0 prd0 cthn cels csm' prd' prd_f
+        (lc_sub_push_aux cthn csm' prd' prd_f)
+        (lc_sub_push_aux cels csm' prd' prd_f)
   | LCsub  env #a #f csm0 prd0 cf csm1 prd1 prd_f1 ->
       let csm2 : csm_t (filter_mask (mask_not (bind_csm env csm0 csm1)) env) = csm' in
       let prd2 : prd_t a = prd' in
