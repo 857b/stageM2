@@ -105,7 +105,8 @@ let repr_of_steel
     repr_steel = (fun pre'0 post'0 c ->
                     let TCspec #a #sp s sh tcs = c in
                     let SpecSteel tr = U.cast (spec_r_steel pre post req ens s) sh in
-                    repr_of_steel_steel a tr.r_pre tr.r_post tr.r_req tr.r_ens
+                    let {r_pre; r_post; r_req; r_ens} = tr in
+                    repr_of_steel_steel a r_pre r_post r_req r_ens
                                         tcs (repr_steel_of_steel tr f))
   }
 
@@ -121,7 +122,8 @@ let repr_of_steel_ghost
     repr_steel = (fun pre'0 post'0 c ->
                     let TCspec #a #sp s sh tcs = c in
                     let SpecSteel tr = U.cast (spec_r_steel pre post req ens s) sh in
-                    repr_of_steel_ghost_steel a opened tr.r_pre tr.r_post tr.r_req tr.r_ens
+                    let {r_pre; r_post; r_req; r_ens} = tr in
+                    repr_of_steel_ghost_steel a opened r_pre r_post r_req r_ens
                                         tcs (repr_steel_of_steel_ghost tr f))
   }
 

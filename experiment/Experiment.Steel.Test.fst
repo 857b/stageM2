@@ -716,11 +716,11 @@ let test3_LV' (r0 r1 : ref U32.t)
       x <-- call read r0;
       call (write r1) U32.(x +%^ 1ul)
     ) #(_ by (mk_steel [O_LV; Timer; Extract])) ())
-// time specs     : 106ms
-// time lin_cond  : 184ms
-// time sub_push  : 36ms
-// time LV2SF     : 61ms
+// time specs     : 180ms
+// time lin_cond  : 254ms
+// time sub_push  : 40ms
+// time LV2SF     : 67ms
 // time SF2Fun    : 3ms
-// time Fun_wp    : 18ms
-// time extract   : 151ms
-// total time : 559ms
+// time Fun_wp    : 20ms
+// time extract   : 49ms
+// total time : 613ms
