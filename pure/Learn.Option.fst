@@ -20,6 +20,10 @@ let bind #a #b (x : option a) (f : a -> option b) : option b
   | None   -> None
   | Some x -> f x
 
+let dflt #a (x : a) (y : option a) : a
+  = match y with
+  | Some y -> y
+  | None   -> x
 
 let rec traverse_list (#a : Type) (l : list (option a))
   : Tot (option (list a)) (decreases l)

@@ -377,14 +377,14 @@ let test_LCspec (v0 v1 : vprop') (vx0 : int -> vprop')
   : lin_cond_r [v0; v1] (specT int [v0] (fun x -> [vx0 x]))
   = _ by (
     norm_test (); apply (`Mklin_cond_r);
-    build_LCspec test_flags
+    build_LCspec test_flags None
   )
 
 let test_LCret (v0 v1 : vprop') (vx0 : int -> vprop')
   : lin_cond_r [v0; v1; vx0 0] (M.Tret int 0 (fun x -> [v1; vx0 x]))
   = _ by (
     norm_test (); apply (`Mklin_cond_r);
-    build_LCret test_flags
+    build_LCret test_flags None
   )
 
 let test_LCbind (v0 v1 v2 v3 : vprop') (vx0 vx1 : int -> vprop')
@@ -392,7 +392,7 @@ let test_LCbind (v0 v1 v2 v3 : vprop') (vx0 vx1 : int -> vprop')
                                    (fun x -> specT int [vx0 x; v1] (fun y -> [vx1 y])))
   = _ by (
     norm_test (); apply (`Mklin_cond_r);
-    build_LCbind test_flags
+    build_LCbind test_flags None
   )
 
 let test_LCbindP_0 (v0 v1 : vprop') (vx0 : int -> vprop') (wp : pure_wp int)
@@ -400,7 +400,7 @@ let test_LCbindP_0 (v0 v1 : vprop') (vx0 : int -> vprop') (wp : pure_wp int)
         (M.TbindP int int wp (fun x -> specT int [v0] (fun y -> [vx0 y])))
   = _ by (
     norm_test (); apply (`Mklin_cond_r);
-    build_LCbindP test_flags
+    build_LCbindP test_flags None
   )
 
 let test_LCbindP_1 (v0 v1 : vprop') (vx0 : int -> vprop') (wp : pure_wp int)
@@ -410,7 +410,7 @@ let test_LCbindP_1 (v0 v1 : vprop') (vx0 : int -> vprop') (wp : pure_wp int)
     norm_test (); apply (`Mklin_cond_r);
     apply (`LV.LCbindP);
     let x = intro () in
-    build_lin_cond test_flags
+    build_lin_cond test_flags None
   )
 
 [@@ expect_failure [228]]
@@ -419,7 +419,7 @@ let test_LCbindP_2 (vx0 : int -> vprop') (wp : pure_wp int)
         (M.TbindP int int wp (fun x -> specT int [] (fun y -> [vx0 x])))
   = _ by (
     norm_test (); apply (`Mklin_cond_r);
-    build_LCbindP test_flags
+    build_LCbindP test_flags None
   )
 
 
@@ -437,9 +437,8 @@ let test_lin_cond1 (v : vprop') (vx : int -> vprop')
       [v; vx 0] (fun x -> [v; vx x])
   = _ by (build_top_lin_cond test_flags)
 
-/// Contrary to [Tac.MCond] we do not propagate the post when it is known so [sl_hint] is always needed when a [Tret]
-/// introduces a dependency.
-[@@ expect_failure [228]]
+/// This example succeeds thanks to the propagation of a production hind ([prd_hint]) which allows to use the top-level
+/// post-condition to infer the dependency on [x] introduced by the [M.Tret].
 let test_lin_cond__ret_hint0 (vx : int -> vprop')
   : LV.top_lin_cond
       (M.Tret int 0 (fun _ -> []))
@@ -449,6 +448,23 @@ let test_lin_cond__ret_hint0 (vx : int -> vprop')
 let test_lin_cond__ret_hint1 (vx : int -> vprop')
   : LV.top_lin_cond
       (M.Tret int 0 (fun x -> [vx x]))
+      [vx 0] (fun x -> [vx x])
+  = _ by (build_top_lin_cond test_flags)
+
+[@@ expect_failure [228]]
+let test_lin_cond__ret_hint2 (vx : int -> vprop')
+  : LV.top_lin_cond
+      (M.Tbind int int
+         (M.Tret int 0 (fun _ -> []))
+         (fun x -> M.Tret int x (fun _ -> [])))
+      [vx 0] (fun x -> [vx x])
+  = _ by (build_top_lin_cond test_flags)
+
+let test_lin_cond__ret_hint3 (vx : int -> vprop')
+  : LV.top_lin_cond
+      (M.Tbind int int
+         (M.Tret int 0 (fun x -> [vx x]))
+         (fun x -> M.Tret int x (fun _ -> [])))
       [vx 0] (fun x -> [vx x])
   = _ by (build_top_lin_cond test_flags)
 
@@ -488,4 +504,33 @@ let test_lin_cond__if_2 (v : int -> vprop')
         (M.Tif _ true (specT int [v 0] (fun _ -> [v 1]))
                       (specT int []    (fun _ -> [])))
         [v 0] (fun _ -> [v 1])
+  = _ by (norm_test (); build_top_lin_cond test_flags)
+
+[@@ expect_failure [228]]
+let test_lin_cond__if_3 (vx : int -> vprop')
+  : LV.top_lin_cond
+        (M.Tbind int int
+          (M.Tif _ true (M.Tret int 0 (fun _ -> []))
+                        (M.Tret int 0 (fun _ -> [])))
+          (fun x -> M.Tret int x (fun _ -> [])))
+        [vx 0] (fun x -> [vx x])
+  = _ by (norm_test (); build_top_lin_cond test_flags)
+
+let test_lin_cond__if_3 (vx : int -> vprop')
+  : LV.top_lin_cond
+        (M.Tbind int int
+          (M.Tif _ true (M.Tret int 0 (fun x -> [vx x]))
+                        (M.Tret int 0 (fun _ -> [])))
+          (fun x -> M.Tret int x (fun _ -> [])))
+        [vx 0] (fun x -> [vx x])
+  = _ by (norm_test (); build_top_lin_cond test_flags)
+
+[@@ expect_failure [228]]
+let test_lin_cond__if_4 (vx : int -> vprop')
+  : LV.top_lin_cond
+        (M.Tbind int int
+          (M.Tif _ true (M.Tret int 0 (fun _ -> []))
+                        (M.Tret int 0 (fun x -> [vx x])))
+          (fun x -> M.Tret int x (fun _ -> [])))
+        [vx 0] (fun x -> [vx x])
   = _ by (norm_test (); build_top_lin_cond test_flags)

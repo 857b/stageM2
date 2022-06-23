@@ -106,8 +106,6 @@ let test_build_pequiv_list
 
 (*** Building a [lin_cond] *)
 
-// TODO? propagate a partial [prd]
-
 let __normal_lc : list norm_step = [
   delta_only [`%L.map; `%L.length; `%L.mem; `%L.op_At; `%L.append; `%L.splitAt; `%L.count; `%L.map2;
               `%Ll.initi; `%Ll.repeat;
@@ -118,6 +116,15 @@ let __normal_lc : list norm_step = [
 
 let norm_lc () : Tac unit =
   norm __normal_lc
+
+
+/// Contrary to what is done in [Tac.MCond], were we propagate the [?post] of [M.tree_cond t pre ?post] as a concrete
+/// term when it is known, we always call our tactics on goals [lin_cond env t ?csm ?prd] where [?prd] is an uvar.
+/// Instead when we have a (possibly partial) constraint on [?prd], we first infer a [lin_cond] then we use [LCsub]
+/// to satisfy the constraint. However, the knowledge of the constraints is useful for introducing dependencies in
+/// [LCret]. For this reason, we propagate some [prd_hint] in the context.
+/// Currently we replicate the behaviour of [Tac.MCond] for the introduction of dependencies.
+type prd_hint (#a : Type) (prd : prd_t a) = unit
 
 
 #push-options "--fuel 0 --ifuel 0"
@@ -150,9 +157,10 @@ let lcsub_add_csm
 let __build_LCret
       (env : vprop_list)
       (a : Type u#a) (x : a) (sl_hint : M.post_t a)
-      (csm_f : eq_injection_l (sl_hint x) env)
-  : lin_cond env (M.Tret a x sl_hint) (eij_trg_mask csm_f) sl_hint
-  = LCret env #a #x #sl_hint sl_hint csm_f
+      (prd : prd_t a) (prd_h : prd_hint sl_hint -> prd_hint prd)
+      (csm_f : eq_injection_l (prd x) env)
+  : lin_cond env (M.Tret a x sl_hint) (eij_trg_mask csm_f) prd
+  = LCret env #a #x #sl_hint prd csm_f
 
 /// To infer a [Tbind], we first infer the left side [f] then the right side [g] in the resulting environment.
 /// In order to use [LCbind], we must ensure that [g] consumes all the [vprop'] produced by [f] (that is, the first
@@ -248,7 +256,8 @@ let __build_LCbindP
   =
     LCbindP env #a #b #wp #g csm prd (fun x -> eqs x; cg x)
 
-/// To infer a [Tif], we first infer independently the two branches.
+/// To infer a [Tif], we first infer independently the two branches (except for the [prd_hint] which allow the
+/// production of the [thn] branch to be used as a hint for the [els] branch).
 /// In order to use [LCif] we then use a [LCsub] on each branch so that they have the same signature.
 /// We use the union ([mask_or]) of the consumed [vprop'] of the two branch.
 /// For the produced variables, we requires an equivalence between:
@@ -263,7 +272,7 @@ let __build_LCif
       (thn_csm : csm_t env) (thn_prd : prd_t a)
       (cthn : lin_cond env thn thn_csm thn_prd)
       (els_csm : csm_t env) (els_prd : prd_t a)
-      (cels : lin_cond env els els_csm els_prd)
+      (cels : prd_hint thn_prd -> lin_cond env els els_csm els_prd)
       (veq : (x : a) -> Perm.pequiv_list L.(els_prd x @ filter_diff els_csm thn_csm env)
                                         L.(thn_prd x @ filter_diff thn_csm els_csm env))
   : lin_cond env (M.Tif a guard thn els)
@@ -276,7 +285,7 @@ let __build_LCif
          (lcsub_add_csm env thn thn_csm thn_prd cthn
                         els_csm prd
                         (fun x -> pequiv_list_refl (prd x)))
-         (lcsub_add_csm env els els_csm els_prd cels
+         (lcsub_add_csm env els els_csm els_prd (cels ())
                         thn_csm prd veq)
 
 #pop-options
@@ -292,9 +301,10 @@ let __defer_sig_unification
   : lin_cond env t csm1 prd1
   = lc
 
-/// The following tactics solve goals of the form [lin_cond env t ?csm ?prd]
+/// The following tactics, [build_* fr prd_hint_b] solve goals of the form [lin_cond env t ?csm ?prd],
+/// using an optional hint [prd_hint_b : option binder] which should be a binder of type [prd_hint prd].
 
-let build_LCspec fr : Tac unit
+let build_LCspec fr (_ : option binder) : Tac unit
   =
     apply (`LCspec);
     // sh
@@ -303,21 +313,28 @@ let build_LCspec fr : Tac unit
     norm_lc ();
     build_eq_injection_l fr (fun () -> [Info_location "before the spec statement"])
 
-let build_LCret fr : Tac unit
+let build_LCret fr prd_hint_b : Tac unit
   =
     apply (`__build_LCret);
+    // prd_h
+    // If we have an hint from the context, we ignore any hint annotated on the return. This is the behaviour of
+    // [Tac.MCond]. It should be fine to keep this behaviour here as long as it is only used for introducing
+    // dependencies. If it were to be used for smt fallback, since the hint inferred from the context can be
+    // partial, it could be better to use the hint annotated on the return if it is non-empty.
+    let ret_hint = intro () in
+    exact (binder_to_term (Opt.dflt ret_hint prd_hint_b));
     // csm_f
     build_eq_injection_l fr (fun () -> [Info_location "at the return statement"])
 
-let rec build_LCbind fr : Tac unit
+let rec build_LCbind fr prd_hint_b : Tac unit
   =
     apply (`__build_LCbind);
     // cf
-    build_lin_cond fr;
+    build_lin_cond fr None;
     // cg
     let x = intro () in
     norm_lc ();
-    build_lin_cond fr;
+    build_lin_cond fr prd_hint_b;
     // [g_csm <- ...], [g_prd <- ...]
     let x = intro () in
     norm_lc ();
@@ -326,12 +343,12 @@ let rec build_LCbind fr : Tac unit
       cs_try trefl fr ctx (fun m -> fail (m (Fail_dependency "csm" x) []));
       cs_try trefl fr ctx (fun m -> fail (m (Fail_dependency "prd" x) []))
 
-and build_LCbindP fr : Tac unit
+and build_LCbindP fr prd_hint_b : Tac unit
   =
     apply (`__build_LCbindP);
     // cg
     let x = intro () in
-    build_lin_cond fr;
+    build_lin_cond fr prd_hint_b;
     // 
     // [g_csm <- ...], [g_prd <- ...]
     let x = intro () in
@@ -341,21 +358,22 @@ and build_LCbindP fr : Tac unit
       cs_try trefl fr ctx (fun m -> fail (m (Fail_dependency "csm" x) []));
       cs_try trefl fr ctx (fun m -> fail (m (Fail_dependency "prd" x) []))
 
-and build_LCif fr : Tac unit
+and build_LCif fr prd_hint_b : Tac unit
   =
     apply (`__build_LCif);
     // cthn
-    build_lin_cond fr;
+    build_lin_cond fr prd_hint_b;
     // cels
-    build_lin_cond fr;
+    let thn_hint = intro () in
+    build_lin_cond fr (Some (Opt.dflt thn_hint prd_hint_b));
     // veq
     let c = intro () in
     norm_lc ();
     build_pequiv_list fr (fun () -> [Info_location "at the end of the if statement"])
 
-and build_lin_cond fr : Tac unit
+and build_lin_cond (fr : flags_record) (prd_hint_b : option binder) : Tac unit
   =
-    let build_tac : flags_record -> Tac unit =
+    let build_tac : flags_record -> option binder -> Tac unit =
       let goal = cur_goal () in
       let args = (collect_app goal)._2 in
       let fail_shape () =
@@ -375,7 +393,7 @@ and build_lin_cond fr : Tac unit
     // where [?csm1] and [?prd1] are fresh uvars
     apply (`__defer_sig_unification);
     // solves [lin_cond env t ?csm1 ?prd1], instantiate [?csm1] and [?prd1]
-    build_tac fr;
+    build_tac fr prd_hint_b;
     // [?csm0 <- csm1], [?prd0 <- prd1]
     norm_lc ();
     split (); trefl (); trefl ()
@@ -385,23 +403,24 @@ and build_lin_cond fr : Tac unit
 let __build_top_lin_cond
       (#a : Type) (t : M.prog_tree a) (pre : M.pre_t) (post : M.post_t a)
       (csm0 : csm_t pre) (prd0 : prd_t a)
-      (lc : lin_cond pre t csm0 prd0)
+      (lc : prd_hint post -> lin_cond pre t csm0 prd0)
       (veq : (x : a) -> Perm.pequiv_list L.(prd0 x @ filter_mask (mask_not csm0) pre) (post x))
   : top_lin_cond t pre post
   =
     (**) Ll.list_extensionality (mask_or csm0 (csm_all pre)) (csm_all pre) (fun i -> ());
-    lcsub_add_csm pre t csm0 prd0 lc (csm_all pre) post
+    lcsub_add_csm pre t csm0 prd0 (lc ()) (csm_all pre) post
       (fun x ->
         (**) filter_mask_true (mask_diff csm0 (csm_all pre)) (filter_mask (mask_not csm0) pre) (fun i -> ());
         veq x)
 #pop-options
 
 /// Solves a goal [top_lin_cond t pre post]
-let build_top_lin_cond fr : Tac unit
+let build_top_lin_cond (fr : flags_record) : Tac unit
   =
     apply (`__build_top_lin_cond);
     // lc
-    build_lin_cond fr;
+    let prd_hint_b = intro () in
+    build_lin_cond fr (Some prd_hint_b);
     // veq
     let x = intro () in
     norm_lc ();
