@@ -269,24 +269,15 @@ let __build_to_repr_t
                             (__build_to_repr_t_lem (post x) (r_post x) h1))
   }
 
-let filter_rmem_apply (#p : SE.vprop) (h : SE.rmem p) (v : SE.vprop{SE.can_be_split p v})
-  #sl (_ : squash (h v == sl))
-  : squash (h v == sl)
-  = ()
 
-/// Given a term [squash (lhs == rhs)], this tactics returns [Some (h, v)] if [lhs] is [h v]
-/// UNUSED: using v generates a SMT goal [SE.can_be_split]
-let match_rmem_apply (t : term) : Tac (option (term & term))
-  = match inspect t with
-    | Tv_App _squash (eq, Q_Explicit) ->
-      let _, ts = collect_app eq in
-      let n_args = L.length ts in
-      if n_args <> 3 then fail ("unexpected shape1:"^string_of_int n_args)
-      else let lhs = (L.index ts 1)._1 in
-     (match inspect lhs with
-      | Tv_App h (v, Q_Explicit) -> Some (h, v)
-      | _ -> None)
-    | _ -> fail "unexpected shape0"
+let ctrl_rmem_apply (hs : list bv) (t : term) : Tac (bool & ctrl_flag) =
+  if match inspect t with
+          | Tv_App h (_v, Q_Explicit) ->
+          (match inspect h with
+          | Tv_Var hv -> L.existsb (fun hv' -> Order.Eq? (compare_bv hv hv')) hs
+          | _ -> false) | _ -> false
+  then true,  Skip
+  else false, Continue
 
 #push-options "--ifuel 2"
 (**) private val __begin_opt_1 : unit
@@ -340,12 +331,13 @@ let build_to_repr_t fr ctx : Tac unit
       // This normalisation has to be done after introducing [eq0], otherwise its application fails,
       // seemingly because of the normalisation of [t_of].
       norm __normal_Steel_logical_spec;
-      pointwise' begin fun () ->
-        match catch (fun () -> apply_raw (`filter_rmem_apply (`#(binder_to_term h0)))) with
-        | Inr () -> // For some reason, this can only be applied on the goal produced by [filter_rmem_apply]
-                   // TODO? we could check that [filter_rmem_apply] has not succeeded by instantiating an uvar
-                   apply_rew ctx_req eq0
-        | Inl _  -> trefl ()
+      let hs = [(inspect_binder h0)._1] in
+      let ctrl = ctrl_rmem_apply hs in
+      ctrl_rewrite TopDown ctrl
+      begin fun () ->
+        try apply_rew ctx_req eq0
+        with _ -> trefl () // if we reach this, there will be an error in the [trefl] after the [ctrl_rewrite],
+                          // but waiting to be there can give a better error dump
       end;
       cs_try trefl fr ctx_req (fun m -> fail (m Fail_to_repr_t []));
 
@@ -357,18 +349,19 @@ let build_to_repr_t fr ctx : Tac unit
     let h1  = intro () in let sl1 = intro () in
     let eq0 = intro () in let eq1 = intro () in
       norm __normal_Steel_logical_spec;
-      pointwise' begin fun () ->
-        match catch (fun () -> apply_raw (`filter_rmem_apply (`#(binder_to_term h0)))) with
-        | Inr () -> apply_rew ctx_ens eq0
-        | Inl _ ->
-        match catch (fun () -> apply_raw (`filter_rmem_apply (`#(binder_to_term h1)))) with
-        | Inr () -> apply_rew ctx_ens eq1
-        | Inl _  -> trefl ()
+      let hs = [(inspect_binder h0)._1; (inspect_binder h1)._1] in
+      let ctrl = ctrl_rmem_apply hs in
+      ctrl_rewrite TopDown ctrl
+      begin fun () ->
+        try apply_rew ctx_ens eq0 with | _ ->
+        try apply_rew ctx_ens eq1 with | _ ->
+        trefl ()
       end;
       cs_try trefl fr ctx_ens (fun m -> fail (m Fail_to_repr_t []))
 
 #pop-options
 (**) private val __end_opt_1 : unit
+
 
 /// Solves a goal [sp ?s] where [sp] is as [spec_r_exact] [spec_r_steel]
 let build_spec_r fr ctx : Tac unit =

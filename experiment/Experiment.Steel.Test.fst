@@ -697,14 +697,14 @@ let test3_LV (r0 r1 : ref U32.t)
       (requires fun h0 -> U32.v (sel r0 h0) < 42)
       (ensures fun h0 () h1 -> U32.v (sel r1 h1) == U32.v (sel r0 h0) + 1)
   = F.(to_steel (test3_M r0 r1) #(_ by (mk_steel [O_LV; Timer; Extract])) ())
-// time specs     : 101ms
-// time lin_cond  : 41ms
-// time sub_push  : 31ms
+// time specs     : 54ms
+// time lin_cond  : 42ms
+// time sub_push  : 29ms
 // time LV2SF     : 59ms
 // time SF2Fun    : 3ms
 // time Fun_wp    : 18ms
-// time extract   : 40ms
-// total time : 293ms
+// time extract   : 39ms
+// total time : 244ms
 
 inline_for_extraction
 let test3_LV' (r0 r1 : ref U32.t)
@@ -716,11 +716,11 @@ let test3_LV' (r0 r1 : ref U32.t)
       x <-- call read r0;
       call (write r1) U32.(x +%^ 1ul)
     ) #(_ by (mk_steel [O_LV; Timer; Extract])) ())
-// time specs     : 180ms
-// time lin_cond  : 254ms
-// time sub_push  : 40ms
-// time LV2SF     : 67ms
-// time SF2Fun    : 3ms
-// time Fun_wp    : 20ms
-// time extract   : 49ms
-// total time : 613ms
+// time specs     : 87ms
+// time lin_cond  : 177ms
+// time sub_push  : 50ms
+// time LV2SF     : 83ms
+// time SF2Fun    : 5ms
+// time Fun_wp    : 24ms
+// time extract   : 64ms
+// total time : 490ms
