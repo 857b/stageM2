@@ -94,3 +94,55 @@ let repr_steel_of_steel_ghost
         (fun h0 -> tr.r_req_eq (focus_rmem h0 pre))
         (fun h0 x h1 -> tr.r_ens_eq (focus_rmem h0 pre) x (focus_rmem h1 (post x))))
       f)
+
+
+#push-options "--ifuel 0 --fuel 0"
+inline_for_extraction noextract
+let spec_r_of_find_ro
+      (#a : Type) (#pre : pre_t) (#post : post_t a) (#req : req_t pre) (#ens : ens_t pre a post)
+      (sro : spec_find_ro a pre post req ens)
+      (f : repr_steel_t SH.KSteel a pre post req ens)
+  : spc_steel_t SH.KSteel sro.sro_spc
+  = SH.steel_f (fun () ->
+      (**) let sl0    = gget_f sro.sro_spc.spc_pre in
+      (**) let sl_fr0 = gget_f sro.sro_spc.spc_ro  in
+      (**) steel_intro_vprop_of_list_append_f sro.sro_spc.spc_pre sro.sro_spc.spc_ro;
+      (**) steel_change_perm sro.sro_pre_eq;
+      (**) sro.sro_req_eq sl0 sl_fr0;
+      let (x : a) = SH.steel_u f ()     in
+      (**) let sl1'   = gget_f (post x) in
+      (**) steel_change_perm (sro.sro_post_eq x);
+      (**) extract_vars_sym_l (sro.sro_post_eq x) sl1';
+      (**) steel_elim_vprop_of_list_append_f (sro.sro_spc.spc_post x) sro.sro_spc.spc_ro;
+      (**) let sl1    = gget_f (sro.sro_spc.spc_post x) in
+      (**) let sl_fr1 = gget_f sro.sro_spc.spc_ro       in
+      (**) sro.sro_ens_eq sl0 sl_fr0 x sl1 sl_fr1;
+      Steel.Effect.Atomic.return x
+    )
+
+inline_for_extraction noextract
+let spec_r_of_find_ro_ghost
+      (#a : Type) (#pre : pre_t) (#post : post_t a) (#req : req_t pre) (#ens : ens_t pre a post)
+      (sro : spec_find_ro a pre post req ens)
+      (#opened : Mem.inames) (f : repr_steel_t (SH.KGhost opened) a pre post req ens)
+  : spc_steel_t (SH.KGhost opened) sro.sro_spc
+  = SH.ghost_f (fun () ->
+      (**) let sl0    = gget_f sro.sro_spc.spc_pre in
+      (**) let sl_fr0 = gget_f sro.sro_spc.spc_ro  in
+      (**) steel_intro_vprop_of_list_append_f sro.sro_spc.spc_pre sro.sro_spc.spc_ro;
+      (**) steel_change_perm sro.sro_pre_eq;
+      (**) sro.sro_req_eq sl0 sl_fr0;
+      let (x : a) = SH.ghost_u f ()     in
+      (**) let sl1'   = gget_f (post x) in
+      (**) steel_change_perm (sro.sro_post_eq x);
+      (**) extract_vars_sym_l (sro.sro_post_eq x) sl1';
+      (**) steel_elim_vprop_of_list_append_f (sro.sro_spc.spc_post x) sro.sro_spc.spc_ro;
+      (**) let sl1    = gget_f (sro.sro_spc.spc_post x) in
+      (**) let sl_fr1 = gget_f sro.sro_spc.spc_ro       in
+      (**) sro.sro_ens_eq sl0 sl_fr0 x sl1 sl_fr1;
+      noop ();
+      x
+    )
+#pop-options
+
+(**) private let __end_spec_r_of_find_ro = ()

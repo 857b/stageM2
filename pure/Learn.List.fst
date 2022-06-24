@@ -409,6 +409,22 @@ let rec lemma_splitAt_append (#a:Type) (n:nat) (l:list a) :
     | [] -> ()
     | x :: xs -> lemma_splitAt_append (n-1) xs
 
+let splitAt_index (#a : Type) (n : nat) (l : list a)
+  : Lemma (requires n <= length l)
+          (ensures (let l0, l1 = splitAt n l in
+                    length l0 == n /\ length l1 == length l - n /\
+                   (forall (i : Fin.fin (length l0)) . {:pattern (index l0 i)}
+                      index l0 i == index l i) /\
+                   (forall (i : Fin.fin (length l1)) . {:pattern (index l1 i)}
+                      index l1 i == index l (i + n) )))
+  =
+    let l0, l1 = splitAt n l in
+    splitAt_length n l;
+    introduce forall (i : Fin.fin (length l0)) . index l0 i == index l i
+      with lemma_splitAt_reindex_left n l i;
+    introduce forall (i : Fin.fin (length l1)) . index l1 i == index l (i + n)
+      with lemma_splitAt_reindex_right n l i
+
 
 (* [fold_right] *)
 

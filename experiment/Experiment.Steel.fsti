@@ -128,7 +128,7 @@ let prog_LV_to_Fun_extract_wp
 (**** normalisation steps *)
 
 let __delta_list : list string =
-  [`%L.length; `%L.index; `%L.op_At; `%L.append; `%L.map; `%L.hd; `%L.tl; `%L.tail;
+  [`%L.length; `%L.index; `%L.op_At; `%L.append; `%L.map; `%L.hd; `%L.tl; `%L.tail; `%L.count;
    `%Ll.initi; `%Ll.repeat]
 
 let __normal_M : list norm_step = [
@@ -144,7 +144,8 @@ let __normal_lc_sub_push : list norm_step = [
   delta_only (L.append __delta_list
              [`%LV.lc_sub_push; `%LV.lc_sub_push_aux;
               `%Perm.perm_f_to_list; `%Perm.perm_f_of_list;
-              `%Perm.comp; `%Perm.mk_perm_f; `%Perm.perm_f_append; `%Perm.perm_f_cons; `%Perm.id_n]);
+              `%Perm.comp; `%Perm.mk_perm_f; `%Perm.perm_f_append; `%Perm.perm_f_cons; `%Perm.id_n;
+              `%Perm.perm_f_cons_snoc]);
   delta_attr [`%LV.__lin_cond__; `%Learn.List.Mask.__mask__; `%__tac_helper__];
   delta_qualifier ["unfold"];
   iota; zeta; primops
@@ -156,9 +157,10 @@ let __normal_LV2SF : list norm_step = [
               `%Vpl.vprop_list_sels_t;
               `%LV.sub_prd_sl; `%LV.eij_sl; `%LV.filter_sl; `%LV.res_sel;
               `%M.post_sl_t;
-              `%Fl.dlist_of_f; `%Fl.apply_perm_r; `%Fl.append;
+              `%Fl.dlist_of_f; `%Fl.apply_perm_r; `%Fl.append; `%Fl.splitAt_ty;
               `%Dl.initi;
-              `%Perm.perm_f_of_list; `%Perm.mk_perm_f]);
+              `%Perm.perm_f_of_list; `%Perm.mk_perm_f;
+              `%Mktuple2?._1; `%Mktuple2?._2]);
   delta_attr [`%Learn.List.Mask.__mask__; `%__tac_helper__];
   delta_qualifier ["unfold"];
   iota; zeta; primops

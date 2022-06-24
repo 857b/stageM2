@@ -57,7 +57,7 @@ let test_build_to_repr_t_2 (r r' : ref nat)
 
 unfold
 let specT (a : Type) (pre : M.pre_t) (post : M.post_t a) : M.prog_tree a
-  = M.Tspec a (M.spec_r_exact (M.Mkspec_r pre post (fun _ -> True) (fun _ _ _ -> True)))
+  = M.Tspec a (M.spec_r_exact (M.Mkspec_r pre post [] (fun _ _ -> True) (fun _ _ _ _ -> True)))
 
 let rec repeat_n (n : nat) (t : M.prog_tree unit) : M.prog_tree unit
   = if n = 0 then M.Tret unit () (fun _ -> [])

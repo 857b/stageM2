@@ -1,5 +1,6 @@
 module Experiment.Steel.Repr.LV
 
+module L    = FStar.List.Pure
 module Perm = Learn.Permutation
 
 open FStar.List.Pure
@@ -52,6 +53,41 @@ let extract_eij_equiv
         assert (extract_vars (eij_equiv eij) (filter_sl (eij_trg_mask eij) sl) i
              == U.cast _ (sl (mask_pull m (mask_push m (L.index eij i)))))
             by (trefl ()))
+#pop-options
+
+#push-options "--ifuel 0 --fuel 0"
+let eij_split1_trg_mask (#a : Type) (src0 src1 #trg : list a) (eij : eq_injection_l L.(src0 @ src1) trg)
+  : Lemma (eij_trg_mask eij == mask_comp_or (eij_trg_mask (eij_split  src0 src1 eij)._1)
+                                            (eij_trg_mask (eij_split1 src0 src1 eij)))
+  =
+    let n0     = L.length src0 in
+    let n1     = L.length src1 in
+    let r0, r1 = eij_split  src0 src1 eij   in
+    let r1'    = eij_split1 src0 src1 eij   in
+    let m      = mask_not (eij_trg_mask r0) in
+    Ll.splitAt_index n0 eij;
+    Ll.list_extensionality
+      (eij_trg_mask eij) (mask_comp_or (eij_trg_mask r0) (eij_trg_mask r1'))
+    L.(fun i ->
+        calc (<==>) {
+          b2t (index (eij_trg_mask eij) i);
+        <==> { Ll.lemma_splitAt_append n0 eij }
+          memP i (r0 @ r1);
+        <==> { L.append_mem r0 r1 i }
+          memP i r0 \/ memP i r1;
+        <==> { introduce ~(memP i r0) ==> (memP i r1 <==> memP (mask_push m i) r1') with _ . (
+             Ll.memP_iff i r1; Ll.memP_iff (mask_push m i) r1';
+             introduce forall (j : Fin.fin n1) . index r1 j == i <==> index r1' j == mask_push m i
+               with introduce _ /\ _ with ()
+                and introduce _ ==> _ with _ . (
+                    Ll.memP_iff (index r1 j) r0;
+                    assert (index r1' j == mask_push m (index r1 j))
+           )) }
+          index (eij_trg_mask r0) i \/ index (eij_trg_mask r1') (mask_push m i);
+        <==> { }
+          L.index (mask_comp_or (eij_trg_mask r0) (eij_trg_mask r1')) i;
+        }
+      )
 #pop-options
 
 
@@ -338,9 +374,8 @@ and lc_sub_push_aux_at_leaves
          (csm' : csm_t (filter_mask (mask_not csm) env)) -> (prd' : prd_t a) ->
          (prd_f : ((x : a) -> Perm.pequiv_list (sub_prd env csm (prd x) csm') (prd' x))) ->
          squash (goal ct csm' prd' prd_f))
-    begin fun (*LCspec*) a sp s sh csm_f -> fun csm' prd' prd_f ->
-      assert (goal (LCspec env #a #sp s sh csm_f) csm' prd' prd_f)
-          by (norm_lcsbl true; trivial ())
+    begin fun (*LCspec*) a sp s sh pre_f -> fun csm' prd' prd_f ->
+      U.assert_by_tac (fun () -> norm_lcsbl true; trivial ())
     end
     begin fun (*LCret*)  a x sl_hint prd csm_f -> fun csm' prd' prd_f ->
       assert (goal (LCret env #a #x #sl_hint prd csm_f) csm' prd' prd_f)

@@ -277,6 +277,13 @@ let mask_pequiv_append (#a : Type) (#n : nat) (m : vec n bool) (l : vec n a)
 val filter_mask_perm_append' (#a : Type) (#n : nat) (m : vec n bool) (l : vec n a)
   : Lemma (l == Perm.apply_perm_r (mask_perm_append' m) (filter_mask m l @ filter_mask (mask_not m) l))
 
+let mask_pequiv_append' (#a : Type) (#n : nat) (m : vec n bool) (l : vec n a)
+  : Perm.pequiv (filter_mask m l @ filter_mask (mask_not m) l) l
+  =
+    (**) filter_mask_perm_append' m l;
+    Perm.perm_cast _ (mask_perm_append' m)
+
+
 val filter_mask_or_append
       (#a : Type) (#len : nat) (m0 : vec len bool) (m1 : vec (mask_len (mask_not m0)) bool) (l : vec len a)
   : Lemma (filter_mask m0 l @ filter_mask m1 (filter_mask (mask_not m0) l)
@@ -331,6 +338,11 @@ let filter_mask_f_dl_f (#len : nat) (mask : vec len bool) (ts : vec len Type) (x
 val filter_mask_fl_perm_append (#n : nat) (m : vec n bool) (ts : vec n Type) (xs : Fl.flist ts)
   : Lemma (Fl.apply_pequiv (mask_pequiv_append m ts) xs
         == Fl.append (filter_mask_fl m ts xs) (filter_mask_fl (mask_not m) ts xs))
+
+val filter_mask_fl_perm_append' (#n : nat) (m : vec n bool) (ts : vec n Type) (xs : Fl.flist ts)
+  : Lemma (Fl.apply_pequiv (mask_pequiv_append' m ts)
+                           (Fl.append (filter_mask_fl m ts xs) (filter_mask_fl (mask_not m) ts xs))
+        == xs)
 
 val filter_mask_fl_and
       (#len : nat) (m0 : vec len bool) (m1 : vec (mask_len m0) bool) (ts : vec len Type)

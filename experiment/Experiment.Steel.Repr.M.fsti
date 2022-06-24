@@ -1,14 +1,15 @@
 module Experiment.Steel.Repr.M
 
-module U   = Learn.Util
-module L   = FStar.List.Pure
-module Dl  = Learn.DList
-module Fl  = Learn.FList
-module Ll  = Learn.List
-module SE  = Steel.Effect
-module SH  = Experiment.Steel.Steel
-module Mem = Steel.Memory
-module Veq = Experiment.Steel.VEquiv
+module U    = Learn.Util
+module L    = FStar.List.Pure
+module Dl   = Learn.DList
+module Fl   = Learn.FList
+module Ll   = Learn.List
+module SE   = Steel.Effect
+module SH   = Experiment.Steel.Steel
+module Mem  = Steel.Memory
+module Veq  = Experiment.Steel.VEquiv
+module Perm = Learn.Permutation
 
 open Steel.Effect
 open Steel.Effect.Atomic
@@ -122,32 +123,94 @@ val repr_steel_of_steel_ghost
       ($f  : SH.unit_steel_ghost a opened pre post req ens)
   : repr_steel_t (SH.KGhost opened) a tr.r_pre tr.r_post tr.r_req tr.r_ens
 
-
-(*** [prog_tree] *)
+(*** [spec_r] *)
 
 [@@ Learn.Tactics.Util.__tac_helper__]
-inline_for_extraction noeq
+noeq
 type spec_r (a : Type u#a) = {
   spc_pre  : pre_t;
   spc_post : post_t a;
-  spc_req  : req_t spc_pre;
-  spc_ens  : ens_t spc_pre a spc_post;
+  spc_ro   : vprop_list;
+  spc_req  : sl_f spc_pre -> sl_f spc_ro -> Type0;
+  spc_ens  : sl_f spc_pre -> (x : a) -> sl_f (spc_post x) -> sl_f spc_ro -> Type0;
 }
+
+[@@ Learn.Tactics.Util.__tac_helper__]
+let spc_pre1 (#a : Type) (s : spec_r a) : pre_t
+  = L.(s.spc_pre @ s.spc_ro)
+  
+[@@ Learn.Tactics.Util.__tac_helper__]
+noextract
+let spc_post1 (#a : Type) (s : spec_r a) : post_t a
+  = fun x -> L.(s.spc_post x @ s.spc_ro)
+
+type spc_steel_t (ek : SH.effect_kind) (#a : Type) (s : spec_r a)
+  =
+    SH.steel a
+      (      vprop_of_list  s.spc_pre     `star` vprop_of_list s.spc_ro)
+      (fun x -> vprop_of_list (s.spc_post x) `star` vprop_of_list s.spc_ro)
+      (requires fun h0      -> s.spc_req (sel_f s.spc_pre h0) (sel_f s.spc_ro h0))
+      (ensures  fun h0 x h1 -> s.spc_ens (sel_f s.spc_pre h0) x (sel_f (s.spc_post x) h1) (sel_f s.spc_ro h0) /\
+                            sel_f s.spc_ro h1 == sel_f s.spc_ro h0)
+      ek
+
 
 type spec_r_exact (#a : Type u#a) (s0 : spec_r a) : (s : spec_r a) -> Type u#(max a 2) =
   | SpecExact : spec_r_exact s0 s0
+
+
+[@@ Learn.Tactics.Util.__tac_helper__]
+noeq
+type spec_find_ro (a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post) = {
+  sro_spc     : spec_r a;
+  sro_pre_eq  : vequiv_perm L.(sro_spc.spc_pre @ sro_spc.spc_ro) pre;
+  sro_post_eq : (x : a) -> vequiv_perm (post x) L.(sro_spc.spc_post x @ sro_spc.spc_ro);
+  // sro_spc.spc_req is determined by sr_pre_eq
+  sro_req_eq  : (sl0 : sl_f sro_spc.spc_pre) -> (sl_fr0 : sl_f sro_spc.spc_ro) ->
+                Lemma (req (extract_vars sro_pre_eq (append_vars sl0 sl_fr0))
+                    <==> sro_spc.spc_req sl0 sl_fr0);
+  sro_ens_eq  : (sl0 : sl_f sro_spc.spc_pre) -> (sl_fr0 : sl_f sro_spc.spc_ro) ->
+                (x : a) -> (sl1 : sl_f (sro_spc.spc_post x)) -> (sl_fr1 : sl_f sro_spc.spc_ro) ->
+                Lemma (ens (extract_vars sro_pre_eq (append_vars sl0 sl_fr0))
+                         x (extract_vars (Perm.pequiv_sym (sro_post_eq x)) (append_vars sl1 sl_fr1))
+                   <==> (sro_spc.spc_ens sl0 x sl1 sl_fr0 /\ sl_fr1 == sl_fr0))
+}
+
+[@@ Learn.Tactics.Util.__tac_helper__]
+let trivial_spec_find_ro a pre post req ens : spec_find_ro a pre post req ens = {
+  sro_spc = Mkspec_r pre post [] (fun sl0 _ -> req sl0) (fun sl0 x sl1 _ -> ens sl0 x sl1);
+  sro_pre_eq  = U.cast _ (Perm.pequiv_refl pre);
+  sro_post_eq = (fun x -> Perm.pequiv_refl (post x));
+  sro_req_eq  = (fun sl0 sl_fr0 -> Fl.nil_uniq sl_fr0);
+  sro_ens_eq  = (fun sl0 sl_fr0 x sl1 sl_fr1 -> Fl.nil_uniq sl_fr0; Fl.nil_uniq sl_fr1);
+}
+
+inline_for_extraction noextract
+val spec_r_of_find_ro
+      (#a : Type) (#pre : pre_t) (#post : post_t a) (#req : req_t pre) (#ens : ens_t pre a post)
+      (sro : spec_find_ro a pre post req ens)
+      (f : repr_steel_t SH.KSteel a pre post req ens)
+  : spc_steel_t SH.KSteel sro.sro_spc
+
+inline_for_extraction noextract
+val spec_r_of_find_ro_ghost
+      (#a : Type) (#pre : pre_t) (#post : post_t a) (#req : req_t pre) (#ens : ens_t pre a post)
+      (sro : spec_find_ro a pre post req ens)
+      (#opened : Mem.inames) (f : repr_steel_t (SH.KGhost opened) a pre post req ens)
+  : spc_steel_t (SH.KGhost opened) sro.sro_spc
+
+(**) private val __end_spec_r_of_find_ro : unit
 
 noeq
 type spec_r_steel (#a : Type u#a) (pre : SE.pre_t) (post : SE.post_t a)
                   (req : SE.req_t pre) (ens : SE.ens_t pre a post)
   : (s : spec_r a) -> Type u#(max a 2) =
   | SpecSteel : (tr : to_repr_t a pre post req ens) ->
-                spec_r_steel pre post req ens
-                   ({ spc_pre  = tr.r_pre;
-                      spc_post = tr.r_post;
-                      spc_req  = tr.r_req;
-                      spc_ens  = tr.r_ens })
-                               
+                (sr : spec_find_ro a tr.r_pre tr.r_post tr.r_req tr.r_ens) ->
+                spec_r_steel pre post req ens sr.sro_spc
+
+
+(*** [prog_tree] *)
 
 noeq
 type prog_tree : (a : Type u#a) -> Type u#(max (a+1) 3) =
@@ -193,7 +256,7 @@ noeq
 type tree_cond : (#a : Type u#a) -> (t : prog_tree a) -> (pre : pre_t) -> (post : post_t a) -> Type u#(max (a+1) 3) =
   | TCspec  : (#a : Type u#a) -> (#sp : (spec_r a -> Type u#(max a 2))) ->
               (s : spec_r a) -> (sh : sp s) ->
-              (tcs : tree_cond_Spec a s.spc_pre s.spc_post) ->
+              (tcs : tree_cond_Spec a (spc_pre1 s) (spc_post1 s)) ->
               tree_cond (Tspec a sp) tcs.tcs_pre tcs.tcs_post
   | TCret   : (#a : Type u#a) -> (#x : a) -> (#sl_hint : post_t a) ->
               (pre : pre_t) -> (post : post_t a) ->
@@ -220,24 +283,24 @@ type tree_cond : (#a : Type u#a) -> (t : prog_tree a) -> (pre : pre_t) -> (post 
 
 // ALT? directly express with a bind
 
-let spec_req (#a : Type) (#pre : pre_t) (#post : post_t a) (tcs : tree_cond_Spec a pre post)
-             (req : req_t pre) (ens : ens_t pre a post)
+let spec_req (#a : Type) (s : spec_r a) (tcs : tree_cond_Spec a (spc_pre1 s) (spc_post1 s))
   : req_t tcs.tcs_pre
   = fun sl0 ->
       tcs.tcs_pre_eq.veq_req sl0 /\
-     (forall (sl0' : sl_f pre) (sl_frame : sl_f tcs.tcs_frame) .
-      Veq.veq_ens1 tcs.tcs_pre_eq sl0 (append_vars sl0' sl_frame) ==>
-     (req sl0' /\
-     (forall (x : a) (sl1' : sl_f (post x)) . ens sl0' x sl1' ==>
-      (tcs.tcs_post_eq x).veq_req (append_vars sl1' sl_frame))))
+     (forall (sl0' : sl_f s.spc_pre) (sl_ro : sl_f s.spc_ro) (sl_frame : sl_f tcs.tcs_frame) .
+      Veq.veq_ens1 tcs.tcs_pre_eq sl0 (append_vars (append_vars sl0' sl_ro) sl_frame) ==>
+     (s.spc_req sl0' sl_ro /\
+     (forall (x : a) (sl1' : sl_f (s.spc_post x)) . s.spc_ens sl0' x sl1' sl_ro ==>
+      (tcs.tcs_post_eq x).veq_req (append_vars (append_vars sl1' sl_ro) sl_frame))))
 
-let spec_ens (#a : Type) (#pre : pre_t) (#post : post_t a) (tcs : tree_cond_Spec a pre post)
-             (ens : ens_t pre a post)
+let spec_ens (#a : Type) (s : spec_r a) (tcs : tree_cond_Spec a (spc_pre1 s) (spc_post1 s))
   : ens_t tcs.tcs_pre a tcs.tcs_post
-  = fun sl0 x sl1 -> exists (sl0' : sl_f pre) (sl1' : sl_f (post x)) (sl_frame : sl_f tcs.tcs_frame) .
-      Veq.veq_ens1 tcs.tcs_pre_eq sl0 (append_vars sl0' sl_frame) /\
-      ens sl0' x sl1' /\
-      Veq.veq_ens1 (tcs.tcs_post_eq x) (append_vars sl1' sl_frame) sl1
+  = fun sl0 x sl1 ->
+    exists (sl0' : sl_f s.spc_pre) (sl1' : sl_f (s.spc_post x))
+      (sl_ro : sl_f s.spc_ro) (sl_frame : sl_f tcs.tcs_frame) .
+      Veq.veq_ens1 tcs.tcs_pre_eq sl0 (append_vars (append_vars sl0' sl_ro) sl_frame) /\
+      s.spc_ens sl0' x sl1' sl_ro /\
+      Veq.veq_ens1 (tcs.tcs_post_eq x) (append_vars (append_vars sl1' sl_ro) sl_frame) sl1
 
 (** return *)
 
@@ -309,7 +372,7 @@ let rec tree_req (#a : Type u#a) (t : prog_tree a)
   : Tot Type0 (decreases t) =
   match c with
   | TCspec s _ tcs ->
-             spec_req tcs s.spc_req s.spc_ens sl0
+             spec_req s tcs sl0
   | TCret #_ #_  _ _  e ->
              return_req e sl0
   | TCbind #_ #_ #f #g  pre itm _  cf cg ->
@@ -325,7 +388,7 @@ and tree_ens (#a : Type u#a) (t : prog_tree a)
   : Tot Type0 (decreases t) =
   match c with
   | TCspec s _  tcs ->
-             spec_ens tcs s.spc_ens sl0 res sl1
+             spec_ens s tcs sl0 res sl1
   | TCret #a #x  _ _  e ->
              return_ens x e sl0 res sl1
   | TCbind #_ #_ #f #g  pre itm post  cf cg ->

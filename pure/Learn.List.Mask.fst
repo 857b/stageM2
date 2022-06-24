@@ -426,6 +426,16 @@ let filter_mask_fl_perm_append (#n : nat) (m : vec n bool) (ts : vec n Type) (xs
       (Fl.append (filter_mask_fl m ts xs) (filter_mask_fl (mask_not m) ts xs))
       (fun i -> mask_perm_append_index m i)
 
+let filter_mask_fl_perm_append' (#n : nat) (m : vec n bool) (ts : vec n Type) (xs : Fl.flist ts)
+  : Lemma (Fl.apply_pequiv (mask_pequiv_append' m ts)
+                           (Fl.append (filter_mask_fl m ts xs) (filter_mask_fl (mask_not m) ts xs))
+        == xs)
+  = Fl.flist_extensionality
+      (Fl.apply_pequiv (mask_pequiv_append' m ts)
+                       (Fl.append (filter_mask_fl m ts xs) (filter_mask_fl (mask_not m) ts xs)))
+      xs
+      (fun i -> mask_perm_append'_index m i)
+
 let filter_mask_fl_and
       (#len : nat) (m0 : vec len bool) (m1 : vec (mask_len m0) bool) (ts : vec len Type)
       (xs : Fl.flist ts)

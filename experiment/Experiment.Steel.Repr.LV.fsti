@@ -100,6 +100,46 @@ val extract_eij_equiv
       (#src #trg : vprop_list) (eij : eq_injection_l src trg) (sl : sl_f trg)
   : Lemma (extract_vars (eij_equiv eij) (filter_sl (eij_trg_mask eij) sl) == eij_sl (L.index eij) sl)
 
+#push-options "--ifuel 0 --fuel 0"
+
+[@@ __lin_cond__]
+let eij_split (#a : Type) (src0 src1 #trg : list a) (eij : eq_injection_l L.(src0 @ src1) trg)
+  : eq_injection_l src0 trg & eq_injection_l src1 trg
+  =
+    let n0 = L.length src0 in
+    let r0, r1 = L.splitAt n0 eij in
+    (**) L.splitAt_length n0 eij;
+    (**) Ll.pat_append ();
+    (**) Ll.splitAt_index n0 eij;
+    r0, r1
+
+let eij_split1 (#a : Type) (src0 src1 #trg : list a) (eij : eq_injection_l L.(src0 @ src1) trg)
+  : eq_injection_l src1 (filter_mask (mask_not (eij_trg_mask (eij_split src0 src1 eij)._1)) trg)
+  =
+    let n0 = L.length src0 in
+    let n1 = L.length src1 in
+    let r0, r1 = L.splitAt n0 eij in
+    (**) L.splitAt_length n0 eij;
+    (**) Ll.pat_append ();
+    (**) Ll.splitAt_index n0 eij;
+    (**) introduce forall (j : Fin.fin (L.length trg)) . L.mem j r0 ==> (exists (i : Fin.fin n0) . L.index r0 i == j)
+    (**)   with Ll.memP_iff j r0;
+    (**) let r0 : eq_injection_l src0 trg = r0 in
+    (**) assert (r0 == (eij_split src0 src1 eij)._1);
+    let m = mask_not (eij_trg_mask r0) in
+    let r_f (i : Fin.fin n1) : Fin.fin (L.length (filter_mask m trg))
+      = mask_push m (L.index r1 i)
+    in
+    (**) Perm.injectiveI r_f (fun i i' ->
+    (**)   assert (mask_pull m (mask_push m (L.index r1 i)) == mask_pull m (mask_push m (L.index r1 i'))));
+    Ll.initi 0 (L.length r1) r_f
+
+#pop-options
+
+val eij_split1_trg_mask (#a : Type) (src0 src1 #trg : list a) (eij : eq_injection_l L.(src0 @ src1) trg)
+  : Lemma (eij_trg_mask eij == mask_comp_or (eij_trg_mask (eij_split  src0 src1 eij)._1)
+                                            (eij_trg_mask (eij_split1 src0 src1 eij)))
+
 
 (*** [lin_cond] *)
 
@@ -188,6 +228,11 @@ let sub_prd_sl
   = extract_vars (Perm.perm_f_of_list prd_f)
                  (append_vars sl1 (filter_sl csm' (filter_sl (mask_not csm) sl0)))
 
+[@@ __lin_cond__]
+let spec_csm (#env : vprop_list) (#a : Type) (#s : M.spec_r a) (pre_f : eq_injection_l (M.spc_pre1 s) env)
+  : csm_t env
+  = eij_trg_mask (eij_split s.spc_pre s.spc_ro pre_f)._1
+
 
 noeq
 type lin_cond : 
@@ -200,8 +245,8 @@ type lin_cond :
       (env : vprop_list) ->
       (#a : Type u#a) -> (#sp : (M.spec_r a -> Type u#(max a 2))) ->
       (s : M.spec_r a) -> (sh : sp s) ->
-      (csm_f : eq_injection_l s.spc_pre env) ->
-      lin_cond env (M.Tspec a sp) (eij_trg_mask csm_f) s.spc_post
+      (pre_f : eq_injection_l (M.spc_pre1 s) env) ->
+      lin_cond env (M.Tspec a sp) (spec_csm pre_f) s.spc_post
   | LCret :
       (env : vprop_list) ->
       (#a : Type u#a) -> (#x : a) -> (#sl_hint : M.post_t a) ->
@@ -249,11 +294,11 @@ let match_lin_cond
            (ct : lin_cond env t csm prd) -> Type u#r)
       (c_LCspec : (a : Type u#a) ->  (sp : (M.spec_r a -> Type u#(max a 2))) ->
                   (s : M.spec_r a) -> (sh : sp s) ->
-                  (csm_f : eq_injection_l s.spc_pre env) ->
-                  Pure (r _ _ _ _ (LCspec env #a #sp s sh csm_f))
+                  (pre_f : eq_injection_l (M.spc_pre1 s) env) ->
+                  Pure (r _ _ _ _ (LCspec env #a #sp s sh pre_f))
                        (requires a0 == a /\ t0 == M.Tspec a sp /\
-                                 csm0 == eij_trg_mask csm_f /\ prd0 == s.spc_post /\
-                                 ct0 == LCspec env #a #sp s sh csm_f)
+                                 csm0 == spec_csm pre_f /\ prd0 == s.spc_post /\
+                                 ct0 == LCspec env #a #sp s sh pre_f)
                        (ensures fun _ -> True))
       (c_LCret  : (a : Type u#a) -> (x : a) -> (sl_hint : M.post_t a) ->
                   (prd : prd_t a) -> (csm_f : eq_injection_l (prd x) env) ->
@@ -305,7 +350,7 @@ let match_lin_cond
                        (ensures fun _ -> True))
   : r _ _ _ _ ct0
   = match ct0 as ct returns r _ _ _ _ ct with
-  | LCspec  env #a #sp s sh csm_f                         -> c_LCspec  a sp s sh csm_f
+  | LCspec  env #a #sp s sh pre_f                         -> c_LCspec  a sp s sh pre_f
   | LCret   env #a #x #sl_hint prd csm_f                  -> c_LCret   a x sl_hint prd csm_f
   | LCbind  env #a #b #f #g f_csm f_prd cf g_csm g_prd cg -> c_LCbind  a b f g f_csm f_prd cf g_csm g_prd cg
   | LCbindP env #a #b #wp #g csm prd cg                   -> c_LCbindP a b wp g csm prd cg
@@ -330,8 +375,9 @@ let rec tree_req
       (sl0 : sl_f env)
   : Tot Type0 (decreases ct)
   = match ct with
-  | LCspec env s _ csm_f ->
-      s.spc_req (eij_sl (L.index csm_f) sl0)
+  | LCspec env s _ pre_f ->
+      let pre_sl = split_vars s.spc_pre s.spc_ro (eij_sl (L.index pre_f) sl0) in
+      s.spc_req pre_sl._1 pre_sl._2
   | LCret  env #a #x #sl_hint prd csm_f ->
       True
   | LCbind env #a #b #f #g f_csm f_prd cf g_csm g_prd cg ->
@@ -352,8 +398,9 @@ and tree_ens
       (sl0 : sl_f env) (res : a) (sl1 : sl_f (prd res))
   : Tot Type0 (decreases ct)
   = match ct with
-  | LCspec env s _ csm_f ->
-      s.spc_ens (eij_sl (L.index csm_f) sl0) res sl1
+  | LCspec env s _ pre_f ->
+      let pre_sl = split_vars s.spc_pre s.spc_ro (eij_sl (L.index pre_f) sl0) in
+      s.spc_ens pre_sl._1 res sl1 pre_sl._2
   | LCret  env #a #x #sl_hint prd csm_f ->
       res == x /\
       sl1 == eij_sl (L.index csm_f) sl0

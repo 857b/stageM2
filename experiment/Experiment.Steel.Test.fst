@@ -92,26 +92,29 @@ let normal_elim_returns : list norm_step = [
 ////////// test0 //////////
 
 unfold
-let read_pre  #a (r : ref a) : M.pre_t
+let read_pre : M.pre_t
+  = []
+unfold
+let read_post #a : M.post_t a
+  = fun _ -> []
+unfold
+let read_ro #a (r : ref a) : Vpl.vprop_list
   = [vptr' r full_perm]
 unfold
-let read_post #a (r : ref a) : M.post_t a
-  = fun _ -> [vptr' r full_perm]
+let read_req  #a (r : ref a) (sl0 : Vpl.sl_f []) (sl_ro : Vpl.sl_f (read_ro r)) : Type0
+  = True
 unfold
-let read_req  #a (r : ref a) : M.req_t (read_pre r)
-  = fun sl0 -> True
-unfold
-let read_ens  #a (r : ref a) : M.ens_t (read_pre r) a (read_post r)
-  = fun sl0 x sl1 ->
-    sl0 0 == sl1 0 /\ x == sl1 0
+let read_ens  #a (r : ref a) (sl0 : Vpl.sl_f []) (x : a) (sl1 : Vpl.sl_f []) (sl_ro : Vpl.sl_f (read_ro r)) : Type0
+  = x == sl_ro 0
 
 inline_for_extraction
 let steel_read #a (r : ref a) () :
-  Steel a (Vpl.vprop_of_list [vptr' r full_perm]) (fun _ -> Vpl.vprop_of_list [vptr' r full_perm])
+  Steel a (Vpl.vprop_of_list [] `star` Vpl.vprop_of_list [vptr' r full_perm])
+    (fun _ -> Vpl.vprop_of_list [] `star` Vpl.vprop_of_list [vptr' r full_perm])
     (requires fun _ -> True)
-    (ensures fun h0 x h1 -> let sl0 = Vpl.sel_f [vptr' r full_perm] h0 in
-                         let sl1 = Vpl.sel_f [vptr' r full_perm] h1 in
-                         sl0 0 == sl1 0 /\ x == sl1 0)
+    (ensures fun h0 x h1 -> let sl_ro0 = Vpl.sel_f [vptr' r full_perm] h0 in
+                         let sl_ro1 = Vpl.sel_f [vptr' r full_perm] h1 in
+                         sl_ro1 == sl_ro0 /\ x == sl_ro0 0)
   =
     (**) change_equal_slprop (Vpl.vprop_of_list [vptr' r full_perm]) (vptr r `star` emp);
     let x = read r in
@@ -121,11 +124,13 @@ let steel_read #a (r : ref a) () :
 [@@ __test__; __reduce__]
 inline_for_extraction
 let r_read (#a : Type0) (r : ref a) : M.repr SH.KSteel a =
-  MC.repr_of_steel_r (read_pre r) (read_post r) (read_req r) (read_ens r) (SH.steel_f (steel_read r))
+  MC.repr_of_steel_r (M.Mkspec_r read_pre read_post (read_ro r) (read_req r) (read_ens r))
+                     (SH.steel_f (steel_read r))
 
 inline_for_extraction
 let steel_write #a (r : ref a) (x : a) ()
-  : Steel unit (Vpl.vprop_of_list [vptr' r full_perm]) (fun _ -> Vpl.vprop_of_list [vptr' r full_perm])
+  : Steel unit (Vpl.vprop_of_list [vptr' r full_perm] `star` Vpl.vprop_of_list [])
+               (fun _ -> Vpl.vprop_of_list [vptr' r full_perm] `star` Vpl.vprop_of_list [])
                (requires fun _ -> True) (ensures fun h0 () h1 -> x == Vpl.sel_f [vptr' r full_perm] h1 0)
   =
     (**) change_equal_slprop (Vpl.vprop_of_list [vptr' r full_perm]) (vptr r `star` emp);
@@ -135,8 +140,8 @@ let steel_write #a (r : ref a) (x : a) ()
 [@@ __test__; __reduce__]
 inline_for_extraction
 let r_write #a (r : ref a) (x : a) : M.repr SH.KSteel unit =
-  MC.repr_of_steel_r [vptr' r full_perm] (fun _ -> [vptr' r full_perm])
-                    (fun sl0 -> True) (fun sl0 () sl1 -> x == sl1 0)
+  MC.repr_of_steel_r (M.Mkspec_r [vptr' r full_perm] (fun _ -> [vptr' r full_perm]) []
+                                 (fun sl0 sl_ro -> True) (fun sl0 () sl1 sl_ro -> x == sl1 0))
                     (SH.steel_f (steel_write r x))
 
 ////////// test1 //////////
@@ -292,8 +297,6 @@ let test3_steel_caller (r0 r1 : ref U32.t)
 #pop-options
 
 // This only generates 1 SMT query: the WP
-// FIXME: the use of call make ST -> SF and SF -> Fun longer when using O_ST2SF
-//        even if the dump at stage ST are (nearly) identical
 inline_for_extraction
 let test3_steel' (r0 r1 : ref U32.t)
   : F.steel unit
@@ -303,7 +306,7 @@ let test3_steel' (r0 r1 : ref U32.t)
   = F.(to_steel (
       x <-- call read r0;
       call (write r1) U32.(x +%^ 1ul)
-    ) #(_ by (mk_steel [Extract; Timer(*; O_ST2SF; Dump Stage_ST*)])) ())
+    ) #(_ by (mk_steel [Extract; Timer; (*; O_ST2SF; Dump Stage_ST*)])) ())
 
 inline_for_extraction
 let test3_steel'' (r0 r1 : ref U32.t)
@@ -311,7 +314,7 @@ let test3_steel'' (r0 r1 : ref U32.t)
       (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
       (requires fun h0 -> U32.v (sel r0 h0) < 42)
       (ensures fun h0 () h1 -> U32.v (sel r1 h1) == U32.v (sel r0 h0) + 1)
-  = F.(to_steel (test3_M r0 r1) #(_ by (mk_steel [Timer(*; O_ST2SF; Dump Stage_ST*)])) ())
+  = F.(to_steel (test3_M r0 r1) #(_ by (mk_steel [Timer; (*; O_ST2SF; Dump Stage_ST*)])) ())
 
 
 let test3_steel'_caller (r0 r1 : ref U32.t)
@@ -528,7 +531,7 @@ let test3_LV' (r0 r1 : ref U32.t)
   = F.(to_steel (
       x <-- call read r0;
       call (write r1) U32.(x +%^ 1ul)
-    ) #(_ by (mk_steel [Timer; Extract])) ())
+    ) #(_ by (mk_steel [Timer; Extract; Dump Stage_Extract])) ())
 // time specs     : 87ms
 // time lin_cond  : 177ms
 // time sub_push  : 50ms

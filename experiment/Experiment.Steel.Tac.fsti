@@ -363,12 +363,13 @@ let build_to_repr_t fr ctx : Tac unit
 (**) private val __end_opt_1 : unit
 
 
-/// Solves a goal [sp ?s] where [sp] is as [spec_r_exact] [spec_r_steel]
+/// Solves a goal [sp ?s] where [sp] is as [spec_r_exact] or a [spec_r_steel]
 let build_spec_r fr ctx : Tac unit =
   try apply (`M.SpecExact)
   with | _ ->
-      apply (`M.SpecSteel);
-      build_to_repr_t fr ctx
+      apply_raw (`M.SpecSteel);
+      build_to_repr_t fr ctx;
+      apply (`M.trivial_spec_find_ro)// TODO: infer ro
 
 
 (*** Building an injection *)

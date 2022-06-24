@@ -18,9 +18,9 @@ let rec repr_SF_of_LV
       (sl0 : sl_f env)
   : Tot (SF.prog_tree a (M.post_sl_t prd)) (decreases lc)
   = match lc with
-  | LCspec env #a #sp s sh csm_f ->
-      let sl0' = eij_sl (L.index csm_f) sl0 in
-      SF.Tspec a (M.post_sl_t s.spc_post) (s.spc_req sl0') (s.spc_ens sl0')
+  | LCspec env #a #sp s sh pre_f ->
+      let sl0s = split_vars s.spc_pre s.spc_ro (eij_sl (L.index pre_f) sl0) in
+      SF.Tspec a (M.post_sl_t s.spc_post) (s.spc_req sl0s._1 sl0s._2) (fun x sl1 -> s.spc_ens sl0s._1 x sl1 sl0s._2)
   | LCret  env #a #x prd csm_f ->
       SF.Tret a x (M.post_sl_t prd) (Fl.dlist_of_f (eij_sl (L.index csm_f) sl0))
   | LCbind env #a #b f_csm f_prd cf g_csm g_prd cg ->

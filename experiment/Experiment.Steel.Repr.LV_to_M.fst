@@ -8,6 +8,9 @@ module TLogic = Learn.Tactics.Logic
 
 open FStar.Tactics
 
+// FIXME: without `--ide_id_info_off` the interactive mode takes a lot of time
+#set-options "--ide_id_info_off"
+
 #push-options "--ifuel 0 --fuel 0"
 let extract_eij_framed_equiv
       (env : vprop_list) (pre : M.pre_t) (csm_f : eq_injection_l pre env)
@@ -39,6 +42,122 @@ let extract_eij_framed_equiv
     == { extract_eij_equiv csm_f sl }
       Fl.append #(vprop_list_sels_t pre) (eij_sl (L.index csm_f) sl) (filter_sl (mask_not m) sl);
     }
+
+#push-options "--z3rlimit 60"
+let eij_split1_equiv (src0 src1 #trg : vprop_list) (eij : eq_injection_l L.(src0 @ src1) trg)
+                     (sl : sl_f trg)
+  : Lemma (extract_vars (Perm.pequiv_sym (eij_equiv (eij_split1 src0 src1 eij)))
+                                (split_vars src0 src1 (eij_sl (L.index eij) sl))._2
+        == filter_sl (eij_trg_mask (eij_split1 src0 src1 eij))
+             (filter_sl (mask_not (eij_trg_mask (eij_split src0 src1 eij)._1)) sl))
+  =
+    let n0 = L.length src0 in
+    let n1 = L.length src1 in
+    let r0, r1 = eij_split src0 src1 eij in
+    let r1' = eij_split1 src0 src1 eij in
+    let m   = mask_not (eij_trg_mask r0) in
+    let eqv = eij_equiv r1' in
+    let sl0 = (split_vars src0 src1 (eij_sl (L.index eij) sl))._2 in
+    let sl1 = filter_sl (eij_trg_mask r1') (filter_sl m sl) in
+
+    Fl.flist_extensionality sl0 (extract_vars eqv sl1)
+       (fun i ->
+         assert (i < n1);
+         L.lemma_splitAt_reindex_right n0 eij i;
+
+         let j = L.index eij (n0 + i) in
+         let v = L.index trg j        in
+         let sl_j : v.t  = sl j       in
+
+         assert (L.index src1 i == v);
+         let sl0_i : v.t = sl0 i in
+         assert (sl0_i == sl_j)
+           by (norm [delta_only [`%split_vars; `%eij_sl;
+                                 `%Mktuple2?._2; `%Fl.splitAt_ty; `%U.cast; `%Fl.mk_flist;
+                                 `%FunctionalExtensionality.on_domain];
+                     iota];
+               smt ());
+
+         U.assert_by (L.index (eij_trg_mask r1') (L.index r1' i)) (fun () ->
+           L.lemma_index_memP r1' i);
+         U.assert_by (L.index m (L.index r1 i)) (fun () ->
+           Ll.memP_iff (L.index r1 i) r0; Ll.splitAt_index n0 eij);
+         calc (==) {
+           mask_pull m (mask_pull (eij_trg_mask r1') (eqv i)) <: int;
+         == { U.by_refl () }
+           mask_pull m (mask_pull (eij_trg_mask r1') (mask_push (eij_trg_mask r1') (L.index r1' i)));
+         == { }
+           mask_pull m (L.index r1' i);
+         == { }
+           L.index r1 i;
+         == { }
+           j;
+         }
+       );
+    extract_vars_sym_l eqv sl1
+#pop-options
+
+#push-options "--z3rlimit 20"
+let extract_spec_post_equiv
+      (env : vprop_list) (pre post ro : vprop_list) (pre_f : eq_injection_l L.(pre @ ro) env)
+      (sl0 : sl_f env) (sl_post : sl_f post)
+  : Lemma (extract_vars (spec_post_equiv env pre post ro pre_f)
+                        (append_vars (append_vars sl_post (split_vars pre ro (eij_sl (L.index pre_f) sl0))._2)
+                                     (filter_sl (mask_not (eij_trg_mask pre_f)) sl0))
+        == append_vars sl_post (filter_sl (mask_not (eij_trg_mask (eij_split pre ro pre_f)._1)) sl0))
+  =
+    let m_trg  = eij_trg_mask pre_f                 in
+    let csm_f  = (eij_split pre ro pre_f)._1        in
+    let m_trg0 = eij_trg_mask csm_f                 in
+    let env1   = filter_mask (mask_not m_trg0) env  in
+    let ro_f1  : eq_injection_l ro env1
+               = eij_split1 pre ro pre_f            in
+    let m_trg1 = eij_trg_mask ro_f1                 in
+    let flt0   = filter_mask m_trg1 env1            in
+    let flt1   = filter_mask (mask_not m_trg1) env1 in
+
+    Ll.pat_append ();
+    L.append_assoc post ro (filter_mask (mask_not m_trg) env);
+    eij_split1_trg_mask pre ro pre_f;
+    mask_not_comp_or m_trg0 m_trg1;
+    filter_mask_and (mask_not m_trg0) (mask_not m_trg1) env;
+
+    let f0 : vequiv_perm ro flt0
+      = Perm.pequiv_sym (eij_equiv ro_f1)                    in
+    let f1 : vequiv_perm L.(flt0 @ flt1) env1
+      = mask_pequiv_append' m_trg1 env1                      in
+    let f2_0 = Perm.pequiv_append f0 (Perm.pequiv_refl flt1) in
+    let f2_1 = Perm.pequiv_trans f2_0 f1                     in
+    let f2 : vequiv_perm L.(post @ (ro @ flt1)) L.(post @ env1)
+      = Perm.pequiv_append (Perm.pequiv_refl post) f2_1
+    in
+    let sl_ro   = (split_vars pre ro (eij_sl (L.index pre_f) sl0))._2 in
+    let sl_rem  = filter_sl (mask_not m_trg ) sl0 in
+    let sl_env1 = filter_sl (mask_not m_trg0) sl0
+    in
+    calc (==) {
+      extract_vars (spec_post_equiv env pre post ro pre_f)
+                   (append_vars (append_vars sl_post sl_ro) sl_rem);
+    == { }
+      extract_vars f2 (append_vars (append_vars sl_post sl_ro) sl_rem);
+    == { Fl.append_assoc sl_post sl_ro sl_rem;
+         Fl.apply_pequiv_append (vequiv_perm_sl (Perm.pequiv_refl post))
+                                (vequiv_perm_sl f2_1)
+                                sl_post (append_vars sl_ro sl_rem) }
+      append_vars sl_post (extract_vars f2_1 (append_vars sl_ro sl_rem));
+    == { Fl.apply_pequiv_trans (vequiv_perm_sl f2_0) (vequiv_perm_sl f1) (append_vars sl_ro sl_rem);
+         Fl.apply_pequiv_append (vequiv_perm_sl f0)
+                                (vequiv_perm_sl (Perm.pequiv_refl flt1))
+                                sl_ro sl_rem }
+      append_vars sl_post (extract_vars f1 (append_vars (extract_vars f0 sl_ro) sl_rem));
+    == { eij_split1_equiv pre ro pre_f sl0;
+         filter_mask_fl_and (mask_not m_trg0) (mask_not m_trg1) (vprop_list_sels_t env) sl0 }
+      append_vars sl_post (extract_vars f1 (append_vars (filter_sl           m_trg1  sl_env1)
+                                                        (filter_sl (mask_not m_trg1) sl_env1)));
+    == { filter_mask_fl_perm_append' m_trg1 _ sl_env1 }
+      append_vars sl_post sl_env1;
+    }
+#pop-options
 
 let extract_sub_prd_framed_equiv
       (env : vprop_list) 
@@ -235,6 +354,16 @@ let rew_iff_LV2M () : Tac unit =
     (fun () -> apply (`rew_exists_sl_f_app); r ())
   ])
 
+let rew_iff_l_LV2M (smp : bool) : Tac unit =
+  apply (`TLogic.rew_iff_left); rew_iff_LV2M (); norm (if smp then [simplify] else [])
+
+let split_vars_append (v0 v1 : vprop_list) (sl : sl_f L.(v0 @ v1)) ()
+  : Lemma (sl == (let sls = split_vars v0 v1 sl in append_vars sls._1 sls._2))
+  =
+    Ll.pat_append ();
+    Fl.splitAt_ty_append (vprop_list_sels_t v0) (vprop_list_sels_t v1) sl
+
+
 let norm_sound_LV2M () : Tac unit =
   norm [delta_only [`%repr_M_of_LV; `%repr_M_of_LV__tcs; `%repr_M_of_LV__tcs_sub;
                     `%M.tree_req; `%M.spec_req; `%M.return_req; `%M.bind_req;
@@ -248,9 +377,9 @@ let norm_sound_LV2M () : Tac unit =
 
 let tac_sound_LV2M () : Tac unit =
   norm_sound_LV2M ();
-  apply (`TLogic.rew_iff_left); rew_iff_LV2M (); norm [simplify];
+  rew_iff_l_LV2M true;
   l_to_r [`extract_eij_framed_equiv];
-  apply (`TLogic.rew_iff_left); rew_iff_LV2M (); norm []
+  rew_iff_l_LV2M false
 
 
 #push-options "--ifuel 0 --fuel 1"
@@ -258,28 +387,63 @@ let tac_sound_LV2M () : Tac unit =
 let sound_repr_M_of_LV__LCspec
       (env : vprop_list)
       (a : Type u#a) (sp : M.spec_r a -> Type u#(max a 2))
-      (pre : M.pre_t) (post : M.post_t a) (req : M.req_t pre) (ens : M.ens_t pre a post)
-      (sh : sp (M.Mkspec_r pre post req ens))
-      (csm_f : eq_injection_l pre env)
-  : squash (sound_repr_M_of_LV (LCspec env #a #sp (M.Mkspec_r pre post req ens) sh csm_f))
+      (pre : M.pre_t) (post : M.post_t a) (ro : vprop_list)
+      (req : sl_f pre -> sl_f ro -> Type0) (ens : sl_f pre -> (x : a) -> sl_f (post x) -> sl_f ro -> Type0)
+      (sh : sp (M.Mkspec_r pre post ro req ens))
+      (pre_f : eq_injection_l L.(pre @ ro) env)
+  : squash (sound_repr_M_of_LV (LCspec env #a #sp (M.Mkspec_r pre post ro req ens) sh pre_f))
   =
     intro_sound_M_of_LV _ _
       (fun sl0 ->
-        let sl0_0 = eij_sl #pre #env (L.index csm_f) sl0          in
-        let sl0_1 = filter_sl (mask_not (eij_trg_mask csm_f)) sl0 in
+        let split_sl0_lem = split_vars_append pre ro (eij_sl (L.index pre_f) sl0) in
+        let sl0_pre = (split_vars pre ro (eij_sl (L.index pre_f) sl0))._1         in
+        let sl0_ro  = (split_vars pre ro (eij_sl (L.index pre_f) sl0))._2         in
+        let sl0_rem = filter_sl (mask_not (eij_trg_mask pre_f)) sl0               in
         U.assert_by_tac (fun () ->
-              tac_sound_LV2M ();
-              // We rewrite [forall sl' . sl' = sl0_i ==> p sl'] into [p sl0_i]
-              TLogic.(
-                apply (`rew_iff_left); apply_raw (`rew_forall_eq (`@sl0_0));
-                  norm_sound_LV2M (); smt (); norm [simplify];
-                apply (`rew_iff_left); apply_raw (`rew_forall_eq (`@sl0_1));
-                  smt (); norm [simplify]
-              );
-              trivial ()))
+          norm_sound_LV2M ();
+          apply (`TLogic.rew_iff_left); rew_iff_LV2M (); norm [simplify];
+          l_to_r [`extract_eij_framed_equiv];
+          apply (`TLogic.rew_iff_left);
+              l_to_r [``@split_sl0_lem];
+              rew_iff_LV2M ();
+              norm [];
+          // re-running rew_iff_LV2M since there is a nested append
+          apply (`TLogic.rew_iff_left); rew_iff_LV2M (); norm [];
+          // We rewrite [forall sl' . sl' = sl0_* ==> p sl'] into [p sl0_*]
+          TLogic.(
+            apply (`rew_iff_left); apply_raw (`rew_forall_eq (`@sl0_pre)); smt (); norm [simplify];
+            apply (`rew_iff_left); apply_raw (`rew_forall_eq (`@sl0_ro )); smt (); norm [simplify];
+            apply (`rew_iff_left); apply_raw (`rew_forall_eq (`@sl0_rem)); smt ();
+              norm_sound_LV2M (); norm [delta_only [`%split_vars]; simplify]
+          );
+          smt ()))
       (fun sl0 x sl1 sl_rem ->
-        _ by (tac_sound_LV2M ();
-              smt ()))
+        let split_sl0_lem = split_vars_append pre ro (eij_sl (L.index pre_f) sl0) in
+        let sl0_pre = (split_vars pre ro (eij_sl (L.index pre_f) sl0))._1         in
+        let sl0_ro  = (split_vars pre ro (eij_sl (L.index pre_f) sl0))._2         in
+        let sl0_rem = filter_sl (mask_not (eij_trg_mask pre_f)) sl0               in
+        U.assert_by_tac (fun () ->
+          norm_sound_LV2M ();
+          rew_iff_l_LV2M true;
+          l_to_r [`extract_eij_framed_equiv];
+          apply (`TLogic.rew_iff_left);
+              l_to_r [``@split_sl0_lem];
+              rew_iff_LV2M ();
+              norm [];
+          rew_iff_l_LV2M false;
+          TLogic.(
+            apply (`rew_iff_left); apply_raw (`rew_exists_eq (`@sl0_pre));
+              smt (); norm [simplify];
+            apply (`rew_iff_left); apply (`exists_morph_iff); let _ = intro () in
+              apply (`rew_exists_eq (`@sl0_ro ));
+              smt (); norm [simplify];
+            apply (`rew_iff_left); apply (`exists_morph_iff); let _ = intro () in
+              apply_raw (`rew_exists_eq (`@sl0_rem));
+              smt (); norm_sound_LV2M (); norm [simplify]
+          );
+          l_to_r [`extract_spec_post_equiv];
+          rew_iff_l_LV2M false;
+          smt ()))
 
 let sound_repr_M_of_LV__LCret
       (env : vprop_list)
@@ -381,55 +545,94 @@ let sound_repr_M_of_LV__LCif
 
 #pop-options
 
-// FIXME: without `--ide_id_info_off` the interactive mode takes a lot of time
-#push-options "--fuel 0 --ifuel 0 --ide_id_info_off"
+#push-options "--fuel 0 --ifuel 0"
+
+let extract_pequiv_trans #v0 #v1 #v2 (f : vequiv_perm v0 v1) (g : vequiv_perm v1 v2) (sl : sl_f v0)
+  : Lemma (extract_vars (Perm.pequiv_trans f g) sl == extract_vars g (extract_vars f sl))
+  =
+    Fl.apply_pequiv_trans (vequiv_perm_sl f) (vequiv_perm_sl g) sl
+
+// TODO?: factorize with LCspec
 let sound_repr_M_of_LV__LCsub_LCspec
       (env : vprop_list)
       (a : Type u#a) (sp : M.spec_r a -> Type u#(max a 2))
-      (pre : M.pre_t) (post : M.post_t a) (req : M.req_t pre) (ens : M.ens_t pre a post)
-      (sh : sp (M.Mkspec_r pre post req ens))
-      (csm_f : eq_injection_l pre env)
-      (csm1 : csm_t (filter_mask (mask_not (eij_trg_mask csm_f)) env))
+      (pre : M.pre_t) (post : M.post_t a) (ro : vprop_list)
+      (req : sl_f pre -> sl_f ro -> Type0) (ens : sl_f pre -> (x : a) -> sl_f (post x) -> sl_f ro -> Type0)
+      (sh : sp (M.Mkspec_r pre post ro req ens))
+      (pre_f : eq_injection_l L.(pre @ ro) env)
+      (csm1 : csm_t (filter_mask (mask_not (eij_trg_mask (eij_split pre ro pre_f)._1)) env))
       (prd1 : prd_t a)
-      (prd_f1 : (x : a) -> Perm.pequiv_list (sub_prd env (eij_trg_mask csm_f) (post x) csm1) (prd1 x))
-  : (let lc = LCsub env (eij_trg_mask csm_f) post
-                    (LCspec env #a #sp (M.Mkspec_r pre post req ens) sh csm_f)
+      (prd_f1 : (x : a) ->
+              Perm.pequiv_list (sub_prd env (eij_trg_mask (eij_split pre ro pre_f)._1) (post x) csm1) (prd1 x))
+  : (let lc = LCsub env ((eij_trg_mask (eij_split pre ro pre_f)._1)) post
+                    (LCspec env #a #sp (M.Mkspec_r pre post ro req ens) sh pre_f)
                     csm1 prd1 prd_f1
      in squash (lcsub_at_leaves lc /\ sound_repr_M_of_LV lc))
   = introduce _ /\ _
     with _ by (norm [delta_only [`%lcsub_at_leaves]; iota; zeta]; trivial ())
     and intro_sound_M_of_LV _ _
       (fun sl0 ->
-        let sl0_0 = eij_sl #pre #env (L.index csm_f) sl0          in
-        let sl0_1 = filter_sl (mask_not (eij_trg_mask csm_f)) sl0 in
+        let split_sl0_lem = split_vars_append pre ro (eij_sl (L.index pre_f) sl0) in
+        let sl0_pre = (split_vars pre ro (eij_sl (L.index pre_f) sl0))._1         in
+        let sl0_ro  = (split_vars pre ro (eij_sl (L.index pre_f) sl0))._2         in
+        let sl0_rem = filter_sl (mask_not (eij_trg_mask pre_f)) sl0               in
         U.assert_by_tac (fun () ->
-              tac_sound_LV2M ();
-              TLogic.(
-                apply (`rew_iff_left); apply_raw (`rew_forall_eq (`@sl0_0));
-                  norm_sound_LV2M (); smt (); norm [simplify];
-                apply (`rew_iff_left); apply_raw (`rew_forall_eq (`@sl0_1));
-                  smt (); norm [simplify]
-              );
-              trivial ()))
+          norm_sound_LV2M ();
+          apply (`TLogic.rew_iff_left); rew_iff_LV2M (); norm [simplify];
+          l_to_r [`extract_eij_framed_equiv];
+          apply (`TLogic.rew_iff_left);
+              l_to_r [``@split_sl0_lem];
+              rew_iff_LV2M ();
+              norm [];
+          // re-running rew_iff_LV2M since there is a nested append
+          apply (`TLogic.rew_iff_left); rew_iff_LV2M (); norm [];
+          // We rewrite [forall sl' . sl' = sl0_* ==> p sl'] into [p sl0_*]
+          TLogic.(
+            apply (`rew_iff_left); apply_raw (`rew_forall_eq (`@sl0_pre)); smt (); norm [simplify];
+            apply (`rew_iff_left); apply_raw (`rew_forall_eq (`@sl0_ro )); smt (); norm [simplify];
+            apply (`rew_iff_left); apply_raw (`rew_forall_eq (`@sl0_rem)); smt ();
+              norm_sound_LV2M (); norm [delta_only [`%split_vars]; simplify]
+          );
+          smt ()))
       (fun sl0 x sl1 sl_rem ->
-        // A guard generated by [extract_sub_prd_framed_equiv]
-        let gd : squash (prd1 x == Perm.apply_perm_r (Perm.perm_f_of_list (prd_f1 x))
-                                                     (sub_prd env (eij_trg_mask csm_f) (post x) csm1))
-              = ()
-        in
-        _ by (with_policy Goal (fun () ->
-              norm_sound_LV2M ();
-              apply (`TLogic.rew_iff_left); rew_iff_LV2M (); norm [simplify];
-              l_to_r [`extract_eij_framed_equiv];
-              apply (`TLogic.rew_iff_left); rew_iff_LV2M (); norm [];
-              l_to_r [`extract_sub_prd_framed_equiv]);
-                later (); let _ = mintros () in exact (``@gd);
-              apply (`TLogic.rew_iff_left); rew_iff_LV2M ();
-                // additional goal generated by [rew_append_var_inj']
-                seq explode (fun () -> try trefl () with | _ -> ());
-                apply_lemma (`filter_bind_csm);
-              l_to_r [`filter_sl_bind_csm];
-              smt ()))
+        let split_sl0_lem = split_vars_append pre ro (eij_sl (L.index pre_f) sl0) in
+        let sl0_pre = (split_vars pre ro (eij_sl (L.index pre_f) sl0))._1         in
+        let sl0_ro  = (split_vars pre ro (eij_sl (L.index pre_f) sl0))._2         in
+        let sl0_rem = filter_sl (mask_not (eij_trg_mask pre_f)) sl0               in
+        U.assert_by_tac (fun () ->
+          norm_sound_LV2M ();
+          apply (`TLogic.rew_iff_left); rew_iff_LV2M (); norm [simplify];
+          l_to_r [`extract_eij_framed_equiv];
+          apply (`TLogic.rew_iff_left);
+            l_to_r [``@split_sl0_lem];
+            rew_iff_LV2M ();
+            norm [];
+          rew_iff_l_LV2M false;
+          with_policy SMT TLogic.(fun () ->
+            apply (`rew_iff_left); apply_raw (`rew_exists_eq (`@sl0_pre));
+              smt (); norm [simplify];
+            apply (`rew_iff_left); apply (`exists_morph_iff); let _ = intro () in
+              apply (`rew_exists_eq (`@sl0_ro ));
+              smt (); norm [simplify];
+            apply (`rew_iff_left); apply (`exists_morph_iff); let _ = intro () in
+              apply_raw (`rew_exists_eq (`@sl0_rem));
+              smt (); norm_sound_LV2M (); norm [simplify]
+          );
+          norm [delta_only [`%spec_sub_post_equiv]];
+          norm_sound_LV2M ();
+          l_to_r [`extract_pequiv_trans];
+          l_to_r [`extract_spec_post_equiv];
+          with_policy Goal (fun () ->
+          l_to_r [`extract_sub_prd_framed_equiv]); later ();
+            // guard
+            norm_sound_LV2M (); norm [simplify]; smt ();
+          rew_iff_l_LV2M false;
+            // additional goal generated by [rew_append_var_inj']
+            seq explode (fun () -> try trefl () with | _ -> ());
+            apply_lemma (`filter_bind_csm);
+          norm [delta_only [`%U.cast]; iota];
+          l_to_r [`filter_sl_bind_csm];
+          smt ()))
 #pop-options
 
 
@@ -443,8 +646,8 @@ let rec repr_M_of_LV_sound
       (fun a t csm prd lc -> squash (lcsub_at_leaves lc) ->
          squash (sound_M_of_LV lc (repr_M_of_LV lc)))
     begin fun (*LCspec*) a sp s sh csm_f -> fun _ ->
-      let M.Mkspec_r pre post req ens = s in
-      sound_repr_M_of_LV__LCspec env a sp pre post req ens sh csm_f
+      let M.Mkspec_r pre post ro req ens = s in
+      sound_repr_M_of_LV__LCspec env a sp pre post ro req ens sh csm_f
     end
     begin fun (*LCret*)  a x sl_hint prd csm_f -> fun _ ->
       sound_repr_M_of_LV__LCret env a x sl_hint prd csm_f
@@ -472,8 +675,8 @@ let rec repr_M_of_LV_sound
             squash (lcsub_at_leaves lc) ->
             squash (sound_M_of_LV lc (repr_M_of_LV lc))))
       begin fun (*LCspec*) a sp s sh csm_f -> fun csm1 prd1 prd_f1 _ ->
-        let M.Mkspec_r pre post req ens = s in
-        sound_repr_M_of_LV__LCsub_LCspec env a sp pre post req ens sh csm_f csm1 prd1 prd_f1
+        let M.Mkspec_r pre post ro req ens = s in
+        sound_repr_M_of_LV__LCsub_LCspec env a sp pre post ro req ens sh csm_f csm1 prd1 prd_f1
       end
       (fun (*LCret*)   a x sl_hint prd csm_f -> fun _ _ _ _ -> false_elim ())
       (fun (*LCbind*)  a b f g f_csm f_prd cf g_csm g_prd cg -> fun _ _ _ _ -> false_elim ())
