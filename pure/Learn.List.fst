@@ -11,6 +11,7 @@ module Fin = FStar.Fin
 
 
 type vec (n : nat) (a : Type) = llist a n
+type dom (#a : Type) (l : list a) = Fin.fin (length l)
 
 let list_extensionality (#a : Type)
       (l0 : list a) (l1 : list a {length l1 = length l0})
@@ -39,7 +40,7 @@ let rec list_eq (#a : Type) (eq_a : U.eq_dec a) (l0 l1 : list a)
 
 #push-options "--ifuel 1 --fuel 1"
 let rec memP_iff (#a : Type) (x : a) (l : list a)
-  : Lemma (ensures memP x l <==> (exists (i : Fin.fin (length l)) . index l i == x))
+  : Lemma (ensures memP x l <==> (exists (i : dom l) . index l i == x))
           (decreases l)
   = match l with
   | [] -> ()
@@ -49,19 +50,25 @@ let rec memP_iff (#a : Type) (x : a) (l : list a)
       <==> { }
         y == x \/ memP x ys;
       <==> { memP_iff x ys }
-        index l 0 == x \/ (exists (i : Fin.fin (length ys)) . index ys i == x);
+        index l 0 == x \/ (exists (i : dom ys) . index ys i == x);
       <==> { }
         index l 0 == x \/ (exists (i : Fin.fin (length l - 1)) . index l (i+1) == x);
-      <==> { introduce forall (i : Fin.fin (length l)) . i == 0 \/ (exists (i' : Fin.fin (length l - 1)) . i = i'+1)
+      <==> { introduce forall (i : dom l) . i == 0 \/ (exists (i' : Fin.fin (length l - 1)) . i = i'+1)
              with if i > 0 then assert (i = (i-1)+1) }
-        exists (i : Fin.fin (length l)) . index l i == x;
+        exists (i : dom l) . index l i == x;
       }
 #pop-options
+
+let rec append_memP (#a : Type) (x : a) (l0 l1 : list a)
+  : Lemma (ensures memP x (l0 @ l1) <==> (memP x l0 \/ memP x l1))
+  = match l0 with
+  | [] -> ()
+  | y :: l0 -> append_memP x l0 l1
 
 (* [mem_findi] *)
 
 let rec mem_findi (#a : eqtype) (x : a) (l : list a)
-  : Pure (Fin.fin (length l))
+  : Pure (dom l)
          (requires mem x l)
          (ensures fun i -> index l i = x)
          (decreases l)
@@ -113,7 +120,7 @@ let rec map2_length (#a1 #a2 #b: Type) (f: a1 -> a2 -> b) (l1:list a1) (l2:list 
   | [], [] -> ()
   | x :: xs, y :: ys -> map2_length f xs ys
 
-let rec map2_index (#a1 #a2 #b: Type) (f: a1 -> a2 -> b) (l1:list a1) (l2:list a2) (i : Fin.fin (length l1))
+let rec map2_index (#a1 #a2 #b: Type) (f: a1 -> a2 -> b) (l1:list a1) (l2:list a2) (i : dom l1)
   : Lemma (requires length l1 == length l2)
           (ensures index (map2 f l1 l2) i == f (index l1 i) (index l2 i))
           (decreases i)
@@ -390,6 +397,14 @@ let rec map_nth (#a : Type) (i : nat) (f : a -> a) (l : list a)
     if i = 0 then f hd :: tl
     else hd :: map_nth (i - 1) f tl
 
+let rec map_nth_index (#a : Type) (i : nat) (f : a -> a) (l : list a) (j : dom l)
+  : Lemma (requires  i < length l)
+          (ensures   index (map_nth i f l) j == (if j = i then f (index l i) else index l j))
+          (decreases j)
+          [SMTPat (index (map_nth i f l) j)]
+  = let hd :: tl = l in
+    if j > 0 && i > 0 then map_nth_index (i-1) f tl (j-1)
+
 let rec set_is_map_nth (#a : Type) (i : nat) (x : a) (l : list a)
   : Lemma (requires  i < length l)
           (ensures   set i x l == map_nth i (fun _ -> x) l)
@@ -413,16 +428,16 @@ let splitAt_index (#a : Type) (n : nat) (l : list a)
   : Lemma (requires n <= length l)
           (ensures (let l0, l1 = splitAt n l in
                     length l0 == n /\ length l1 == length l - n /\
-                   (forall (i : Fin.fin (length l0)) . {:pattern (index l0 i)}
+                   (forall (i : dom l0) . {:pattern (index l0 i)}
                       index l0 i == index l i) /\
-                   (forall (i : Fin.fin (length l1)) . {:pattern (index l1 i)}
+                   (forall (i : dom l1) . {:pattern (index l1 i)}
                       index l1 i == index l (i + n) )))
   =
     let l0, l1 = splitAt n l in
     splitAt_length n l;
-    introduce forall (i : Fin.fin (length l0)) . index l0 i == index l i
+    introduce forall (i : dom l0) . index l0 i == index l i
       with lemma_splitAt_reindex_left n l i;
-    introduce forall (i : Fin.fin (length l1)) . index l1 i == index l (i + n)
+    introduce forall (i : dom l1) . index l1 i == index l (i + n)
       with lemma_splitAt_reindex_right n l i
 
 
@@ -448,6 +463,28 @@ let rec fold_right_gtot_append #a #b l0 l1 f x
 let fold_right_gtot_f_comm #a #b (f : a -> b -> GTot b) : prop =
   forall (x0 x1 : a) (y : b) . f x0 (f x1 y) == f x1 (f x0 y)
 
+(* [fold_left] *)
+
+let rec fold_left_ind_aux
+      (#a #b : Type) (f : a -> b -> a) (ll : list b) (x : a) (lr : list b)
+      (p : (ll : list b) -> (x : a) -> (lr : list b) -> Type0)
+      (pf : (ll : list b) -> (x : a) -> (r : b) -> (lr : list b) ->
+            Lemma (requires p ll x (r :: lr)) (ensures p (r :: ll) (f x r) lr))
+  : Lemma (requires p ll x lr) (ensures p (rev_acc lr ll) (fold_left f x lr) [])
+          (decreases lr)
+  = match lr with
+  | [] -> ()
+  | r :: lr ->
+      pf ll x r lr;
+      fold_left_ind_aux f (r :: ll) (f x r) lr p pf
+
+let fold_left_ind
+      (#a #b : Type) (f : a -> b -> a) (x0 : a) (l : list b)
+      (p : (ll : list b) -> (x : a) -> (lr : list b) -> Type0)
+      (pf : (ll : list b) -> (x : a) -> (r : b) -> (lr : list b) ->
+            Lemma (requires p ll x (r :: lr)) (ensures p (r :: ll) (f x r) lr))
+  : Lemma (requires p [] x0 l) (ensures p (rev l) (fold_left f x0 l) [])
+  = fold_left_ind_aux f [] x0 l p pf
 
 (* [g_for_all] *)
 

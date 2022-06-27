@@ -166,16 +166,22 @@ let fin_injective_le (n m : nat) (f : Fin.fin n -> Fin.fin m)
   : Lemma (requires injective f) (ensures n <= m)
   = if n > m then let _ = pigeonhole_fun n m f in ()
 
+let rec fin_find_f (#n : nat) (#a : Type) ($f : Fin.fin n -> a) (p : a -> bool) (i : nat)
+  : Pure (option (Fin.fin n))
+         (requires True)
+         (ensures (function
+                  | None   -> forall (k : nat { i <= k /\ k < n}) . not (p (f k))
+                  | Some j -> i <= j /\ p (f j)))
+         (decreases n - i)
+  = if i >= n then None
+    else if p (f i) then Some i
+    else fin_find_f f p (i+1)
+
 let surjective_invert_r (#a : eqtype) (n : nat) (f : Fin.fin n -> a)
       (x : a) : Pure (Fin.fin n) (requires surjective f) (ensures fun y -> f y = x)
   =
-    let f_sq = Seq.init n f in
-    match Fin.find f_sq (fun x' -> x' = x) 0 with
-    | Some y -> y
-    | None -> eliminate exists y . f y = x
-               returns False
-               with _ . assert (Seq.index f_sq y = x);
-             false_elim ()
+    let Some y = fin_find_f f (fun x' -> x' = x) 0
+    in y
 
 let fin_surjective_injective (n m : nat) (f : Fin.fin n -> Fin.fin m)
   : Lemma (requires n <= m /\ surjective f) (ensures injective f)
@@ -260,8 +266,10 @@ let pat_inv_f () : squash (
     (forall (n : nat) (f : perm_f n) (i : Fin.fin n) . {:pattern (f (inv_f f i))} f (inv_f f i) == i)
   )
   =
-    assert (forall (n : nat) (f : perm_f n) (i : Fin.fin n) . inv_f f (f i) == (inv_f f `comp` f) i);
-    assert (forall (n : nat) (f : perm_f n) (i : Fin.fin n) . f (inv_f f i) == (f `comp` inv_f f) i)
+    introduce forall (n : nat) (f : perm_f n) (i : Fin.fin n) . inv_f f (f i) == i
+      with assert (inv_f f (f i) == (inv_f f `comp` f) i);
+    introduce forall (n : nat) (f : perm_f n) (i : Fin.fin n) . f (inv_f f i) == i
+      with assert (f (inv_f f i) == (f `comp` inv_f f) i)
 
 let inverse_uniq (#n : nat) (f g0 g1 : perm_f n)
   : Lemma (requires is_inverse f g0 /\ is_inverse f g1)

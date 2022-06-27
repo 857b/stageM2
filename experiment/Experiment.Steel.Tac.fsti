@@ -10,8 +10,9 @@ module SE   = Steel.Effect
 module Msk  = Learn.List.Mask
 module Fin  = FStar.Fin
 module Opt  = Learn.Option
-module Vpl  = Experiment.Steel.VPropList
+module Vpl  = Experiment.Steel.VPropList//TODO? open
 module Veq  = Experiment.Steel.VEquiv
+module Perm = Learn.Permutation
 
 open FStar.Tactics
 open Learn.Tactics.Util
@@ -52,6 +53,11 @@ let cs_raise (#a : Type)
   = fail_f (fun fail_enum infos -> let
       failure = {fail_enum; fail_info = L.(infos @ ctx ())} in
       failure_to_string fr failure)
+
+
+let __delta_list : list string =
+  [`%L.length; `%L.index; `%L.op_At; `%L.append; `%L.map; `%L.hd; `%L.tl; `%L.tail; `%L.count; `%L.fold_left;
+   `%Ll.initi; `%Ll.repeat; `%Ll.map_nth; `%Ll.set]
 
 
 (***** [truth_refl] *)
@@ -361,15 +367,6 @@ let build_to_repr_t fr ctx : Tac unit
 
 #pop-options
 (**) private val __end_opt_1 : unit
-
-
-/// Solves a goal [sp ?s] where [sp] is as [spec_r_exact] or a [spec_r_steel]
-let build_spec_r fr ctx : Tac unit =
-  try apply (`M.SpecExact)
-  with | _ ->
-      apply_raw (`M.SpecSteel);
-      build_to_repr_t fr ctx;
-      apply (`M.trivial_spec_find_ro)// TODO: infer ro
 
 
 (*** Building an injection *)
@@ -708,6 +705,450 @@ let checked_pre_partial_injection
   =
     (**) check_map_to_eq_spec src trg ij;
     ij
+
+
+(*** Building a [spec_find_ro] *)
+
+// TODO
+
+type sel_eq_t (pre post : Vpl.vprop_list) =
+    i : (Fin.fin (L.length pre) & Fin.fin (L.length post))
+      { L.index pre i._1 == L.index post i._2 }
+
+// TODO? optimize to avoid a quadratic complexity because of [( @ )]
+noeq
+type ens_refl (#pre #post : Vpl.vprop_list) (sl0 : Vpl.sl_f pre) (sl1 : Vpl.sl_f post)
+  : (ens : Type0) -> list (sel_eq_t pre post) -> Type
+  =
+  | EnsProp : (p : Type0) -> ens_refl sl0 sl1 p []
+  | EnsEq   : (e : sel_eq_t pre post) ->
+              (p : Type0) -> squash (p <==> (sl0 e._1 == U.cast _ (sl1 e._2))) ->
+              ens_refl sl0 sl1 p [e]
+  | EnsConj : (#p0 : Type0) -> (#p1 : (squash p0 -> Type0)) ->
+              (#es0 : list (sel_eq_t pre post)) -> (#es1 : list (sel_eq_t pre post)) ->
+              // TODO: comment about l_and
+              (r0 : ens_refl sl0 sl1 p0 es0) -> (r1 : ((pf0 : squash p0) -> ens_refl sl0 sl1 (p1 pf0) es1)) ->
+              ens_refl sl0 sl1 (p0 /\ p1 ()) L.(es0 @ es1)
+
+val ens_refl_impl_eqs
+      (#pre #post : Vpl.vprop_list) (#sl0 : Vpl.sl_f pre) (#sl1 : Vpl.sl_f post)
+      (#ens : Type0) (#es : list (sel_eq_t pre post))
+      (r : ens_refl sl0 sl1 ens es)
+      (e : sel_eq_t pre post)
+  : Lemma (requires  L.memP e es /\ ens) (ensures sl0 e._1 == U.cast _ (sl1 e._2))
+
+(* ALT to Veq.map_to_eq
+type sel_eq_f (pre post : Vpl.vprop_list) =
+  (i_post : Ll.dom post) -> option (i_pre : Ll.dom pre {L.index pre i_pre == L.index post i_post})
+ *)
+
+let sel_eq_on
+      (#pre #post : Vpl.vprop_list)
+      (f : Ll.dom post -> option (Ll.dom pre) { Veq.map_to_eq post pre f})
+      (sl0 : Vpl.sl_f pre) (sl1 : Vpl.sl_f post)
+  : prop
+  = forall (i : Ll.dom post {Some? (f i)}) . sl0 (Some?.v (f i)) == U.cast _ (sl1 i)
+
+// TODO: clean the [True] by returning an option
+[@@ __cond_solver__]
+let rec ens_refl_remove_eq
+      (#pre #post : Vpl.vprop_list) (#sl0 : Vpl.sl_f pre) (#sl1 : Vpl.sl_f post)
+      (#ens : Type0) (#es : list (sel_eq_t pre post))
+      (r : ens_refl sl0 sl1 ens es)
+      (f : Ll.dom post -> option (Ll.dom pre) { Veq.map_to_eq post pre f})
+  : Pure Type0 (requires  sel_eq_on f sl0 sl1)
+               (ensures   fun ens' -> ens' <==> ens)
+               (decreases r)
+  = match r with
+  | EnsProp p -> p
+  | EnsEq e p _ ->
+      if Opt.opt_eq (fun x y -> x = y) (f e._2) (Some e._1) then True else p
+  | EnsConj #_ #_ #_ #_ #ens0 #ens1 #es0 #es1 r0 r1 ->
+      ens_refl_remove_eq r0 f /\ ens_refl_remove_eq (r1 ()) f
+
+
+(***** Building [ens_refl] *)
+
+[@@ __tac_helper__]
+let ens_refl_eq0
+      (#pre #post : Vpl.vprop_list) (#sl0 : Vpl.sl_f pre) (#sl1 : Vpl.sl_f post)
+      (pre_i : Fin.fin (L.length pre)) (post_i : Fin.fin (L.length post)) (t : Type)
+      (eq_v  : squash (let pre_v = L.index pre pre_i in
+                       pre_v == L.index post post_i /\ pre_v.t == t))
+  : ens_refl sl0 sl1 (eq2 #t (sl0 pre_i) (sl1 post_i)) [pre_i, post_i]
+  =
+    EnsEq (pre_i, post_i) (eq2 #t (sl0 pre_i) (sl1 post_i)) ()
+
+[@@ __tac_helper__]
+let ens_refl_eq1
+      (#pre #post : Vpl.vprop_list) (#sl0 : Vpl.sl_f pre) (#sl1 : Vpl.sl_f post)
+      (pre_i : Fin.fin (L.length pre)) (post_i : Fin.fin (L.length post)) (t : Type)
+      (eq_v  : squash (let pre_v = L.index pre pre_i in
+                       pre_v == L.index post post_i /\ pre_v.t == t))
+  : ens_refl sl0 sl1 (eq2 #t (sl1 post_i) (sl0 pre_i)) [pre_i, post_i]
+  =
+    EnsEq (pre_i, post_i) (eq2 #t (sl1 post_i) (sl0 pre_i)) ()
+
+let __norm_index : list norm_step = [
+  delta_only L.([`%index; `%hd; `%tl]);
+  iota; zeta; primops
+]
+
+/// Solves a goal [ens_refl sl0 sl1 ens ?es]
+let rec build_ens_refl () : Tac unit =
+  try apply (`ens_refl_eq0);
+      // eq_v
+      // POTENTIALLY UNSOUND
+      //   should be fine since we are only using [trefl], hence the proof does not depend on any assumptions in
+      //   the context
+      norm __norm_index;
+      split (); trefl (); trefl ()
+  with _ ->
+  try apply (`ens_refl_eq1);
+      // eq_v
+      norm __norm_index;
+      split (); trefl (); trefl ()
+  with _ ->
+  try apply (`EnsConj);
+      // r0
+      build_ens_refl ();
+      // r1
+      let pf0 = intro () in
+      build_ens_refl ()
+  with _ ->
+      apply (`EnsProp)
+
+
+(***** Extracting an injection *)
+
+/// We build a partial injection from [post] to [pre], but we could probably build it in the other direction
+
+[@@__cond_solver__]
+let ograph_of_sl_eqs
+      (#pre #post : Vpl.vprop_list)
+      (eqs : list (sel_eq_t pre post))
+  : ograph (L.length post) (L.length pre)
+  =
+    let n_pre  = L.length pre  in
+    let n_post = L.length post in
+    let g0 = Ll.repeat n_post (Ll.repeat n_pre false) in
+    L.fold_left (fun (g : ograph n_post n_pre) (e : sel_eq_t pre post) ->
+       let i_pre, i_post = e in
+       Ll.map_nth i_post (fun (c : Ll.vec n_pre bool) -> Ll.set i_pre true c) g) g0 eqs
+
+val ograph_of_sl_eqs_spec
+      (#pre #post : Vpl.vprop_list)
+      (eqs : list (sel_eq_t pre post))
+      (i_post : Ll.dom post) (i_pre : Ll.dom pre)
+  : Lemma (L.index (L.index (ograph_of_sl_eqs eqs) i_post) i_pre <==>
+            (L.index pre i_pre == L.index post i_post /\ L.mem (i_pre, i_post) eqs))
+
+
+(***** Splitting [pre] and [post] according to the equalities *)
+
+// TODO: optimize
+
+val sel_eq_on_injection_iff_eq
+      (#pre #post : Vpl.vprop_list)
+      (f : Veq.partial_injection post pre)
+      (sl0 : Vpl.sl_f pre) (sl1 : Vpl.sl_f post)
+  : Lemma Vpl.(sel_eq_on (L.index f) sl0 sl1
+            <==> extract_vars (Veq.ij_matched_equiv f) (filter_sl (Msk.mask_not (Veq.ij_trg_mask f)) sl0)
+               == filter_sl (Msk.mask_not (Veq.ij_src_mask f)) sl1)
+
+#push-options "--ifuel 0 --fuel 0 --z3rlimit 20"
+[@@ __cond_solver__]
+let build_spec_find_ro_from_vequivs
+      (a : Type) (pre : M.pre_t) (post : M.post_t a) (req : M.req_t pre) (ens : M.ens_t pre a post)
+      (spc_pre : M.pre_t) (spc_post : M.post_t a) (spc_ro : Vpl.vprop_list)
+      (sro_pre_eq : Vpl.vequiv_perm L.(spc_pre @ spc_ro) pre)
+      (sro_post_eq : (x : a) -> Vpl.vequiv_perm (post x) L.(spc_post x @ spc_ro))
+      (ens0 : M.ens_t pre a post)
+      (ens_imp0 : (sl0 : Vpl.sl_f pre) -> (x : a) -> (sl1 : Vpl.sl_f (post x)) ->
+            Lemma (requires ens sl0 x sl1)
+                  (ensures  ens0 sl0 x sl1))
+      (ens0_eq : (sl0 : Vpl.sl_f spc_pre) -> (sl_fr0 : Vpl.sl_f spc_ro) ->
+                 (x : a) -> (sl1 : Vpl.sl_f (spc_post x)) -> (sl_fr1 : Vpl.sl_f spc_ro) ->
+            Lemma (ens0 Vpl.(extract_vars sro_pre_eq (append_vars sl0 sl_fr0))
+                      x Vpl.(extract_vars (Perm.pequiv_sym (sro_post_eq x)) (append_vars sl1 sl_fr1))
+                   <==> sl_fr0 == sl_fr1))
+      (ens1 : (sl0 : Vpl.sl_f pre) -> (x : a) -> (sl1 : Vpl.sl_f (post x)) -> squash (ens0 sl0 x sl1) -> Type0)
+      (ens_eq1 : (sl0 : Vpl.sl_f pre) -> (x : a) -> (sl1 : Vpl.sl_f (post x)) ->
+            Lemma (requires ens0 sl0 x sl1)
+                  (ensures  ens sl0 x sl1 <==> ens1 sl0 x sl1 ()))
+  : M.spec_find_ro a pre post req ens
+  =
+    let spc_ens (sl0 : Vpl.sl_f spc_pre) (x : a) (sl1 : Vpl.sl_f (spc_post x)) (sl_fr : Vpl.sl_f spc_ro) : Type0
+      =
+        let sl0' = Vpl.(extract_vars sro_pre_eq (append_vars sl0 sl_fr))                        in
+        let sl1' = Vpl.(extract_vars (Perm.pequiv_sym (sro_post_eq x)) (append_vars sl1 sl_fr)) in
+        ens0_eq sl0 sl_fr x sl1 sl_fr;
+        assert (ens0 sl0' x sl1');
+        ens1 sl0' x sl1' ()
+    in
+    {
+    sro_spc = {
+      spc_pre; spc_post; spc_ro;
+      spc_req = (fun (sl0 : Vpl.sl_f spc_pre) (sl_fr : Vpl.sl_f spc_ro) ->
+                   req Vpl.(extract_vars sro_pre_eq (append_vars sl0 sl_fr)));
+      spc_ens;
+    };
+    sro_pre_eq; sro_post_eq;
+    sro_req_eq = (fun sl0 sl_fr0 -> ());
+    sro_ens_eq = (fun sl0 sl_fr0 x sl1 sl_fr1 ->
+                   ens0_eq sl0 sl_fr0 x sl1 sl_fr1;
+                   let sl0' = Vpl.(extract_vars sro_pre_eq (append_vars sl0 sl_fr0))                        in
+                   let sl1' = Vpl.(extract_vars (Perm.pequiv_sym (sro_post_eq x)) (append_vars sl1 sl_fr1)) in
+                   FStar.Classical.move_requires (ens_imp0 sl0' x) sl1';
+                   introduce ens0 sl0' x sl1' ==> (ens sl0' x sl1' <==> ens1 sl0' x sl1' ())
+                     with _ . ens_eq1  sl0' x sl1';
+                   ()
+                 )
+  }
+#pop-options
+
+// TODO:MOVE
+let fl_apply_perm_r_inj (#n : nat) (p : Perm.perm_f n) (#ts : Ll.vec n Type) (xs ys : Fl.flist ts)
+  : Lemma (requires Fl.apply_perm_r p xs == Fl.apply_perm_r p ys)
+          (ensures  xs == ys)
+  = assert (Fl.apply_perm_r (Perm.inv_f p) (Fl.apply_perm_r p xs)
+         == Fl.apply_perm_r (Perm.inv_f p) (Fl.apply_perm_r p ys));
+    Fl.apply_r_comp (Perm.inv_f p) p xs;
+    Fl.apply_r_comp (Perm.inv_f p) p ys
+
+
+
+val build_spec_find_ro_from_ij_lem1
+      (pre post : Vpl.vprop_list) (ij : Veq.partial_injection post pre)
+      (p0 : Vpl.vequiv_perm (Msk.filter_mask (Msk.mask_not (Veq.ij_trg_mask ij)) pre)
+                            (Msk.filter_mask (Msk.mask_not (Veq.ij_src_mask ij)) post))
+      (sl1    : Vpl.sl_f Msk.(filter_mask (Veq.ij_src_mask ij) post))
+      (sl_fr1 : Vpl.sl_f Msk.(filter_mask (mask_not (Veq.ij_trg_mask ij)) pre))
+  : Lemma Vpl.(extract_vars p0 sl_fr1
+            == filter_sl (Msk.mask_not (Veq.ij_src_mask ij))
+                  (extract_vars Perm.(pequiv_sym (pequiv_trans
+                    (Msk.mask_pequiv_append (Veq.ij_src_mask ij) post)
+                    (pequiv_append (pequiv_refl _) (pequiv_sym p0)))
+                  ) (append_vars sl1 sl_fr1)))
+
+#push-options "--fuel 0 --ifuel 0 --z3rlimit 20"
+
+[@@ __cond_solver__]
+let build_spec_find_ro_from_ij
+      (a : Type) (pre : M.pre_t) (post : M.post_t a) (req : M.req_t pre) (ens : M.ens_t pre a post)
+      (ens_r_es : (x : a) -> list (sel_eq_t pre (post x)))
+      (ens_r : (sl0 : Vpl.sl_f pre) -> (x : a) -> (sl1 : Vpl.sl_f (post x)) ->
+               ens_refl sl0 sl1 (ens sl0 x sl1) (ens_r_es x))
+      (n_post : nat {forall (x : a) . {:pattern (post x)} L.length (post x) = n_post})
+      (ij : Ll.vec n_post (option (Ll.dom pre)) {Veq.injective_on_dom (L.index ij)})
+      (ij_x : (x : a) -> squash (
+            Veq.map_to_eq (post x) pre (L.index ij) /\
+            (forall (i : Fin.fin n_post {Some? (L.index ij i)}) . L.mem (Some?.v (L.index ij i), i) (ens_r_es x))))
+  : M.spec_find_ro a pre post req ens
+  =
+    let spc_pre = Msk.filter_mask (Veq.ij_trg_mask ij) pre                             in
+    let spc_post (x : a) = Msk.filter_mask (Veq.ij_src_mask ij) (post x)               in
+    let spc_ro  = Msk.filter_mask (Msk.mask_not (Veq.ij_trg_mask ij)) pre              in
+    let spc_ro' (x : a) = Msk.filter_mask (Msk.mask_not (Veq.ij_src_mask ij)) (post x) in
+
+    let ij' (x : a) : Veq.partial_injection (post x) pre
+      =
+        (**) ij_x x;
+        ij
+    in
+    let ro_eqv (x : a) : Vpl.vequiv_perm spc_ro (spc_ro' x)
+      = U.cast _ (Veq.ij_matched_equiv #_ #(post x) #pre (ij' x)) in
+    let pre_eq  : Vpl.vequiv_perm L.(spc_pre @ spc_ro) pre
+      = Msk.mask_pequiv_append' (Veq.ij_trg_mask ij) pre          in
+    let post_eq (x : a) : Vpl.vequiv_perm (post x) L.(spc_post x @ spc_ro)
+      = Perm.(pequiv_trans
+          (Msk.mask_pequiv_append (Veq.ij_src_mask ij) (post x))
+          (pequiv_append (pequiv_refl (spc_post x)) (pequiv_sym (ro_eqv x))))
+    in
+    build_spec_find_ro_from_vequivs a pre post req ens
+      spc_pre spc_post spc_ro pre_eq post_eq
+      (fun sl0 x sl1 -> ij_x x; sel_eq_on (L.index ij) sl0 sl1)
+      (fun sl0 x sl1 ->
+          ij_x x;
+          introduce forall (i : Ll.dom (post x) {Some? (L.index ij i)}) .
+                    sl0 (Some?.v (L.index ij i)) == U.cast _ (sl1 i)
+          with (
+            let j = Some?.v (L.index ij i) in
+            assert (L.mem (j, i) (ens_r_es x));
+            ens_refl_impl_eqs (ens_r sl0 x sl1) (j, i)
+          ))
+      Vpl.(fun sl0 sl_fr0 x sl1 sl_fr1 ->
+          ij_x x;
+          let f = ij' x in
+          let sl0' = extract_vars pre_eq (append_vars sl0 sl_fr0)                        in
+          let sl1' = extract_vars (Perm.pequiv_sym (post_eq x)) (append_vars sl1 sl_fr1) in
+          let m0   = Msk.mask_not (Veq.ij_trg_mask f) in
+          let m1   = Msk.mask_not (Veq.ij_src_mask f) in
+          let prm  = ro_eqv x                         in
+
+          // ALT: equality on permutations
+          Fl.flist_extensionality sl_fr0 (filter_sl m0 sl0') (fun j1 ->
+            let j = Msk.mask_pull m0 j1 in
+            let j2 = Msk.mask_len (Veq.ij_trg_mask ij) + j1 in
+            calc (==) {
+              (|_, filter_sl m0 sl0' j1|) <: t : Type & t;
+            == { }
+              (|_, sl0' j|);
+            == { }
+              (|_, append_vars sl0 sl_fr0 (pre_eq j)|);
+            == { Msk.mask_perm_append'_index (Veq.ij_trg_mask ij) j }
+              (|_, append_vars sl0 sl_fr0 j2|);
+            == { Ll.pat_append () }
+              (|_, sl_fr0 j1|);
+            }
+          );
+
+          U.assert_by (extract_vars prm sl_fr1 == filter_sl m1 sl1') (fun () ->
+            build_spec_find_ro_from_ij_lem1 pre (post x) ij (U.cast _ prm) sl1 sl_fr1);
+          
+          sel_eq_on_injection_iff_eq f sl0' sl1';
+          calc (<==>) {
+            extract_vars prm (filter_sl m0 sl0') == filter_sl m1 sl1';
+          <==> { }
+            extract_vars prm sl_fr0 == extract_vars prm sl_fr1;
+          <==> { FStar.Classical.move_requires (fl_apply_perm_r_inj prm sl_fr0) sl_fr1 }
+            sl_fr0 == sl_fr1;
+          };
+          ()
+          )
+      (fun sl0 x sl1 _ -> ij_x x; ens_refl_remove_eq (ens_r sl0 x sl1) (L.index ij))
+      (fun sl0 x sl1 -> ij_x x)
+#pop-options
+
+(**) private val __end_build_spec_find_ro_from_ij : unit
+
+
+(***** Assembling everything *)
+
+[@@ __cond_solver__]
+let __build_spec_find_ro
+      (a : Type) (pre : M.pre_t) (post : M.post_t a) (req : M.req_t pre) (ens : M.ens_t pre a post)
+      (ens_r_es : (x : a) -> list (sel_eq_t pre (post x)))
+      (ens_r : (sl0 : Vpl.sl_f pre) -> (x : a) -> (sl1 : Vpl.sl_f (post x)) ->
+               ens_refl sl0 sl1 (ens sl0 x sl1) (ens_r_es x))
+      (n_post : nat)
+      (n_post_eq : (x : a) -> squash (L.length (post x) = n_post))
+      (g : ograph n_post (L.length pre))
+      (g_eq : (x : a) -> squash (n_post_eq x; g == ograph_of_sl_eqs (ens_r_es x)))
+  : M.spec_find_ro a pre post req ens
+  =
+    let ij : Ll.vec n_post (option Ll.(dom pre)) = build_injection g in
+    (**) FStar.Classical.forall_intro_squash_gtot n_post_eq;
+    (**) build_injection_spec g;
+    build_spec_find_ro_from_ij
+      a pre post req ens
+      ens_r_es ens_r n_post
+      ij
+      (fun x ->
+        introduce forall (i : Fin.fin n_post {Some? (L.index ij i)}) .
+                  let Some j = L.index ij i in
+                  L.index pre j == L.index (post x) i /\ L.mem (j, i) (ens_r_es x)
+          with begin
+            let Some j = L.index ij i in
+            assert (L.index (L.index g i) j);
+            n_post_eq x;
+            g_eq x;
+            ograph_of_sl_eqs_spec (ens_r_es x) i j
+          end
+      )
+
+[@@ __tac_helper__]
+let __build_then_norm (#a : Type) (x : a) (#y : a) (_ : squash (y == x))
+  : a
+  = y
+
+let build_then_norm (t : unit -> Tac unit) (ns : list norm_step) : Tac unit
+  =
+    apply_raw (`__build_then_norm);
+    // x
+    t ();
+    // y <- x
+    dismiss ();
+    norm ns;
+    dump "after norm"; //TODO
+    trefl ()
+    
+
+/// Solves a goal [M.spec_find_ro a pre post req ens]
+let build_spec_find_ro () : Tac unit
+  =
+    build_then_norm begin fun () ->
+      apply (`__build_spec_find_ro);
+      // ens_r
+      (let sl0 = intro () in
+      let x   = intro () in
+      let sl1 = intro () in
+      build_ens_refl ());
+      // n_post_eq
+      (let x   = intro () in
+      norm [delta_only [`%L.length]; iota; zeta];
+      trefl ());
+      // g_eq
+      (let x   = intro () in
+      norm [delta_only __delta_list; delta_attr [`%__cond_solver__]; iota; zeta; primops];
+      trefl ())
+    end [delta_only (L.append __delta_list
+           [`%Vpl.vprop_list_sels_t; `%Vpl.extract_vars; `%Vpl.append_vars;
+            `%Veq.ij_src_mask; `%Veq.ij_trg_mask; `%Veq.mem_Some; `%Veq.ij_matched_equiv; `%Veq.ij_matched_perm;
+            `%Veq.ij_matched_perm_f;
+            `%Fl.append; `%Fl.apply_pequiv; `%Fl.apply_perm_r; `%Fl.mk_flist;
+            `%Msk.mask_pequiv_append; `%Msk.mask_pequiv_append';
+            `%Perm.comp; `%Perm.perm_f_cons; `%Perm.perm_f_move_to_head; `%Perm.id_n; `%Perm.mk_perm_f;
+            `%Perm.perm_f_append; `%Perm.perm_f_snoc_cons; `%Perm.inv_f; `%Perm.surjective_invert_r;
+            `%Perm.fin_find_f; `%Perm.perm_f_cons_snoc;
+            `%FunctionalExtensionality.on_domain;
+            `%Opt.opt_eq; `%None?; `%Some?.v;
+            `%Mktuple2?._1; `%Mktuple2?._2]);
+         delta_attr [`%__cond_solver__; `%__tac_helper__; `%Msk.__mask__];
+         delta_qualifier ["unfold"];
+         iota; zeta; primops]
+
+// TODO:MOVE
+open Steel.FractionalPermission
+open Steel.Reference
+
+noeq
+type test_ens_refl (#pre #post : Vpl.vprop_list) (sl0 : Vpl.sl_f pre) (sl1 : Vpl.sl_f post) (ens : Type0) =
+  | TestEnsRefl : (es : list (sel_eq_t pre post)) ->
+                  ens_refl sl0 sl1 ens es ->
+                  test_ens_refl sl0 sl1 ens
+
+#push-options "--fuel 3"
+let test_ens_refl_0
+      (r0 r1 : ref nat)
+      (sl0 : Vpl.sl_f [vptr' r0 full_perm; vptr' r1 full_perm])
+      (sl1 : Vpl.sl_f [vptr' r0 full_perm; vptr' r1 full_perm])
+  : test_ens_refl sl0 sl1 (sl1 0 == sl0 0 /\ sl1 1 == sl0 0 + sl0 1)
+  = _ by (apply (`TestEnsRefl);
+          build_ens_refl ())
+
+(*
+let print_test_ens_refl_0 r0 r1 sl0 sl1 : U.print_util (test_ens_refl_0 r0 r1 sl0 sl1)
+  = _ by (norm [delta_only [`%test_ens_refl_0]; delta_attr [`%__tac_helper__]];
+          fail "print")
+*)
+
+let test_find_ro_0 (r0 r1 : ref nat)
+  : M.spec_find_ro nat
+      [vptr' r0 full_perm; vptr' r1 full_perm] (fun _ -> [vptr' r0 full_perm; vptr' r1 full_perm])
+      (fun sl0 -> sl0 0 >= 0) (fun sl0 x sl1 -> sl1 0 == sl0 0 /\ sl1 0 == x)
+  = _ by (build_spec_find_ro ())
+#pop-options
+
+
+
+/// Solves a goal [sp ?s] where [sp] is as [spec_r_exact] or a [spec_r_steel]
+let build_spec_r fr ctx : Tac unit =
+  try apply (`M.SpecExact)
+  with | _ ->
+      apply_raw (`M.SpecSteel);
+      build_to_repr_t fr ctx;
+      build_spec_find_ro () // TODO? apply (`M.trivial_spec_find_ro) if this fails
 
 
 (*** Misc *)

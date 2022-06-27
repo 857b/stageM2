@@ -24,11 +24,6 @@ type ens_t (env : vprop_list) (a : Type) (prd : prd_t a) = sl_f env -> (x : a) -
 let res_env (env : vprop_list) (csm : csm_t env) (prd : vprop_list) : vprop_list =
   L.(prd @ filter_mask (mask_not csm) env)
 
-let filter_sl
-      (#vs : vprop_list) (mask : mask_t vs) (xs : sl_f vs)
-  : sl_f (filter_mask mask vs)
-  = filter_mask_fl mask (vprop_list_sels_t vs) xs
-
 let res_sel (#env : vprop_list) (sl0 : sl_f env) (csm : csm_t env) (#prd : vprop_list) (sl1 : sl_f prd)
   : sl_f (res_env env csm prd)
   =

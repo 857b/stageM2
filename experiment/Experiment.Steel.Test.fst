@@ -531,7 +531,7 @@ let test3_LV' (r0 r1 : ref U32.t)
   = F.(to_steel (
       x <-- call read r0;
       call (write r1) U32.(x +%^ 1ul)
-    ) #(_ by (mk_steel [Timer; Extract; Dump Stage_Extract])) ())
+    ) #(_ by (mk_steel [Timer; Extract])) ())
 // time specs     : 87ms
 // time lin_cond  : 177ms
 // time sub_push  : 50ms

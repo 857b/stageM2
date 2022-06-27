@@ -198,6 +198,11 @@ let extract_vars_sym_l (#vs0 #vs1 : vprop_list) (f : vequiv_perm vs0 vs1) (xs : 
   =
     Fl.apply_pequiv_sym_l (vequiv_perm_sl f) xs
 
+let filter_sl
+      (#vs : vprop_list) (mask : Msk.mask_t vs) (xs : sl_f vs)
+  : sl_f (Msk.filter_mask mask vs)
+  = Msk.filter_mask_fl mask (vprop_list_sels_t vs) xs
+
 
 
 val steel_elim_vprop_of_list_cons_f (#opened : Mem.inames) (v : vprop') (vs : vprop_list)
