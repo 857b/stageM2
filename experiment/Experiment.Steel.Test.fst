@@ -306,7 +306,7 @@ let test3_steel' (r0 r1 : ref U32.t)
   = F.(to_steel (
       x <-- call read r0;
       call (write r1) U32.(x +%^ 1ul)
-    ) #(_ by (mk_steel [Extract; Timer; (*; O_ST2SF; Dump Stage_ST*)])) ())
+    ) #(_ by (mk_steel [Extract; Timer(*; O_ST2SF; Dump Stage_ST*)])) ())
 
 inline_for_extraction
 let test3_steel'' (r0 r1 : ref U32.t)

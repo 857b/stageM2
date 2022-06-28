@@ -16,7 +16,7 @@ type timer = {
   timer_print : bool;
 }
 
-let timer_start (name : string) (timer_print) : Tac timer =
+let timer_start (name : string) (timer_print : bool) : Tac timer =
   let init_ms = curms () in
   { init_ms; start_ms = init_ms; timer_name = name; timer_print }
 

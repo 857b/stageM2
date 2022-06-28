@@ -69,6 +69,70 @@ let norm_test () : Tac unit
           iota; zeta; primops]
 
 
+(**** [spec_find_ro], [spec_r] *)
+
+noeq
+type test_build_arg (#a : Type) ($f : a -> Type) : Type =
+  | TestBuildArg : (x : a) -> (y : f x) -> test_build_arg f
+
+#push-options "--fuel 3"
+let test_ens_refl_0
+      (r0 r1 : ref nat)
+      (sl0 : sl_f [vptr' r0 full_perm; vptr' r1 full_perm])
+      (sl1 : sl_f [vptr' r0 full_perm; vptr' r1 full_perm])
+  : test_build_arg (ens_refl sl0 sl1 (sl1 0 == sl0 0 /\ sl1 1 == sl0 0 + sl0 1))
+  = _ by (apply (`TestBuildArg);
+          build_ens_refl ())
+
+(*
+let print_test_ens_refl_0 r0 r1 sl0 sl1 : U.print_util (test_ens_refl_0 r0 r1 sl0 sl1)
+  = _ by (norm [delta_only [`%test_ens_refl_0]; delta_attr [`%__tac_helper__]];
+          fail "print")
+*)
+
+let test_find_ro_0 (r0 r1 : ref nat)
+  : M.spec_find_ro nat
+      [vptr' r0 full_perm; vptr' r1 full_perm] (fun _ -> [vptr' r0 full_perm; vptr' r1 full_perm])
+      (fun sl0 -> sl0 0 >= 0) (fun sl0 x sl1 -> sl1 0 == sl0 0 /\ sl1 0 == x)
+  = _ by (build_spec_find_ro ())
+
+(*
+let print_test_fin_ro_0 r0 r1 : U.print_util (test_find_ro_0)
+  = _ by (norm [delta_only [`%test_find_ro_0]; delta_attr [`%__tac_helper__]];
+          fail "print")
+ *)
+
+#pop-options
+
+let test_build_spec_r_0 (r0 r1 : ref nat)
+  : test_build_arg (
+      M.spec_r_steel #nat (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
+         (fun h0 -> sel r0 h0 >= 0) (fun h0 x h1 -> sel r0 h1 == sel r0 h0 /\ sel r1 h1 == x))
+  = _ by (apply (`TestBuildArg);
+          build_spec_r default_flags dummy_ctx)
+
+let test_build_spec_r_0_ro r0 r1 =
+  assert ((M.SpecSteel?.sr (TestBuildArg?.y (test_build_spec_r_0 r0 r1))).M.sro_spc.spc_ro == [vptr' r0 full_perm])
+    by (trefl ())
+
+let test_build_spec_r_1 (r0 r1 : ref nat)
+  : test_build_arg (
+      M.spec_r_steel #nat (vptr r0 `star` vptr r1) (fun _ -> vptr r1 `star` vptr r0)
+         (fun h0 -> sel r0 h0 >= 0) (fun h0 x h1 -> sel r1 h0 == sel r1 h1 /\ sel r0 h1 == sel r0 h0))
+  = _ by (apply (`TestBuildArg);
+          build_spec_r default_flags dummy_ctx)
+
+let test_build_spec_r_1_ro r0 r1 =
+  assert ((M.SpecSteel?.sr (TestBuildArg?.y (test_build_spec_r_1 r0 r1))).M.sro_spc.spc_ro
+       == [vptr' r0 full_perm; vptr' r1 full_perm])
+    by (clear_all ();
+        norm [delta_only [`%test_build_spec_r_0; `%TestBuildArg?.y; `%M.SpecSteel?.sr;
+                          `%M.Mkspec_find_ro?.sro_spc; `%M.Mkspec_r?.spc_ro];
+              delta_attr [`%__tac_helper__];
+              iota];
+        trefl ())
+
+
 (*** LV *)
 
 open Experiment.Steel.Tac.LV

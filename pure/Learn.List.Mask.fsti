@@ -261,7 +261,7 @@ val mask_perm_append'_index (#n : nat) (m : vec n bool) (i : Fin.fin n)
   : Lemma (mask_perm_append' m i == (if index m i then mask_push m i else mask_len m + mask_push (mask_not m) i))
 
 val mask_perm_append_index (#n : nat) (m : vec n bool) (i : Fin.fin n)
-  : Lemma (mask_perm_append m i =
+  : Lemma (mask_perm_append m i ==
           (if i < mask_len m then mask_pull m i else mask_pull (mask_not m) (i - mask_len m)))
 
 val filter_mask_perm_append (#a : Type) (#n : nat) (m : vec n bool) (l : vec n a)

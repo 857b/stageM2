@@ -709,8 +709,6 @@ let checked_pre_partial_injection
 
 (*** Building a [spec_find_ro] *)
 
-// TODO
-
 type sel_eq_t (pre post : Vpl.vprop_list) =
     i : (Fin.fin (L.length pre) & Fin.fin (L.length post))
       { L.index pre i._1 == L.index post i._2 }
@@ -846,8 +844,6 @@ val ograph_of_sl_eqs_spec
 
 (***** Splitting [pre] and [post] according to the equalities *)
 
-// TODO: optimize
-
 val sel_eq_on_injection_iff_eq
       (#pre #post : Vpl.vprop_list)
       (f : Veq.partial_injection post pre)
@@ -857,12 +853,35 @@ val sel_eq_on_injection_iff_eq
                == filter_sl (Msk.mask_not (Veq.ij_src_mask f)) sl1)
 
 #push-options "--ifuel 0 --fuel 0 --z3rlimit 20"
-[@@ __cond_solver__]
+
+
+[@@ postprocess_with (fun () -> norm [delta_qualifier ["unfold"]; iota]; trefl ())]
+let build_spec_find_ro_from_vequivs__sl
+      (#vs #vs' #ro : Vpl.vprop_list)
+      (veq : Vpl.vequiv_perm L.(vs' @ ro) vs)
+      (n_vs' : nat {L.length vs' == n_vs'})
+      (sl : Vpl.sl_f vs') (sl_fr : Vpl.sl_f ro)
+  : r : Vpl.sl_f vs { r == Vpl.(extract_vars veq (append_vars sl sl_fr)) }
+  =
+    let r = Fl.mk_flist (Vpl.vprop_list_sels_t vs) (fun i ->
+      let j = veq i in
+      (**) Ll.pat_append ();
+      if j < n_vs' then U.cast _ (sl j) else U.cast _ (sl_fr (j - n_vs')))
+    in
+    (**) Fl.flist_extensionality r Vpl.(extract_vars veq (append_vars sl sl_fr)) (fun i -> ());
+    r
+
+[@@ postprocess_with (fun () -> norm [delta_only [`%build_spec_find_ro_from_vequivs__sl]]; trefl ())]
 let build_spec_find_ro_from_vequivs
       (a : Type) (pre : M.pre_t) (post : M.post_t a) (req : M.req_t pre) (ens : M.ens_t pre a post)
-      (spc_pre : M.pre_t) (spc_post : M.post_t a) (spc_ro : Vpl.vprop_list)
+      (spc_pre  : M.pre_t)    (n_spc_pre : nat {L.length spc_pre == n_spc_pre})
+      (spc_post : M.post_t a) (n_spc_post : (x : a) -> (n : nat {L.length (spc_post x) == n}))
+      (spc_ro   : Vpl.vprop_list)
       (sro_pre_eq : Vpl.vequiv_perm L.(spc_pre @ spc_ro) pre)
+      (sro_pre_eq_eff : Vpl.vequiv_perm L.(spc_pre @ spc_ro) pre {sro_pre_eq_eff == sro_pre_eq})
       (sro_post_eq : (x : a) -> Vpl.vequiv_perm (post x) L.(spc_post x @ spc_ro))
+      (sro_post_eq_sym : (x : a) -> (e : Vpl.vequiv_perm L.(spc_post x @ spc_ro) (post x)
+                                      {e == Perm.pequiv_sym (sro_post_eq x)}))
       (ens0 : M.ens_t pre a post)
       (ens_imp0 : (sl0 : Vpl.sl_f pre) -> (x : a) -> (sl1 : Vpl.sl_f (post x)) ->
             Lemma (requires ens sl0 x sl1)
@@ -880,8 +899,10 @@ let build_spec_find_ro_from_vequivs
   =
     let spc_ens (sl0 : Vpl.sl_f spc_pre) (x : a) (sl1 : Vpl.sl_f (spc_post x)) (sl_fr : Vpl.sl_f spc_ro) : Type0
       =
-        let sl0' = Vpl.(extract_vars sro_pre_eq (append_vars sl0 sl_fr))                        in
-        let sl1' = Vpl.(extract_vars (Perm.pequiv_sym (sro_post_eq x)) (append_vars sl1 sl_fr)) in
+        let sl0' = build_spec_find_ro_from_vequivs__sl  sro_pre_eq_eff      n_spc_pre     sl0 sl_fr in
+        let sl1' = build_spec_find_ro_from_vequivs__sl (sro_post_eq_sym x) (n_spc_post x) sl1 sl_fr in
+        let sl0' = Vpl.(extract_vars  sro_pre_eq_eff     (append_vars sl0 sl_fr)) in
+        let sl1' = Vpl.(extract_vars (sro_post_eq_sym x) (append_vars sl1 sl_fr)) in
         ens0_eq sl0 sl_fr x sl1 sl_fr;
         assert (ens0 sl0' x sl1');
         ens1 sl0' x sl1' ()
@@ -890,7 +911,8 @@ let build_spec_find_ro_from_vequivs
     sro_spc = {
       spc_pre; spc_post; spc_ro;
       spc_req = (fun (sl0 : Vpl.sl_f spc_pre) (sl_fr : Vpl.sl_f spc_ro) ->
-                   req Vpl.(extract_vars sro_pre_eq (append_vars sl0 sl_fr)));
+        let sl0' = build_spec_find_ro_from_vequivs__sl  sro_pre_eq_eff n_spc_pre sl0 sl_fr in
+        req sl0');
       spc_ens;
     };
     sro_pre_eq; sro_post_eq;
@@ -907,32 +929,100 @@ let build_spec_find_ro_from_vequivs
   }
 #pop-options
 
-// TODO:MOVE
-let fl_apply_perm_r_inj (#n : nat) (p : Perm.perm_f n) (#ts : Ll.vec n Type) (xs ys : Fl.flist ts)
-  : Lemma (requires Fl.apply_perm_r p xs == Fl.apply_perm_r p ys)
-          (ensures  xs == ys)
-  = assert (Fl.apply_perm_r (Perm.inv_f p) (Fl.apply_perm_r p xs)
-         == Fl.apply_perm_r (Perm.inv_f p) (Fl.apply_perm_r p ys));
-    Fl.apply_r_comp (Perm.inv_f p) p xs;
-    Fl.apply_r_comp (Perm.inv_f p) p ys
+
+let roij_pre (#pre : Vpl.vprop_list) (#n_post : nat) (ij : Ll.vec n_post (option (Ll.dom pre)))
+  : Vpl.vprop_list
+  = Msk.(filter_mask (Veq.ij_trg_mask ij) pre)
+
+let roij_ro (#pre : Vpl.vprop_list) (#n_post : nat) (ij : Ll.vec n_post (option (Ll.dom pre)))
+  : Vpl.vprop_list
+  = Msk.(filter_mask (mask_not (Veq.ij_trg_mask ij))) pre
+
+let roij_post (#pre #post : Vpl.vprop_list) (ij : Veq.partial_injection post pre)
+  : Vpl.vprop_list
+  = Msk.(filter_mask (Veq.ij_src_mask ij)) post
+
+let roij_ro' (#pre #post : Vpl.vprop_list) (ij : Veq.partial_injection post pre)
+  : Vpl.vprop_list
+  = Msk.(filter_mask (mask_not (Veq.ij_src_mask ij))) post
+
+let roij_pre_eq (#pre : Vpl.vprop_list) (#n_post : nat) (ij : Ll.vec n_post (option (Ll.dom pre)))
+  : Vpl.vequiv_perm L.(roij_pre ij @ roij_ro ij) pre
+  = Msk.mask_pequiv_append' (Veq.ij_trg_mask ij) pre
+
+let roij_post_eq (#pre #post : Vpl.vprop_list) (ij : Veq.partial_injection post pre)
+  : Vpl.vequiv_perm post L.(roij_post ij @ roij_ro #pre #(L.length post) ij)
+  = Perm.(
+    pequiv_trans
+      (Msk.mask_pequiv_append (Veq.ij_src_mask ij) post)
+      (pequiv_append (pequiv_refl (roij_post ij)) (pequiv_sym (Veq.ij_matched_equiv ij))))
+
+// ALT definition of roij_post_eq
+val roij_post_eq_sym (#pre #post : Vpl.vprop_list) (ij : Veq.partial_injection post pre)
+  : Lemma Perm.(pequiv_sym (roij_post_eq ij) ==
+                pequiv_trans
+                  (pequiv_append (pequiv_refl (roij_post ij)) (Veq.ij_matched_equiv ij))
+                  (Msk.mask_pequiv_append' (Veq.ij_src_mask ij) post))
+    
+
+// TODO: MOVE
+#push-options "--ifuel 0 --fuel 0"
+let perm_f_inv_list_f (#n : nat) (f : Perm.perm_f_list n) (i : Fin.fin n) : Fin.fin n
+  =
+    (**) Perm.fin_injective_surjective n n (L.index f);
+    (**) Ll.memP_iff i f;
+    Ll.mem_findi i f
+#pop-options
+
+let roij_pre_eq_l (#pre : Vpl.vprop_list) (#n_post : nat) (ij : Ll.vec n_post (option (Ll.dom pre)))
+  : Ll.vec (L.length pre) (Ll.dom pre)
+  =
+    let n   = L.length pre       in
+    let m1' = Veq.ij_trg_mask ij in
+    let n0  = Msk.mask_len m1'   in
+    (**) Msk.mask_len_le m1';
+    Msk.merge_fun_on_mask m1' #(Fin.fin n)
+      (fun _ j -> j)
+      (fun _ j -> n0 + j)
+
+val roij_pre_eq_l_eq (#pre : Vpl.vprop_list) (#n_post : nat) (ij : Ll.vec n_post (option (Ll.dom pre)))
+  : Lemma (Perm.injective (L.index (roij_pre_eq_l ij)) /\
+           Perm.perm_cast _ (Perm.perm_f_of_list (roij_pre_eq_l ij)) == roij_pre_eq ij)
+
+let roij_post_eq_l (#pre #post : Vpl.vprop_list) (ij : Veq.partial_injection post pre)
+  : Ll.vec (L.length post) (Ll.dom post)
+  =
+    let n   = L.length post      in
+    let m1' = Veq.ij_src_mask ij in
+    let n0  = Msk.mask_len m1'   in
+    (**) Veq.ij_matched_len ij;
+    Msk.merge_fun_on_mask m1' #(Fin.fin n)
+      (fun _ j -> j)
+      (fun _ j -> n0 + Veq.ij_matched_perm_f ij j)
+
+val roij_post_eq_l_eq (#pre #post : Vpl.vprop_list) (ij : Veq.partial_injection post pre)
+  : Lemma (Perm.injective (L.index (roij_post_eq_l ij)) /\
+           L.length L.(roij_post ij @ roij_ro ij) == L.length post /\
+           Perm.perm_cast _ (Perm.perm_f_of_list (roij_post_eq_l ij)) == Perm.pequiv_sym (roij_post_eq ij))
 
 
-
-val build_spec_find_ro_from_ij_lem1
+val build_spec_find_ro_from_ij_lem
       (pre post : Vpl.vprop_list) (ij : Veq.partial_injection post pre)
-      (p0 : Vpl.vequiv_perm (Msk.filter_mask (Msk.mask_not (Veq.ij_trg_mask ij)) pre)
-                            (Msk.filter_mask (Msk.mask_not (Veq.ij_src_mask ij)) post))
-      (sl1    : Vpl.sl_f Msk.(filter_mask (Veq.ij_src_mask ij) post))
-      (sl_fr1 : Vpl.sl_f Msk.(filter_mask (mask_not (Veq.ij_trg_mask ij)) pre))
-  : Lemma Vpl.(extract_vars p0 sl_fr1
-            == filter_sl (Msk.mask_not (Veq.ij_src_mask ij))
-                  (extract_vars Perm.(pequiv_sym (pequiv_trans
-                    (Msk.mask_pequiv_append (Veq.ij_src_mask ij) post)
-                    (pequiv_append (pequiv_refl _) (pequiv_sym p0)))
-                  ) (append_vars sl1 sl_fr1)))
+      (sl0 : Vpl.sl_f (roij_pre ij)) (sl_fr0 : Vpl.sl_f (roij_ro ij))
+      (sl1 : Vpl.sl_f (roij_post ij)) (sl_fr1 : Vpl.sl_f (roij_ro #pre #(L.length post) ij))
+  : Lemma Vpl.(sel_eq_on (L.index ij)
+                   (extract_vars (roij_pre_eq #pre #(L.length post) ij) (append_vars sl0 sl_fr0))
+                   (extract_vars (Perm.pequiv_sym (roij_post_eq ij)) (append_vars sl1 sl_fr1))
+             <==> sl_fr0 == sl_fr1)
+
+let sel_eq_on_l
+      (#pre #post : Vpl.vprop_list)
+      (f : Ll.vec (L.length post) (option (Ll.dom pre)) {Veq.map_to_eq post pre (L.index f)})
+      (sl0 : Vpl.sl_f pre) (sl1 : Vpl.sl_f post)
+  : prop
+  = sel_eq_on (L.index f) sl0 sl1
 
 #push-options "--fuel 0 --ifuel 0 --z3rlimit 20"
-
 [@@ __cond_solver__]
 let build_spec_find_ro_from_ij
       (a : Type) (pre : M.pre_t) (post : M.post_t a) (req : M.req_t pre) (ens : M.ens_t pre a post)
@@ -940,35 +1030,36 @@ let build_spec_find_ro_from_ij
       (ens_r : (sl0 : Vpl.sl_f pre) -> (x : a) -> (sl1 : Vpl.sl_f (post x)) ->
                ens_refl sl0 sl1 (ens sl0 x sl1) (ens_r_es x))
       (n_post : nat {forall (x : a) . {:pattern (post x)} L.length (post x) = n_post})
+      // ALT? [Veq.injective_on_dom] could be moved into ij_x
       (ij : Ll.vec n_post (option (Ll.dom pre)) {Veq.injective_on_dom (L.index ij)})
       (ij_x : (x : a) -> squash (
             Veq.map_to_eq (post x) pre (L.index ij) /\
             (forall (i : Fin.fin n_post {Some? (L.index ij i)}) . L.mem (Some?.v (L.index ij i), i) (ens_r_es x))))
   : M.spec_find_ro a pre post req ens
   =
-    let spc_pre = Msk.filter_mask (Veq.ij_trg_mask ij) pre                             in
-    let spc_post (x : a) = Msk.filter_mask (Veq.ij_src_mask ij) (post x)               in
-    let spc_ro  = Msk.filter_mask (Msk.mask_not (Veq.ij_trg_mask ij)) pre              in
-    let spc_ro' (x : a) = Msk.filter_mask (Msk.mask_not (Veq.ij_src_mask ij)) (post x) in
-
     let ij' (x : a) : Veq.partial_injection (post x) pre
-      =
-        (**) ij_x x;
-        ij
+      = ij_x x; ij
     in
-    let ro_eqv (x : a) : Vpl.vequiv_perm spc_ro (spc_ro' x)
-      = U.cast _ (Veq.ij_matched_equiv #_ #(post x) #pre (ij' x)) in
-    let pre_eq  : Vpl.vequiv_perm L.(spc_pre @ spc_ro) pre
-      = Msk.mask_pequiv_append' (Veq.ij_trg_mask ij) pre          in
+    let spc_pre          = roij_pre ij       in
+    let spc_post (x : a) = roij_post (ij' x) in
+    let spc_ro           = roij_ro ij        in
+    let pre_eq : Vpl.vequiv_perm L.(spc_pre @ spc_ro) pre
+      = roij_pre_eq ij                       in
+    let pre_eq_l
+      = roij_pre_eq_l ij                     in
     let post_eq (x : a) : Vpl.vequiv_perm (post x) L.(spc_post x @ spc_ro)
-      = Perm.(pequiv_trans
-          (Msk.mask_pequiv_append (Veq.ij_src_mask ij) (post x))
-          (pequiv_append (pequiv_refl (spc_post x)) (pequiv_sym (ro_eqv x))))
-    in
+      = roij_post_eq (ij' x)                 in
+    let post_eq_l (x : a)
+      = roij_post_eq_l (ij' x)               in
+
     build_spec_find_ro_from_vequivs a pre post req ens
-      spc_pre spc_post spc_ro pre_eq post_eq
-      (fun sl0 x sl1 -> ij_x x; sel_eq_on (L.index ij) sl0 sl1)
-      (fun sl0 x sl1 ->
+      spc_pre (L.length spc_pre) spc_post (fun x -> L.length (spc_post x)) spc_ro
+      pre_eq  (roij_pre_eq_l_eq ij; Perm.perm_cast _ (Perm.perm_f_of_list pre_eq_l))
+      post_eq (fun x -> roij_post_eq_l_eq (ij' x);
+                     Perm.pequiv_as_eq (Perm.pequiv_sym (post_eq x));
+                     Perm.perm_cast _ (Perm.perm_f_of_list (post_eq_l x)))
+      (fun sl0 x sl1 -> ij_x x; sel_eq_on_l ij sl0 sl1)
+      (fun sl0 x sl1 -> // ens_imp0
           ij_x x;
           introduce forall (i : Ll.dom (post x) {Some? (L.index ij i)}) .
                     sl0 (Some?.v (L.index ij i)) == U.cast _ (sl1 i)
@@ -976,48 +1067,12 @@ let build_spec_find_ro_from_ij
             let j = Some?.v (L.index ij i) in
             assert (L.mem (j, i) (ens_r_es x));
             ens_refl_impl_eqs (ens_r sl0 x sl1) (j, i)
-          ))
-      Vpl.(fun sl0 sl_fr0 x sl1 sl_fr1 ->
+          ); ())
+      (fun sl0 sl_fr0 x sl1 sl_fr1 -> //ens0_eq
           ij_x x;
-          let f = ij' x in
-          let sl0' = extract_vars pre_eq (append_vars sl0 sl_fr0)                        in
-          let sl1' = extract_vars (Perm.pequiv_sym (post_eq x)) (append_vars sl1 sl_fr1) in
-          let m0   = Msk.mask_not (Veq.ij_trg_mask f) in
-          let m1   = Msk.mask_not (Veq.ij_src_mask f) in
-          let prm  = ro_eqv x                         in
-
-          // ALT: equality on permutations
-          Fl.flist_extensionality sl_fr0 (filter_sl m0 sl0') (fun j1 ->
-            let j = Msk.mask_pull m0 j1 in
-            let j2 = Msk.mask_len (Veq.ij_trg_mask ij) + j1 in
-            calc (==) {
-              (|_, filter_sl m0 sl0' j1|) <: t : Type & t;
-            == { }
-              (|_, sl0' j|);
-            == { }
-              (|_, append_vars sl0 sl_fr0 (pre_eq j)|);
-            == { Msk.mask_perm_append'_index (Veq.ij_trg_mask ij) j }
-              (|_, append_vars sl0 sl_fr0 j2|);
-            == { Ll.pat_append () }
-              (|_, sl_fr0 j1|);
-            }
-          );
-
-          U.assert_by (extract_vars prm sl_fr1 == filter_sl m1 sl1') (fun () ->
-            build_spec_find_ro_from_ij_lem1 pre (post x) ij (U.cast _ prm) sl1 sl_fr1);
-          
-          sel_eq_on_injection_iff_eq f sl0' sl1';
-          calc (<==>) {
-            extract_vars prm (filter_sl m0 sl0') == filter_sl m1 sl1';
-          <==> { }
-            extract_vars prm sl_fr0 == extract_vars prm sl_fr1;
-          <==> { FStar.Classical.move_requires (fl_apply_perm_r_inj prm sl_fr0) sl_fr1 }
-            sl_fr0 == sl_fr1;
-          };
-          ()
-          )
-      (fun sl0 x sl1 _ -> ij_x x; ens_refl_remove_eq (ens_r sl0 x sl1) (L.index ij))
-      (fun sl0 x sl1 -> ij_x x)
+          build_spec_find_ro_from_ij_lem pre (post x) ij sl0 sl_fr0 sl1 sl_fr1; ())
+      (fun sl0 x sl1 _ -> ij_x x; ens_refl_remove_eq (ens_r sl0 x sl1) (L.index ij) <: Type0)
+      (fun sl0 x sl1   -> ij_x x; ())
 #pop-options
 
 (**) private val __end_build_spec_find_ro_from_ij : unit
@@ -1035,9 +1090,10 @@ let __build_spec_find_ro
       (n_post_eq : (x : a) -> squash (L.length (post x) = n_post))
       (g : ograph n_post (L.length pre))
       (g_eq : (x : a) -> squash (n_post_eq x; g == ograph_of_sl_eqs (ens_r_es x)))
+      (ij : Ll.vec n_post (option Ll.(dom pre)))
+      (ij_eq : squash (ij == build_injection g))
   : M.spec_find_ro a pre post req ens
   =
-    let ij : Ll.vec n_post (option Ll.(dom pre)) = build_injection g in
     (**) FStar.Classical.forall_intro_squash_gtot n_post_eq;
     (**) build_injection_spec g;
     build_spec_find_ro_from_ij
@@ -1062,83 +1118,58 @@ let __build_then_norm (#a : Type) (x : a) (#y : a) (_ : squash (y == x))
   : a
   = y
 
-let build_then_norm (t : unit -> Tac unit) (ns : list norm_step) : Tac unit
+let build_then_norm_by #a #b (t : unit -> Tac a) (n : a -> Tac b) : Tac b
   =
     apply_raw (`__build_then_norm);
     // x
-    t ();
+    let xa = t () in
     // y <- x
     dismiss ();
-    norm ns;
-    dump "after norm"; //TODO
-    trefl ()
+    let xb = n xa in
+    trefl ();
+    xb
     
 
 /// Solves a goal [M.spec_find_ro a pre post req ens]
 let build_spec_find_ro () : Tac unit
   =
-    build_then_norm begin fun () ->
+    build_then_norm_by begin fun () ->
       apply (`__build_spec_find_ro);
       // ens_r
+      let t = timer_start "ens_r" false in
       (let sl0 = intro () in
       let x   = intro () in
       let sl1 = intro () in
       build_ens_refl ());
       // n_post_eq
+      let t = timer_enter t "n_post_eq" in
       (let x   = intro () in
       norm [delta_only [`%L.length]; iota; zeta];
       trefl ());
       // g_eq
+      let t = timer_enter t "g_eq" in
       (let x   = intro () in
       norm [delta_only __delta_list; delta_attr [`%__cond_solver__]; iota; zeta; primops];
-      trefl ())
-    end [delta_only (L.append __delta_list
-           [`%Vpl.vprop_list_sels_t; `%Vpl.extract_vars; `%Vpl.append_vars;
-            `%Veq.ij_src_mask; `%Veq.ij_trg_mask; `%Veq.mem_Some; `%Veq.ij_matched_equiv; `%Veq.ij_matched_perm;
-            `%Veq.ij_matched_perm_f;
-            `%Fl.append; `%Fl.apply_pequiv; `%Fl.apply_perm_r; `%Fl.mk_flist;
-            `%Msk.mask_pequiv_append; `%Msk.mask_pequiv_append';
-            `%Perm.comp; `%Perm.perm_f_cons; `%Perm.perm_f_move_to_head; `%Perm.id_n; `%Perm.mk_perm_f;
-            `%Perm.perm_f_append; `%Perm.perm_f_snoc_cons; `%Perm.inv_f; `%Perm.surjective_invert_r;
-            `%Perm.fin_find_f; `%Perm.perm_f_cons_snoc;
-            `%FunctionalExtensionality.on_domain;
-            `%Opt.opt_eq; `%None?; `%Some?.v;
-            `%Mktuple2?._1; `%Mktuple2?._2]);
-         delta_attr [`%__cond_solver__; `%__tac_helper__; `%Msk.__mask__];
-         delta_qualifier ["unfold"];
-         iota; zeta; primops]
-
-// TODO:MOVE
-open Steel.FractionalPermission
-open Steel.Reference
-
-noeq
-type test_ens_refl (#pre #post : Vpl.vprop_list) (sl0 : Vpl.sl_f pre) (sl1 : Vpl.sl_f post) (ens : Type0) =
-  | TestEnsRefl : (es : list (sel_eq_t pre post)) ->
-                  ens_refl sl0 sl1 ens es ->
-                  test_ens_refl sl0 sl1 ens
-
-#push-options "--fuel 3"
-let test_ens_refl_0
-      (r0 r1 : ref nat)
-      (sl0 : Vpl.sl_f [vptr' r0 full_perm; vptr' r1 full_perm])
-      (sl1 : Vpl.sl_f [vptr' r0 full_perm; vptr' r1 full_perm])
-  : test_ens_refl sl0 sl1 (sl1 0 == sl0 0 /\ sl1 1 == sl0 0 + sl0 1)
-  = _ by (apply (`TestEnsRefl);
-          build_ens_refl ())
-
-(*
-let print_test_ens_refl_0 r0 r1 sl0 sl1 : U.print_util (test_ens_refl_0 r0 r1 sl0 sl1)
-  = _ by (norm [delta_only [`%test_ens_refl_0]; delta_attr [`%__tac_helper__]];
-          fail "print")
-*)
-
-let test_find_ro_0 (r0 r1 : ref nat)
-  : M.spec_find_ro nat
-      [vptr' r0 full_perm; vptr' r1 full_perm] (fun _ -> [vptr' r0 full_perm; vptr' r1 full_perm])
-      (fun sl0 -> sl0 0 >= 0) (fun sl0 x sl1 -> sl1 0 == sl0 0 /\ sl1 0 == x)
-  = _ by (build_spec_find_ro ())
-#pop-options
+      trefl ());
+      // ij_eq
+      let t = timer_enter t "ij_eq" in
+      (norm [delta_only __delta_list; delta_attr [`%__cond_solver__; `%__tac_helper__]; iota; zeta; primops];
+       trefl ());
+      t
+    end begin fun t ->
+      let t = timer_enter t "norm0" in
+      norm [delta_only (L.append __delta_list
+              [`%roij_pre; `%roij_post; `%roij_ro; `%roij_pre_eq_l; `%roij_post_eq_l;
+               `%Veq.ij_src_mask; `%Veq.ij_trg_mask; `%Veq.mem_Some; `%Veq.ij_matched_perm; `%Veq.ij_matched_perm_f;
+               `%Opt.opt_eq; `%None?; `%Some?.v;
+               `%Mktuple2?._1; `%Mktuple2?._2]);
+            delta_attr [`%__cond_solver__; `%__tac_helper__; `%Msk.__mask__];
+            delta_qualifier ["unfold"];
+            iota; zeta; primops];
+      let t = timer_enter t "norm1" in
+      norm [delta_only [`%build_spec_find_ro_from_vequivs]];
+      timer_stop t
+    end
 
 
 
@@ -1148,7 +1179,8 @@ let build_spec_r fr ctx : Tac unit =
   with | _ ->
       apply_raw (`M.SpecSteel);
       build_to_repr_t fr ctx;
-      build_spec_find_ro () // TODO? apply (`M.trivial_spec_find_ro) if this fails
+      norm [delta_attr [`%__tac_helper__]; iota];
+      build_spec_find_ro () // TODO? apply (`M.trivial_spec_find_ro) if this fails / option
 
 
 (*** Misc *)
