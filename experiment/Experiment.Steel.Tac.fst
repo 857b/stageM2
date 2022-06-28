@@ -238,6 +238,12 @@ let rec ens_refl_impl_eqs
                 and _ . ens_refl_impl_eqs (r1 ()) e
 #pop-options
 
+(**) #push-options "--no_tactics"
+(**) private let __begin_no_tactics = ()
+(**) #pop-options
+(**) private let __end_no_tactics = ()
+
+
 #push-options "--ifuel 0"
 let ograph_of_sl_eqs_spec
       (#pre #post : vprop_list)

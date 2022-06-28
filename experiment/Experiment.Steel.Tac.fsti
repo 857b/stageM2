@@ -747,25 +747,64 @@ let sel_eq_on
   : prop
   = forall (i : Ll.dom post {Some? (f i)}) . sl0 (Some?.v (f i)) == U.cast _ (sl1 i)
 
-// TODO: clean the [True] by returning an option
+/// Remove the equalities in [ens] that become redundant with [sel_eq_on f sl0 sl1].
+/// Because of the dependencies (see comment), we can only replace them with [True] if there is a proposition
+/// that is not eliminated somewhere on the left.
 [@@ __cond_solver__]
-let rec ens_refl_remove_eq
+let rec ens_refl_remove_eq_aux
       (#pre #post : vprop_list) (#sl0 : sl_f pre) (#sl1 : sl_f post)
       (#ens : Type0) (#es : list (sel_eq_t pre post))
       (r : ens_refl sl0 sl1 ens es)
       (f : Ll.dom post -> option (Ll.dom pre) { Veq.map_to_eq post pre f})
-  : Pure Type0 (requires  sel_eq_on f sl0 sl1)
-               (ensures   fun ens' -> ens' <==> ens)
-               (decreases r)
+  : Pure (option Type0)
+         (requires  sel_eq_on f sl0 sl1)
+         (ensures   (function
+                     | None -> ens
+                     | Some ens' -> ens' <==> ens))
+         (decreases r)
   = match r with
-  | EnsProp p -> p
+  | EnsProp p -> Some p
   | EnsEq e p _ ->
-      if Opt.opt_eq (fun x y -> x = y) (f e._2) (Some e._1) then True else p
+      if Opt.opt_eq (fun x y -> x = y) (f e._2) (Some e._1) then None else Some p
   | EnsConj #_ #_ #_ #_ #ens0 #ens1 #es0 #es1 r0 r1 ->
-      ens_refl_remove_eq r0 f /\ ens_refl_remove_eq (r1 ()) f
+      let ens0'    = ens_refl_remove_eq_aux  r0     f in
+      let ens1' p0 = ens_refl_remove_eq_aux (r1 p0) f in
+      match ens0' with
+      | None       -> ens1' ()
+      | Some ens0' ->
+             // the rhs of the conjunction depends on the validity of the lhs, so we cannot test if
+             // it is None before introducing the [/\]
+             Some (ens0' /\ (match ens1' () with | None -> True | Some ens1' -> ens1'))
+
+[@@ __cond_solver__]
+let ens_refl_remove_eq
+      (#pre #post : vprop_list) (#sl0 : sl_f pre) (#sl1 : sl_f post)
+      (#ens : Type0) (#es : list (sel_eq_t pre post))
+      (r : ens_refl sl0 sl1 ens es)
+      (f : Ll.dom post -> option (Ll.dom pre) { Veq.map_to_eq post pre f})
+  : Pure Type0
+         (requires sel_eq_on f sl0 sl1)
+         (ensures  fun ens' -> ens' <==> ens)
+  = match ens_refl_remove_eq_aux r f with
+  | None      -> True
+  | Some ens' -> ens'
 
 
 (***** Building [ens_refl] *)
+
+#push-options "--no_tactics"
+(**) private val __begin_no_tactics : unit
+[@@ __tac_helper__]
+let ens_refl_rewrite_with_tactic
+      (#pre #post : vprop_list) (#sl0 : sl_f pre) (#sl1 : sl_f post)
+      (#t : unit -> Tac unit) (#ens : Type0) (#es : list (sel_eq_t pre post))
+      (r : ens_refl sl0 sl1 ens es)
+  : ens_refl sl0 sl1 (rewrite_with_tactic t ens) es
+  =
+    (**) unfold_rewrite_with_tactic t ens;
+    r
+#pop-options
+(**) private val __end_no_tactics : unit
 
 [@@ __tac_helper__]
 let ens_refl_eq0
@@ -794,6 +833,9 @@ let __norm_index : list norm_step = [
 
 /// Solves a goal [ens_refl sl0 sl1 ens ?es]
 let rec build_ens_refl () : Tac unit =
+  try apply (`ens_refl_rewrite_with_tactic);
+      build_ens_refl ()
+  with _ ->
   try apply (`ens_refl_eq0);
       // eq_v
       // POTENTIALLY UNSOUND
@@ -1160,7 +1202,10 @@ let build_spec_find_ro () : Tac unit
             delta_qualifier ["unfold"];
             iota; zeta; primops];
       let t = timer_enter t "norm1" in
-      norm [delta_only [`%build_spec_find_ro_from_vequivs]];
+      norm [delta_only (L.append __delta_list
+              [`%build_spec_find_ro_from_vequivs; `%Perm.perm_f_of_list; `%Perm.mk_perm_f;
+               `%FunctionalExtensionality.on]);
+            iota; zeta; primops];
       timer_stop t
     end
 
@@ -1173,7 +1218,9 @@ let build_spec_r fr ctx : Tac unit =
       apply_raw (`M.SpecSteel);
       build_to_repr_t fr ctx;
       norm [delta_attr [`%__tac_helper__]; iota];
-      build_spec_find_ro () // TODO? apply (`M.trivial_spec_find_ro) if this fails / option
+      if fr.f_infRO
+      then build_spec_find_ro ()
+      else apply (`M.trivial_spec_find_ro)
 
 
 (*** Misc *)

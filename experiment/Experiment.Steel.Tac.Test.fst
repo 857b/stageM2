@@ -85,7 +85,7 @@ let test_ens_refl_0
           build_ens_refl ())
 
 (*
-let print_test_ens_refl_0 r0 r1 sl0 sl1 : U.print_util (test_ens_refl_0 r0 r1 sl0 sl1)
+let print_test_ens_refl_0 : U.print_util test_ens_refl_0
   = _ by (norm [delta_only [`%test_ens_refl_0]; delta_attr [`%__tac_helper__]];
           fail "print")
 *)
@@ -97,7 +97,7 @@ let test_find_ro_0 (r0 r1 : ref nat)
   = _ by (build_spec_find_ro ())
 
 (*
-let print_test_fin_ro_0 r0 r1 : U.print_util (test_find_ro_0)
+let print_test_fin_ro_0 : U.print_util test_find_ro_0
   = _ by (norm [delta_only [`%test_find_ro_0]; delta_attr [`%__tac_helper__]];
           fail "print")
  *)
@@ -121,6 +121,13 @@ let test_build_spec_r_1 (r0 r1 : ref nat)
          (fun h0 -> sel r0 h0 >= 0) (fun h0 x h1 -> sel r1 h0 == sel r1 h1 /\ sel r0 h1 == sel r0 h0))
   = _ by (apply (`TestBuildArg);
           build_spec_r default_flags dummy_ctx)
+
+(* the ensures should be just [True]
+let print_test_build_spec_r_1 : U.print_util test_build_spec_r_1
+  = _ by (norm [delta_only (L.append __delta_list [`%test_build_spec_r_1]);
+                delta_attr [`%__tac_helper__]; iota; zeta; primops];
+          fail "print")
+*)
 
 let test_build_spec_r_1_ro r0 r1 =
   assert ((M.SpecSteel?.sr (TestBuildArg?.y (test_build_spec_r_1 r0 r1))).M.sro_spc.spc_ro

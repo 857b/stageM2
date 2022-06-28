@@ -20,6 +20,7 @@ type flag =
   | Dump of stage
   | Full_Msg
   | Extract
+  | InferRO
 
 noeq
 type flags_record = {
@@ -27,6 +28,7 @@ type flags_record = {
   f_dump  : stage -> bool;
   f_flmsg : bool;
   f_extr  : bool;
+  f_infRO : bool;
 }
 
 let default_flags : flags_record = {
@@ -34,16 +36,18 @@ let default_flags : flags_record = {
   f_dump  = (fun _ -> false);
   f_flmsg = false;
   f_extr  = false;
+  f_infRO = true;
 }
 
 let rec record_flag (pos : bool) (r : flags_record) (f : flag)
   : Tot flags_record (decreases f) =
   match f with
-  | No f       -> record_flag (not pos) r f
-  | Timer      -> {r with f_timer = pos}
-  | Dump s     -> {r with f_dump  = (fun s' -> if s' = s then pos else r.f_dump s')}
-  | Full_Msg   -> {r with f_flmsg = pos}
-  | Extract    -> {r with f_extr  = pos}
+  | No f     -> record_flag (not pos) r f
+  | Timer    -> {r with f_timer = pos}
+  | Dump s   -> {r with f_dump  = (fun s' -> if s' = s then pos else r.f_dump s')}
+  | Full_Msg -> {r with f_flmsg = pos}
+  | Extract  -> {r with f_extr  = pos}
+  | InferRO  -> {r with f_infRO = pos}
 
 let make_flags_record : list flag -> flags_record =
   L.fold_left (record_flag true) default_flags
