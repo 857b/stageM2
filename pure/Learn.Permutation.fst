@@ -653,6 +653,18 @@ let pequiv_sym #a (#l0 #l1 : list a) (f : pequiv l0 l1)
     (**) apply_r_comp (inv_f f) f l0;
     U.cast #(perm_f (length l0)) (perm_f (length l1)) (inv_f f)
 
+#push-options "--fuel 0 --ifuel 0"
+let pequiv_sym_sym #a (#l0 #l1 : list a) ($f : pequiv l0 l1)
+  : Lemma (pequiv_sym (pequiv_sym f) == f)
+  =
+    let rew () : Lemma (length l1 == length l0) = () in
+    assert (eq2 #(perm_f (length l0)) (pequiv_sym (pequiv_sym f)) f)
+      by FStar.Tactics.(
+           norm [delta_only [`%pequiv_sym; `%U.cast]; iota];
+           l_to_r [``@rew];
+           apply_lemma (`inv_f_invol))
+#pop-options
+
 
 unfold
 let pequiv_trans_eq
@@ -673,6 +685,21 @@ let pequiv_trans #a (#l0 #l1 #l2 : list a) (f : pequiv l0 l1) (g : pequiv l1 l2)
     let g : perm_f (length l0) = U.cast #(perm_f (length l1)) _ g in
     (**) apply_r_comp g f l0;
     g `comp` f
+
+#push-options "--fuel 0 --ifuel 0"
+let pequiv_trans_sym #a (#l0 #l1 #l2 : list a) (f : pequiv l0 l1) ($g : pequiv l1 l2)
+  : Lemma (pequiv_sym (pequiv_trans f g) == pequiv_trans (pequiv_sym g) (pequiv_sym f))
+  =
+    let rew1 () : Lemma (length l1 == length l0) = () in
+    let rew2 () : Lemma (length l2 == length l0) = () in
+    assert (eq2 #(perm_f (length l2))
+                      (pequiv_sym (pequiv_trans f g)) (pequiv_trans (pequiv_sym g) (pequiv_sym f)))
+      by FStar.Tactics.(
+          norm [delta_only [`%pequiv_sym; `%pequiv_trans; `%U.cast]; iota];
+          l_to_r [(`(`@rew1)); (`(`@rew2))];
+          with_policy Goal (fun () -> apply_lemma (`inv_f_comp));
+          l_to_r [(`(`@rew1)); (`(`@rew2))])
+#pop-options
 
 
 let perm_f_cons (#n : nat) (f : perm_f n) : perm_f (n+1)
@@ -788,6 +815,23 @@ let pequiv_append #a (#l0 #l0' : list a) (f0 : pequiv l0 l0') (#l1 #l1' : list a
     (**) pequiv_append_eq l0 l0' l1 l1' (length l0) (length l1) (length l0 + length l1) () f0 f1 () ();
     U.cast (perm_f (length (l0 @ l1))) (perm_f_append f0 f1)
 
+#push-options "--fuel 0 --ifuel 0"
+let pequiv_append_sym #a (#l0 #l0' : list a) ($f0 : pequiv l0 l0')
+                         (#l1 #l1' : list a) ($f1 : pequiv l1 l1')
+  : Lemma (pequiv_sym (pequiv_append f0 f1) == pequiv_append (pequiv_sym f0) (pequiv_sym f1))
+  =
+    let rew0 () : Lemma (length l0' == length l0) = () in
+    let rew1 () : Lemma (length l1' == length l1) = () in
+    let rew2 () : Lemma (eq2 #nat (length (l0' @ l1')) (length l0 + length l1)) = () in
+    let rew3 () : Lemma (eq2 #nat (length (l0  @ l1 )) (length l0 + length l1)) = () in
+    assert (eq2 #(perm_f (length (l0' @ l1')))
+                      (pequiv_sym (pequiv_append f0 f1)) (pequiv_append (pequiv_sym f0) (pequiv_sym f1)))
+      by FStar.Tactics.(
+          norm [delta_only [`%pequiv_sym; `%pequiv_append; `%U.cast]; iota];
+          l_to_r [(`(`@rew0)); (`(`@rew1)); (`(`@rew2)); (`(`@rew3))];
+          apply_lemma (`perm_f_append_inv))
+#pop-options
+
 
 unfold
 let perm_f_move_head (n0 n1 : nat)
@@ -894,6 +938,21 @@ let perm_f_eq (#n : nat) (p0 p1 : perm_f n)
 type pequiv_list (#a : Type) (l0 l1 : list a) =
   f : perm_f_list (length l0) { l1 == apply_perm_r (perm_f_of_list f) l0 }
 
+#push-options "--ifuel 0 --fuel 0"
+let perm_f_inv_list_f (#n : nat) (f : perm_f_list n) (i : Fin.fin n) : Fin.fin n
+  =
+    (**) fin_injective_surjective n n (index f);
+    (**) memP_iff i f;
+    mem_findi i f
+
+let perm_f_inv_list_f_index (#n : nat) (f : perm_f_list n) (i : Fin.fin n)
+  : Lemma (perm_f_inv_list_f f i == inv_f (perm_f_of_list f) i)
+  =
+    let ff = perm_f_of_list f in
+    (**) fin_injective_surjective n n (index f);
+    (**) memP_iff i f;
+    assert (ff (perm_f_inv_list_f f i) == i)
+#pop-options
 
 #push-options "--fuel 1 --ifuel 1"
 let rec check_list_injective (n : nat) (l : list int) (mask : llist bool n)

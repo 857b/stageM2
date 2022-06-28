@@ -255,6 +255,14 @@ let apply_perm_r_of_f (#n : nat) (p : Perm.perm_f n) (#ts : ty_list {L.length ts
   = Dl.dlist_extensionality (dlist_of_f (apply_perm_r p xs)) (Dl.apply_perm_r p (dlist_of_f xs))
                             (fun i -> ())
 
+let apply_perm_r_inj (#n : nat) (p : Perm.perm_f n) (#ts : Ll.vec n Type) (xs ys : flist ts)
+  : Lemma (requires apply_perm_r p xs == apply_perm_r p ys)
+          (ensures  xs == ys)
+  = assert (apply_perm_r (Perm.inv_f p) (apply_perm_r p xs)
+         == apply_perm_r (Perm.inv_f p) (apply_perm_r p ys));
+    apply_r_comp (Perm.inv_f p) p xs;
+    apply_r_comp (Perm.inv_f p) p ys
+
 
 unfold
 let apply_pequiv (#ts0 #ts1 : ty_list) (f : Perm.pequiv ts0 ts1) (xs : flist ts0) : flist ts1
