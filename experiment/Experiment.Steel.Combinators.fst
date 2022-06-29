@@ -20,39 +20,40 @@ open Experiment.Steel.Repr.M
 (****** Call *)
 
 // TODO: one can probably detail more the proofs so that they pass with a lower rlimit
-// TODO? inline s
 #push-options "--z3rlimit 60"
 inline_for_extraction noextract
 let repr_of_steel_steel
-      (a : Type) (s : spec_r a)
-      (tcs : tree_cond_Spec a (spc_pre1 s) (spc_post1 s))
-      ($f : spc_steel_t SH.KSteel s)
-  : (let c = TCspec #a #(spec_r_exact s) _ SpecExact tcs in
+      (a : Type) (pre : pre_t) (post : post_t a) (ro : vprop_list)
+      (req : sl_f pre -> sl_f ro -> Type0) (ens : sl_f pre -> (x : a) -> sl_f (post x) -> sl_f ro -> Type0)
+      (tcs : tree_cond_Spec a L.(pre @ ro) (spc_post1 (Mkspec_r pre post ro req ens)))
+      ($f : spc_steel_t SH.KSteel (Mkspec_r pre post ro req ens))
+  : (let c = TCspec #a #(spec_r_exact (Mkspec_r pre post ro req ens)) _ SpecExact tcs in
      repr_steel_t SH.KSteel a tcs.tcs_pre tcs.tcs_post (tree_req _ c) (tree_ens _ c))
   = SH.steel_f (fun () ->
     (**) tcs.tcs_pre_eq.veq_g _;
-    (**) steel_elim_vprop_of_list_append_f (spc_pre1 s) tcs.tcs_frame;
-    (**) steel_elim_vprop_of_list_append_f s.spc_pre s.spc_ro;
+    (**) steel_elim_vprop_of_list_append_f L.(pre @ ro) tcs.tcs_frame;
+    (**) steel_elim_vprop_of_list_append_f pre ro;
     let (x : a) = SH.steel_u f () in
-    (**) steel_intro_vprop_of_list_append_f (s.spc_post x) s.spc_ro;
-    (**) steel_intro_vprop_of_list_append_f (spc_post1 s x) tcs.tcs_frame;
+    (**) steel_intro_vprop_of_list_append_f (post x) ro;
+    (**) steel_intro_vprop_of_list_append_f L.(post x @ ro) tcs.tcs_frame;
     (**) (tcs.tcs_post_eq x).veq_g _;
     Steel.Effect.Atomic.return x)
 
 inline_for_extraction noextract
 let repr_of_steel_ghost_steel
-      (a : Type) (opened : Mem.inames) (s : spec_r a)
-      (tcs : tree_cond_Spec a (spc_pre1 s) (spc_post1 s))
-      ($f : spc_steel_t (SH.KGhost opened) s)
-  : (let c = TCspec #a #(spec_r_exact s) _ SpecExact tcs in
+      (a : Type) (opened : Mem.inames) (pre : pre_t) (post : post_t a) (ro : vprop_list)
+      (req : sl_f pre -> sl_f ro -> Type0) (ens : sl_f pre -> (x : a) -> sl_f (post x) -> sl_f ro -> Type0)
+      (tcs : tree_cond_Spec a L.(pre @ ro) (spc_post1 (Mkspec_r pre post ro req ens)))
+      ($f : spc_steel_t (SH.KGhost opened) (Mkspec_r pre post ro req ens))
+  : (let c = TCspec #a #(spec_r_exact (Mkspec_r pre post ro req ens)) _ SpecExact tcs in
      repr_steel_t (SH.KGhost opened) a tcs.tcs_pre tcs.tcs_post (tree_req _ c) (tree_ens _ c))
   = SH.ghost_f #opened (fun () ->
     (**) tcs.tcs_pre_eq.veq_g _;
-    (**) steel_elim_vprop_of_list_append_f (spc_pre1 s) tcs.tcs_frame;
-    (**) steel_elim_vprop_of_list_append_f s.spc_pre s.spc_ro;
+    (**) steel_elim_vprop_of_list_append_f L.(pre @ ro) tcs.tcs_frame;
+    (**) steel_elim_vprop_of_list_append_f pre ro;
     let (x : a) = SH.ghost_u f () in
-    (**) steel_intro_vprop_of_list_append_f (s.spc_post x) s.spc_ro;
-    (**) steel_intro_vprop_of_list_append_f (spc_post1 s x) tcs.tcs_frame;
+    (**) steel_intro_vprop_of_list_append_f (post x) ro;
+    (**) steel_intro_vprop_of_list_append_f L.(post x @ ro) tcs.tcs_frame;
     (**) (tcs.tcs_post_eq x).veq_g _;
     (**) noop ();
     x)
@@ -73,7 +74,8 @@ let repr_of_steel_r
     repr_tree  = tree_of_steel_r f;
     repr_steel = (fun pre'0 post'0 c ->
                     let TCspec _ _ tcs = c in
-                    repr_of_steel_steel a s tcs f)
+                    let Mkspec_r pre0 post0 ro0 req0 ens0 = s in
+                    repr_of_steel_steel a pre0 post0 ro0 req0 ens0 tcs f)
   }
 
 [@@ __repr_M__]
@@ -85,7 +87,8 @@ let repr_of_steel_ghost_r
     repr_tree  = tree_of_steel_r f;
     repr_steel = (fun pre'0 post'0 c ->
                     let TCspec _ _ tcs = c in
-                    repr_of_steel_ghost_steel a opened s tcs f)
+                    let Mkspec_r pre0 post0 ro0 req0 ens0 = s in
+                    repr_of_steel_ghost_steel a opened pre0 post0 ro0 req0 ens0 tcs f)
   }
 
 
@@ -96,6 +99,14 @@ let tree_of_steel
   : prog_tree a
   = Tspec a (spec_r_steel pre post req ens)
 
+// FIXME? delta_only & delta_attr do not work in postprocess_with in some cases
+private
+let __postprocess_steps : list norm_step = [
+  delta_qualifier ["inline_for_extraction"];
+  iota
+]
+
+//[@@ __repr_M__; FStar.Tactics.(postprocess_with (fun () -> norm __postprocess_steps; trefl ()))]
 [@@ __repr_M__]
 inline_for_extraction noextract
 let repr_of_steel
@@ -106,10 +117,16 @@ let repr_of_steel
     repr_tree  = tree_of_steel f;
     repr_steel = (fun pre'0 post'0 c ->
                     let TCspec #a #sp s sh tcs = c in
-                    let SpecSteel tr sr = U.cast (spec_r_steel pre post req ens s) sh in
-                    repr_of_steel_steel a s tcs (spec_r_of_find_ro sr (repr_steel_of_steel tr f)))
+                    let SpecSteel tr (Mkspec_find_ro (Mkspec_r pre0 post0 ro0 req0 ens0)
+                                                     pre_eq post_eq req_eq ens_eq)
+                      = U.cast (spec_r_steel pre post req ens s) sh in
+                    let sr = Mkspec_find_ro (Mkspec_r pre0 post0 ro0 req0 ens0)
+                                            pre_eq post_eq req_eq ens_eq in
+                    repr_of_steel_steel a pre0 post0 ro0 req0 ens0 tcs
+                       (spec_r_of_find_ro sr (repr_steel_of_steel tr f)))
   }
 
+//[@@ __repr_M__; FStar.Tactics.(postprocess_with (fun () -> norm __postprocess_steps; trefl ()))]
 [@@ __repr_M__]
 inline_for_extraction noextract
 let repr_of_steel_ghost
@@ -121,8 +138,12 @@ let repr_of_steel_ghost
     repr_tree  = Tspec a (spec_r_steel pre post req ens);
     repr_steel = (fun pre'0 post'0 c ->
                     let TCspec #a #sp s sh tcs = c in
-                    let SpecSteel tr sr = U.cast (spec_r_steel pre post req ens s) sh in
-                    repr_of_steel_ghost_steel a opened s tcs
+                    let SpecSteel tr (Mkspec_find_ro (Mkspec_r pre0 post0 ro0 req0 ens0)
+                                                     pre_eq post_eq req_eq ens_eq)
+                      = U.cast (spec_r_steel pre post req ens s) sh in
+                    let sr = Mkspec_find_ro (Mkspec_r pre0 post0 ro0 req0 ens0)
+                                            pre_eq post_eq req_eq ens_eq in
+                    repr_of_steel_ghost_steel a opened pre0 post0 ro0 req0 ens0 tcs
                         (spec_r_of_find_ro_ghost sr (repr_steel_of_steel_ghost tr f)))
   }
 
@@ -218,7 +239,7 @@ let intro_tree_ens_bind (#a #b : Type) (f : prog_tree a) (g : a -> prog_tree b)
           tree_ens (g x) (cg x) sl1 y (vpl_sels_f (post y) sl2))
     ))
 
-
+[@@FStar.Tactics.(postprocess_with (fun () -> norm __postprocess_steps; trefl ()))]
 inline_for_extraction noextract
 let bind_steel
       (a : Type) (b : Type) (f : prog_tree a) (g : (a -> prog_tree b))
@@ -230,14 +251,15 @@ let bind_steel
      repr_steel_t SH.KSteel b pre post (tree_req _ c) (tree_ens _ c))
   = SH.steel_f (fun () ->
     (**) let sl0 = gget (vprop_of_list pre) in
-    (**) elim_tree_req_bind f g cf cg sl0;
+    (**) (elim_tree_req_bind f g cf cg sl0; ());
     let x = SH.steel_u rf () in
     (**) let sl1 = gget (vprop_of_list (itm x)) in
     let y = SH.steel_u (rg x) () in
     (**) let sl2 = gget (vprop_of_list (post y)) in
-    (**) intro_tree_ens_bind f g cf cg sl0 x sl1 y sl2;
+    (**) (intro_tree_ens_bind f g cf cg sl0 x sl1 y sl2; ());
     Steel.Effect.Atomic.return y)
 
+[@@FStar.Tactics.(postprocess_with (fun () -> norm __postprocess_steps; trefl ()))]
 inline_for_extraction noextract
 let bind_ghost_steel
       (a : Type) (b : Type) (opened : Mem.inames) (f : prog_tree a) (g : (a -> prog_tree b))
@@ -249,12 +271,12 @@ let bind_ghost_steel
      repr_steel_t (SH.KGhost opened) b pre post (tree_req _ c) (tree_ens _ c))
   = SH.ghost_f #opened (fun () ->
     (**) let sl0 = gget (vprop_of_list pre) in
-    (**) elim_tree_req_bind f g cf cg sl0;
+    (**) (elim_tree_req_bind f g cf cg sl0; ());
     let x = SH.ghost_u rf () in
     (**) let sl1 = gget (vprop_of_list (itm x)) in
     let y = SH.ghost_u (rg x) () in
     (**) let sl2 = gget (vprop_of_list (post y)) in
-    (**) intro_tree_ens_bind f g cf cg sl0 x sl1 y sl2;
+    (**) (intro_tree_ens_bind f g cf cg sl0 x sl1 y sl2; ());
     (**) noop ();
     y)
 

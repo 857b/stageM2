@@ -256,7 +256,8 @@ let __build_to_repr_t
     in
     {
     r_pre; r_post; r_req; r_ens;
-    r_pre_eq; r_post_eq;
+    r_pre_eq  = (fun () -> r_pre_eq (); ());
+    r_post_eq = (fun x -> r_post_eq x; ());
     r_req_eq  = (fun (h0 : SE.rmem pre) ->
                    r_pre_eq ();
                    SE.equiv_can_be_split pre (vprop_of_list r_pre);
@@ -943,8 +944,6 @@ let build_spec_find_ro_from_vequivs
       =
         let sl0' = build_spec_find_ro_from_vequivs__sl  sro_pre_eq_eff      n_spc_pre     sl0 sl_fr in
         let sl1' = build_spec_find_ro_from_vequivs__sl (sro_post_eq_sym x) (n_spc_post x) sl1 sl_fr in
-        let sl0' = (extract_vars  sro_pre_eq_eff     (append_vars sl0 sl_fr)) in
-        let sl1' = (extract_vars (sro_post_eq_sym x) (append_vars sl1 sl_fr)) in
         ens0_eq sl0 sl_fr x sl1 sl_fr;
         assert (ens0 sl0' x sl1');
         ens1 sl0' x sl1' ()
@@ -1149,7 +1148,7 @@ let __build_spec_find_ro
       )
 
 [@@ __tac_helper__]
-let __build_then_norm (#a : Type) (x : a) (#y : a) (_ : squash (y == x))
+let __build_then_norm (#a : Type) (x : a) (y : a) (#_ : squash (y == x))
   : a
   = y
 

@@ -37,6 +37,35 @@ let clean () : Tactics.Tac unit =
   Learn.Tactics.Util.clear_all ();
   norm_test ()
 
+
+////////// simple full test //////////
+
+//[@@ handle_smt_goals ]
+//let tac () = T.dump "SMT query"
+
+//#push-options "--z3refresh --query_stats"
+//#push-options "--print_implicits"
+
+inline_for_extraction
+let test3_LV' (r0 r1 : ref U32.t)
+  : F.steel unit
+      (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
+      (requires fun h0 -> U32.v (sel r0 h0) < 42)
+      (ensures fun h0 () h1 -> U32.v (sel r1 h1) == U32.v (sel r0 h0) + 1)
+  = F.(to_steel (
+      x <-- call read r0;
+      call (write r1) U32.(x +%^ 1ul)
+    ) #(_ by (mk_steel [Timer; Extract])) ())
+// time specs     : 81ms
+// time lin_cond  : 214ms
+// time sub_push  : 43ms
+// time LV2SF     : 71ms
+// time SF2Fun    : 3ms
+// time Fun_wp    : 16ms
+// time extract   : 154ms
+// total time : 582ms [450ms-700ms]
+
+
 ////////// test_flatten //////////
 
 unfold
@@ -464,16 +493,14 @@ let rec repeat_n (n : nat) (t : M.repr SH.KSteel unit) : M.repr SH.KSteel unit
 (*let test_time (#a : Type) (r : ref a)
   : F.steel unit (vptr r) (fun () -> vptr r)
       (requires fun _ -> True) (ensures fun h0 () h1 -> frame_equalities (vptr r) h0 h1)
-  = F.(to_steel (repeat_n 30 (call steel_id r))
-        #(_ by (T.norm [delta_only [
-                         `%Vpl.vprop_list_sels_t;   `%M.Mkrepr?.repr_tree;
-                         `%M.Mkprog_cond?.pc_tree;  `%M.Mkprog_cond?.pc_post_len; `%M.Mkprog_cond?.pc_shape;
-                         `%L.map; `%Mkvprop'?.t;
-                         `%prog_M_to_Fun];
-                      delta_attr [`%__tac_helper__; `%M.__repr_M__; `%__steel_reduce__; `%__reduce__];
-                      delta_qualifier ["unfold"];
-                      iota; zeta; primops];
-               mk_steel [Timer; Extract]))
+  = F.(to_steel (repeat_n 5 (call steel_id r))
+        #(_ by (
+          T.norm [
+             delta_only [`%M.Mkrepr?.repr_tree];
+             delta_attr [`%__tac_helper__; `%M.__repr_M__; `%__steel_reduce__; `%__reduce__];
+             delta_qualifier ["unfold"];
+             iota; zeta; primops];
+          mk_steel [Timer; Extract]))
          ())*)
 
 ////////// test ghost //////////
@@ -513,30 +540,11 @@ let test3_LV (r0 r1 : ref U32.t)
       (requires fun h0 -> U32.v (sel r0 h0) < 42)
       (ensures fun h0 () h1 -> U32.v (sel r1 h1) == U32.v (sel r0 h0) + 1)
   = F.(to_steel (test3_M r0 r1) #(_ by (mk_steel [Timer; Extract])) ())
-// time specs     : 54ms
-// time lin_cond  : 42ms
-// time sub_push  : 29ms
-// time LV2SF     : 59ms
-// time SF2Fun    : 3ms
-// time Fun_wp    : 18ms
-// time extract   : 39ms
-// total time : 244ms
-
-inline_for_extraction
-let test3_LV' (r0 r1 : ref U32.t)
-  : F.steel unit
-      (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
-      (requires fun h0 -> U32.v (sel r0 h0) < 42)
-      (ensures fun h0 () h1 -> U32.v (sel r1 h1) == U32.v (sel r0 h0) + 1)
-  = F.(to_steel (
-      x <-- call read r0;
-      call (write r1) U32.(x +%^ 1ul)
-    ) #(_ by (mk_steel [Timer; Extract])) ())
-// time specs     : 87ms
-// time lin_cond  : 177ms
-// time sub_push  : 50ms
-// time LV2SF     : 83ms
-// time SF2Fun    : 5ms
-// time Fun_wp    : 24ms
-// time extract   : 64ms
-// total time : 490ms
+// time specs     : 86ms
+// time lin_cond  : 96ms
+// time sub_push  : 30ms
+// time LV2SF     : 63ms
+// time SF2Fun    : 2ms
+// time Fun_wp    : 19ms
+// time extract   : 103ms
+// total time : 399ms [300ms-500ms]

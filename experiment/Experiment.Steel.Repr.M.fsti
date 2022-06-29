@@ -126,7 +126,7 @@ val repr_steel_of_steel_ghost
 (*** [spec_r] *)
 
 [@@ Learn.Tactics.Util.__tac_helper__]
-noeq
+noeq inline_for_extraction
 type spec_r (a : Type u#a) = {
   spc_pre  : pre_t;
   spc_post : post_t a;

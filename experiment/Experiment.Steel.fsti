@@ -119,7 +119,7 @@ let prog_LV_to_Fun_extract_wp
               (ensures Fun.tree_wp (prog_LV_to_Fun t lc1 sl0) (fun res -> ens sl0 res.val_v res.sel_v)))
   : M.repr_steel_t SH.KSteel a pre post req ens
   =
-    LV.lc_sub_push_at_leaves _ lc0;
+    (**) LV.lc_sub_push_at_leaves _ lc0;
     prog_LV_to_Fun_extract t lc1 req ens
       (fun sl0 -> wp sl0;
                Fun.tree_wp_sound (prog_LV_to_Fun t lc1 sl0) (fun res -> ens sl0 res.val_v res.sel_v))
@@ -138,7 +138,7 @@ let __normal_M : list norm_step = [
 
 let __normal_lc_sub_push : list norm_step = [
   delta_only (L.append TcS.__delta_list
-             [`%LV.lc_sub_push; `%LV.lc_sub_push_aux;
+             [`%LV.lc_sub_push; `%LV.lc_sub_push_aux; `%LV.lcsubp_tr;
               `%Perm.perm_f_to_list; `%Perm.perm_f_of_list;
               `%Perm.comp; `%Perm.mk_perm_f; `%Perm.perm_f_append; `%Perm.perm_f_cons; `%Perm.id_n;
               `%Perm.perm_f_cons_snoc]);
