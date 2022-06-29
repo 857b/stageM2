@@ -5,11 +5,7 @@ module U = Learn.Util
 open FStar.Tactics
 
 #set-options "--fuel 1 --ifuel 1"
-
-(**) #push-options "--fuel 0 --ifuel 0"
-(**) private let __begin_opt_0 = ()
-(**) #pop-options
-(**) private let __end_opt_0 = ()
+(**) private let __begin_module = ()
 
 let normal_SF_of_LV : list norm_step =
   [delta_only [`%repr_SF_of_LV; `%sound_SF_of_LV;
@@ -23,19 +19,19 @@ let rec repr_SF_of_LV_sound
       (#env : vprop_list) (#a : Type u#a) (#t : M.prog_tree a)
       (#csm : csm_t env) (#prd : prd_t a)
       (lc : lin_cond env t csm prd)
-      (sl0 : sl_f env)
+      (sl0 : sl_list env)
   : Lemma (ensures sound_SF_of_LV lc sl0 (repr_SF_of_LV lc sl0)) (decreases lc)
   = match_lin_cond lc
-      (fun a t csm prd lc -> (sl0 : sl_f env) ->
+      (fun a t csm prd lc -> (sl0 : sl_list env) ->
            squash (Pervasives.norm normal_SF_of_LV (sound_SF_of_LV lc sl0 (repr_SF_of_LV lc sl0))))
     (fun (*LCspec*) a sp s sh pre_f -> fun sl0 -> ())
     (fun (*LCret*)  a x sl_hint prd csm_f -> fun sl0 -> ())
     begin fun (*LCbind*) a b f g f_csm f_prd cf g_csm g_prd cg -> fun sl0 ->
       repr_SF_of_LV_sound cf sl0;
       introduce forall (x : a) (sl1 : sl_f (f_prd x)) .
-          let sl1' = res_sel sl0 f_csm sl1 in
+          let sl1' = res_sel_l sl0 f_csm (Fl.dlist_of_f sl1) in
           sound_SF_of_LV (cg x) sl1' (repr_SF_of_LV (cg x) sl1')
-        with repr_SF_of_LV_sound (cg x) (res_sel sl0 f_csm sl1)
+        with repr_SF_of_LV_sound (cg x) (res_sel_l sl0 f_csm (Fl.dlist_of_f sl1))
     end
     begin fun (*LCbindP*) a b wp g csm prd cg -> fun sl0 ->
       FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp;

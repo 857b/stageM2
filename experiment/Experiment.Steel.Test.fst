@@ -30,6 +30,8 @@ open Steel.Reference
 open Learn.Tactics.Util
 open Experiment.Steel
 
+#push-options "--ide_id_info_off"
+
 irreducible let __test__ : unit = ()
 let norm_test () = T.norm [delta_qualifier ["unfold"]; delta_attr [`%__test__]]
 
@@ -46,7 +48,6 @@ let clean () : Tactics.Tac unit =
 //#push-options "--z3refresh --query_stats"
 //#push-options "--print_implicits"
 
-//TODO:update
 inline_for_extraction
 let test3_LV' (r0 r1 : ref U32.t)
   : F.steel unit
@@ -57,14 +58,14 @@ let test3_LV' (r0 r1 : ref U32.t)
       x <-- call read r0;
       call (write r1) U32.(x +%^ 1ul)
     ) #(_ by (mk_steel [Timer; Extract])) ())
-// time specs     : 81ms
-// time lin_cond  : 214ms
-// time sub_push  : 43ms
-// time LV2SF     : 71ms
+// time specs     : 84ms
+// time lin_cond  : 230ms
+// time sub_push  : 46ms
+// time LV2SF     : 14ms
 // time SF2Fun    : 3ms
 // time Fun_wp    : 16ms
-// time extract   : 154ms
-// total time : 582ms [450ms-700ms]
+// time extract   : 156ms
+// total time : 549ms [450ms-700ms]
 
 
 ////////// test_flatten //////////
@@ -305,7 +306,7 @@ let test3_steel (r0 r1 : ref U32.t)
       (requires fun sl0 -> U32.v (sl0 0) < 42)
       (ensures fun sl0 () sl1 -> U32.v (sl1 1) == U32.v (sl0 0) + 1)
       (test3_M r0 r1)
-  = _ by (solve_by_wp F.default_flags (timer_start "" true))
+  = _ by (solve_by_wp F.(make_flags_record [Dump Stage_SF]) (timer_start "" true))
 
 (*let _ = fun r0 r1 ->
   assert (U.print_util (test3_steel r0 r1))
@@ -491,18 +492,25 @@ let steel_id (#a : Type) (r : ref a)
 let rec repeat_n (n : nat) (t : M.repr SH.KSteel unit) : M.repr SH.KSteel unit
   = F.(if n = 0 then return () else (t;; repeat_n (n-1) t))
 
-(*let test_time (#a : Type) (r : ref a)
+(*
+#set-options "--query_stats"
+let test_time (#a : Type) (r : ref a)
   : F.steel unit (vptr r) (fun () -> vptr r)
       (requires fun _ -> True) (ensures fun h0 () h1 -> frame_equalities (vptr r) h0 h1)
   = F.(to_steel (repeat_n 10 (call steel_id r))
-        #(_ by (
-          T.norm [
+        #(_ by T.(
+          norm [
              delta_only [`%M.Mkrepr?.repr_tree];
              delta_attr [`%__tac_helper__; `%M.__repr_M__; `%__steel_reduce__; `%__reduce__];
              delta_qualifier ["unfold"];
              iota; zeta; primops];
+          print ("begin test n=10 at "^string_of_int (curms ()));
           mk_steel [Timer]))
-         ())*)
+         ())
+let _ : unit = _ by T.(
+          print ("end test at "^string_of_int (curms ()));
+          exact (`()))
+*)
 
 ////////// test ghost //////////
 

@@ -20,13 +20,14 @@ let prog_LV_to_Fun_equiv_M
       (sl0 : Vpl.sl_f pre)
   : Lemma (prog_M_equiv_Fun t.repr_tree (LV2M.repr_M_of_LV_top lc) sl0 (prog_LV_to_Fun t lc sl0))
   =
-    let tr    = t.repr_tree                in
-    let mc    = LV2M.repr_M_of_LV_top lc   in
-    let t_SF  = LV2SF.repr_SF_of_LV lc sl0 in
-    let t_Fun = prog_LV_to_Fun t lc sl0    in
+    let tr    = t.repr_tree                  in
+    let mc    = LV2M.repr_M_of_LV_top lc     in
+    let sl0_l = Fl.dlist_of_f sl0            in
+    let t_SF  = LV2SF.repr_SF_of_LV lc sl0_l in
+    let t_Fun = prog_LV_to_Fun t lc sl0      in
 
     LV2M.repr_M_of_LV_top_sound lc;
-    LV2SF.repr_SF_of_LV_sound lc sl0;
+    LV2SF.repr_SF_of_LV_sound lc sl0_l;
     SF2Fun.repr_Fun_of_SF_req t_SF;
 
     let lem_req () : Lemma (M.tree_req t.repr_tree mc sl0 <==> Fun.tree_req t_Fun) = () in

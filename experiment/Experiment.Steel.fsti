@@ -43,7 +43,7 @@ let prog_LV_to_Fun
       (sl0 : Vpl.sl_f pre)
   : Fun.prog_tree #SF2Fun.sl_tys SF.({val_t = a; sel_t = M.post_sl_t post})
   =
-    let t_SF = LV2SF.repr_SF_of_LV lc sl0 in
+    let t_SF = LV2SF.repr_SF_of_LV lc (Fl.dlist_of_f sl0) in
     SF2Fun.repr_Fun_of_SF t_SF
 
 #pop-options
@@ -150,11 +150,11 @@ let __normal_lc_sub_push : list norm_step = [
 let __normal_LV2SF : list norm_step = [
   delta_only [`%prog_LV_to_Fun; `%LV2SF.repr_SF_of_LV;
               `%Vpl.filter_sl;
-              `%M.post_sl_t; `%Vpl.vprop_list_sels_t; `%L.map;
-              `%L.op_At; `%L.append;
-              `%Dl.initi; `%Ll.initi;
+              `%M.post_sl_t; `%Vpl.vprop_list_sels_t;
+              `%L.map; `%L.op_At; `%L.append; `%Ll.initi; `%L.length;
+              `%Dl.initi; `%Dl.append; `%Dl.index; `%Fl.dlist_of_f;
               `%Mktuple2?._1; `%Mktuple2?._2];
-  delta_attr [`%LV2SF.__LV2SF__; `%Learn.List.Mask.__mask__; `%__tac_helper__];
+  delta_attr [`%LV2SF.__LV2SF__; `%Learn.List.Mask.__mask__; `%__tac_helper__; `%SE.__reduce__];
   delta_qualifier ["unfold"];
   iota; zeta; primops
 ]
