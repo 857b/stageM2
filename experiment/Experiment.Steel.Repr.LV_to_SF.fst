@@ -6,11 +6,17 @@ open FStar.Tactics
 
 #set-options "--fuel 1 --ifuel 1"
 
+(**) #push-options "--fuel 0 --ifuel 0"
+(**) private let __begin_opt_0 = ()
+(**) #pop-options
+(**) private let __end_opt_0 = ()
+
 let normal_SF_of_LV : list norm_step =
   [delta_only [`%repr_SF_of_LV; `%sound_SF_of_LV;
               `%tree_req; `%tree_ens;
               `%SF.tree_req; `%SF.tree_ens];
    iota; zeta; simplify]
+
 
 #push-options "--ifuel 0 --fuel 0"
 let rec repr_SF_of_LV_sound

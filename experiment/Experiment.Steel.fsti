@@ -148,16 +148,13 @@ let __normal_lc_sub_push : list norm_step = [
 ]
 
 let __normal_LV2SF : list norm_step = [
-  delta_only (L.append TcS.__delta_list
-             [`%prog_LV_to_Fun; `%LV2SF.repr_SF_of_LV;
-              `%Vpl.vprop_list_sels_t; `%Vpl.filter_sl;
-              `%LV.sub_prd_sl; `%LV.eij_sl; `%LV.res_sel;
-              `%M.post_sl_t;
-              `%Fl.dlist_of_f; `%Fl.apply_perm_r; `%Fl.append; `%Fl.splitAt_ty;
-              `%Dl.initi;
-              `%Perm.perm_f_of_list; `%Perm.mk_perm_f;
-              `%Mktuple2?._1; `%Mktuple2?._2]);
-  delta_attr [`%Learn.List.Mask.__mask__; `%__tac_helper__];
+  delta_only [`%prog_LV_to_Fun; `%LV2SF.repr_SF_of_LV;
+              `%Vpl.filter_sl;
+              `%M.post_sl_t; `%Vpl.vprop_list_sels_t; `%L.map;
+              `%L.op_At; `%L.append;
+              `%Dl.initi; `%Ll.initi;
+              `%Mktuple2?._1; `%Mktuple2?._2];
+  delta_attr [`%LV2SF.__LV2SF__; `%Learn.List.Mask.__mask__; `%__tac_helper__];
   delta_qualifier ["unfold"];
   iota; zeta; primops
 ]

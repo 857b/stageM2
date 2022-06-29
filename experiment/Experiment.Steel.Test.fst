@@ -46,6 +46,7 @@ let clean () : Tactics.Tac unit =
 //#push-options "--z3refresh --query_stats"
 //#push-options "--print_implicits"
 
+//TODO:update
 inline_for_extraction
 let test3_LV' (r0 r1 : ref U32.t)
   : F.steel unit
@@ -493,14 +494,14 @@ let rec repeat_n (n : nat) (t : M.repr SH.KSteel unit) : M.repr SH.KSteel unit
 (*let test_time (#a : Type) (r : ref a)
   : F.steel unit (vptr r) (fun () -> vptr r)
       (requires fun _ -> True) (ensures fun h0 () h1 -> frame_equalities (vptr r) h0 h1)
-  = F.(to_steel (repeat_n 5 (call steel_id r))
+  = F.(to_steel (repeat_n 10 (call steel_id r))
         #(_ by (
           T.norm [
              delta_only [`%M.Mkrepr?.repr_tree];
              delta_attr [`%__tac_helper__; `%M.__repr_M__; `%__steel_reduce__; `%__reduce__];
              delta_qualifier ["unfold"];
              iota; zeta; primops];
-          mk_steel [Timer; Extract]))
+          mk_steel [Timer]))
          ())*)
 
 ////////// test ghost //////////
