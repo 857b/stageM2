@@ -5,6 +5,20 @@ module L = FStar.List.Pure
 open FStar.Tactics
 
 
+(**** Normalization attributes *)
+
+/// Used to expose the [M.prog_tree] structure of the program.
+irreducible let __repr_M__ : unit = ()
+
+/// Normalized when building the [LV.lin_cond].
+irreducible let __cond_solver__ : unit = ()
+
+/// Normalized during the LV2SF phase.
+irreducible let __LV2SF__ : unit = ()
+
+
+(**** Options *)
+
 type stage =
   | Stage_M
   | Stage_ST
@@ -52,6 +66,8 @@ let rec record_flag (pos : bool) (r : flags_record) (f : flag)
 let make_flags_record : list flag -> flags_record =
   L.fold_left (record_flag true) default_flags
 
+
+(**** Errors *)
 
 type failure_goal_shape =
   | GShape_truth_refl_list

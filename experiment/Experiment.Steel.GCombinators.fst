@@ -54,7 +54,7 @@ let make_combinator_steel_ghost
 /// [slrewrite x0 x1] will replace any occurrence of [x0] by [x1] in the current environment (using [l_to_r]).
 /// Requires [x0 == x1].
 
-[@@ Learn.Tactics.Util.__tac_helper__]
+[@@ __cond_solver__]
 let slrewrite_spec_r (#t : Type u#t) (x0 x1 : t) (v0 v1 frame : vprop_list) (veq : squash (x0 == x1 ==> v0 == v1))
   : M.spec_r (U.unit' u#a)
   = M.Mkspec_r
@@ -80,7 +80,7 @@ let slrewrite_steel
 
 // TODO: put the unchanged vprop' in the frame
 #push-options "--ifuel 0 --fuel 1"
-[@@__cond_solver__]
+[@@ __cond_solver__]
 let __build_slrewrite
       (env : vprop_list)
       (#t : Type u#t) (x0 x1 : t) (#gen_tac : M.gen_tac_t)
@@ -116,12 +116,12 @@ let build_slrewrite (fr : flags_record) : Tac unit
     l_to_r [binder_to_term rew_x];
     trefl ()
 
-[@@ M.__repr_M__]
+[@@ __repr_M__]
 let slrewrite_M_tree (#t : Type u#t) (x0 x1 : t)
   : M.prog_tree (U.unit' u#a)
   = M.Tgen (U.unit' u#a) build_slrewrite (slrewrite_gen_c #t x0 x1)
 
-[@@ M.__repr_M__]
+[@@ __repr_M__]
 inline_for_extraction
 let slrewrite (#t : Type u#t) (#opened : Mem.inames) (x0 x1 : t)
   : M.repr (SH.KGhost opened) (U.unit' u#a)

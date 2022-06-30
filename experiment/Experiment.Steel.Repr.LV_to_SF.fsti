@@ -11,13 +11,12 @@ module Dl   = Learn.DList
 module Msk  = Learn.List.Mask
 module Perm = Learn.Permutation
 
+open Experiment.Steel.Interface
 open Experiment.Steel.VPropList
 open Experiment.Steel.Repr.LV
 
 #set-options "--fuel 1 --ifuel 1"
 (**) private val __begin_module : unit
-
-irreducible let __LV2SF__ : unit = ()
 
 [@@ __LV2SF__]
 let rec len_eff (#a : Type) (l : list a) : n : nat { n == L.length l } =

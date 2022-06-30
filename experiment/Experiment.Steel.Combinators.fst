@@ -10,6 +10,7 @@ module Veq = Experiment.Steel.VEquiv
 
 open Steel.Effect
 open Steel.Effect.Atomic
+open Experiment.Steel.Interface
 open Experiment.Steel.VPropList
 open Experiment.Steel.Repr.M
 

@@ -17,8 +17,6 @@ open Steel.Effect.Atomic
 open Experiment.Steel.VPropList
 
 
-irreducible let __repr_M__ : unit = ()
-
 (*** [repr_steel_t] *)
 
 type pre_t = vprop_list

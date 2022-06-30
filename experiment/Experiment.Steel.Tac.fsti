@@ -23,9 +23,6 @@ open FStar.Calc
 
 #set-options "--fuel 1 --ifuel 1"
 
-irreducible let __cond_solver__ : unit = ()
-
-
 type cs_context = unit -> list info
 
 let dummy_ctx = fun () -> []

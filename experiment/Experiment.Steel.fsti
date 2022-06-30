@@ -130,7 +130,7 @@ let prog_LV_to_Fun_extract_wp
 let __normal_M : list norm_step = [
   delta_only [`%Vpl.vprop_list_sels_t;   `%M.Mkrepr?.repr_tree;
               `%L.map; `%SE.Mkvprop'?.t];
-  delta_attr [`%__tac_helper__; `%M.__repr_M__;
+  delta_attr [`%__tac_helper__; `%__repr_M__;
               `%SE.__reduce__];
   delta_qualifier ["unfold"];
   iota; zeta
@@ -154,7 +154,7 @@ let __normal_LV2SF : list norm_step = [
               `%L.map; `%L.op_At; `%L.append; `%Ll.initi; `%L.length;
               `%Dl.initi; `%Dl.append; `%Dl.index; `%Dl.dlist_eq2; `%Fl.dlist_of_f; `%Fl.flist_eq2;
               `%Mktuple2?._1; `%Mktuple2?._2];
-  delta_attr [`%LV2SF.__LV2SF__; `%Learn.List.Mask.__mask__; `%__tac_helper__; `%SE.__reduce__];
+  delta_attr [`%__LV2SF__; `%Learn.List.Mask.__mask__; `%__tac_helper__; `%SE.__reduce__];
   delta_qualifier ["unfold"];
   iota; zeta; primops
 ]
