@@ -3,6 +3,7 @@ module Experiment.Steel.Repr.LV
 module U    = Learn.Util
 module L    = FStar.List.Pure
 module M    = Experiment.Steel.Repr.M
+module SF   = Experiment.Steel.Repr.SF
 module Ll   = Learn.List
 module Fl   = Learn.FList
 module Perm = Learn.Permutation
@@ -47,6 +48,10 @@ type eq_injection (#a : Type) (src trg : list a) =
 type eq_injection_l (#a : Type) (src trg : list a) =
   l : Ll.vec (L.length src) (Fin.fin (L.length trg)) { is_eq_injection src trg (L.index l) }
 
+let eij_of_perm_l (#a : Type) (#l0 #l1 : list a) (p : Perm.pequiv_list l0 l1)
+  : eq_injection_l l1 l0
+  = p
+
 [@@ __lin_cond__]
 let eij_trg_mask_f (#a : Type) (#src #trg : list a) (eij : eq_injection_l src trg) (j : Fin.fin (L.length trg))
   : bool
@@ -61,6 +66,13 @@ let eij_sl (#src #trg : vprop_list) (eij : eq_injection src trg) (xs : sl_f trg)
   : sl_f src
   = Fl.mk_flist (vprop_list_sels_t src) (fun i -> xs (eij i) <: (L.index src i).t)
 
+let eij_of_perm_l_trg (#a : Type) (#l0 #l1 : list a) (f : Perm.pequiv_list l0 l1) (i : Ll.dom l1)
+  : Lemma (L.index (eij_trg_mask #a #l1 #l0 f) i)
+  =
+    let j = Perm.(inv_f (perm_f_of_list f) i) in
+    Perm.pat_inv_f ();
+    assert (L.index f j == i);
+    L.lemma_index_memP f j
 
 let eij_equiv_f (#a : Type) (#src #trg : list a) (eij : eq_injection_l src trg)
                 (i : Fin.fin (L.length src))
@@ -228,6 +240,17 @@ let spec_csm (#env : vprop_list) (#a : Type) (#s : M.spec_r a) (pre_f : eq_injec
   : csm_t env
   = eij_trg_mask (eij_split s.spc_pre s.spc_ro pre_f)._1
 
+[@@ __lin_cond__]
+let gen_csm (#env : vprop_list) (#a : Type) (#s : M.spec_r a) (pre_f : Perm.pequiv_list env (M.spc_pre1 s))
+  : csm_t env
+  = spec_csm (eij_of_perm_l pre_f)
+
+let gen_sf (#a : Type) (s : M.spec_r a) : Type
+  = (sl0 : sl_f s.spc_pre) -> (sl_ro : sl_f s.spc_ro) ->
+    t : SF.prog_tree a (M.post_sl_t s.spc_post) {
+      (SF.tree_req t <==> s.spc_req sl0 sl_ro) /\
+      (forall (x : a) (sl1 : sl_f (s.spc_post x)) .
+        SF.tree_ens t x sl1 <==> s.spc_ens sl0 x sl1 sl_ro) }
 
 noeq
 type lin_cond : 
@@ -270,6 +293,14 @@ type lin_cond :
       (csm : csm_t env) -> (prd : prd_t a) ->
       (cthn : lin_cond env thn csm prd) -> (cels : lin_cond env els csm prd) ->
       lin_cond env (M.Tif a guard thn els) csm prd
+  | LCgen :
+      (env : vprop_list) ->
+      (#a : Type u#a) -> (#gen_tac : (unit -> Tactics.Tac unit)) ->
+      (#gen_c : (M.spec_r a -> Type u#(max a 2))) ->
+      (s : M.spec_r a) -> (sh : gen_c s) ->
+      (pre_f : Perm.pequiv_list env (M.spc_pre1 s)) ->
+      (sf : gen_sf s) ->
+      lin_cond env (M.Tgen a gen_tac gen_c) (gen_csm pre_f) s.spc_post
   | LCsub :
       (env : vprop_list) -> (#a : Type u#a) -> (#f : M.prog_tree a) ->
       (csm : csm_t env) -> (prd : prd_t a) ->
@@ -333,6 +364,17 @@ let match_lin_cond
                                  csm0 == csm /\ prd0 == prd /\
                                  ct0 == LCif env #a #guard #thn #els csm prd cthn cels)
                        (ensures fun _ -> True))
+      (c_LCgen  : (a : Type u#a) -> (gen_tac : (unit -> Tactics.Tac unit)) ->
+                  (gen_c : (M.spec_r a -> Type u#(max a 2))) ->
+                  (s : M.spec_r a) -> (sh : gen_c s) ->
+                  (pre_f : Perm.pequiv_list env (M.spc_pre1 s)) ->
+                  (sf : gen_sf s) ->
+
+                  Pure (r _ _ _ _ (LCgen env #a #gen_tac #gen_c s sh pre_f sf))
+                       (requires a0 == a /\ t0 == M.Tgen a gen_tac gen_c /\
+                                 csm0 == gen_csm pre_f /\ prd0 == s.spc_post /\
+                                 ct0 == LCgen env #a #gen_tac #gen_c s sh pre_f sf)
+                       (ensures fun _ -> True))
       (c_LCsub  : (a : Type u#a) -> (f : M.prog_tree a) ->
                   (csm : csm_t env) -> (prd : prd_t a) ->
                   (cf : lin_cond env f csm prd {cf << ct0}) ->
@@ -350,6 +392,7 @@ let match_lin_cond
   | LCbind  env #a #b #f #g f_csm f_prd cf g_csm g_prd cg -> c_LCbind  a b f g f_csm f_prd cf g_csm g_prd cg
   | LCbindP env #a #b #wp #g csm prd cg                   -> c_LCbindP a b wp g csm prd cg
   | LCif    env #a #guard #thn #els csm prd cthn cels     -> c_LCif    a guard thn els csm prd cthn cels
+  | LCgen   env #a #gen_tac #gen_c s sh pre_f sf          -> c_LCgen   a gen_tac gen_c s sh pre_f sf
   | LCsub   env #a #f csm prd cf csm' prd' prd_f          -> c_LCsub   a f csm prd cf csm' prd' prd_f
 
 
@@ -384,6 +427,9 @@ let rec tree_req
       wp (fun x -> tree_req (cg x) sl0)
   | LCif   env #a #guard csm prd cthn cels ->
       if guard then tree_req cthn sl0 else tree_req cels sl0
+  | LCgen env s _ pre_f _ ->
+      let pre_sl = split_vars s.spc_pre s.spc_ro (extract_vars (Perm.perm_f_of_list pre_f) sl0) in
+      s.spc_req pre_sl._1 pre_sl._2
   | LCsub  env #a #f csm prd cf csm' prd' prd_f ->
       tree_req cf sl0
 
@@ -407,6 +453,9 @@ and tree_ens
       (exists (x:a) . as_ensures wp x /\ tree_ens (cg x) sl0 res sl1)
   | LCif   env #a #guard csm prd cthn cels ->
       if guard then tree_ens cthn sl0 res sl1 else tree_ens cels sl0 res sl1
+  | LCgen env s _ pre_f _ ->
+      let pre_sl = split_vars s.spc_pre s.spc_ro (extract_vars (Perm.perm_f_of_list pre_f) sl0) in
+      s.spc_ens pre_sl._1 res sl1 pre_sl._2
   | LCsub  env #a #f csm prd cf csm' prd' prd_f ->
       (exists (sl1' : sl_f (prd res)) . (
         (**) Ll.pat_append ();
@@ -434,7 +483,8 @@ let rec lcsub_at_leaves
       (ct : lin_cond env t csm prd)
   : Tot prop (decreases ct)
   = match ct with
-  | LCspec _ _ _ _ | LCret _ _ _ | LCsub  _ _ _ (LCspec _ _ _ _) _ _ _ ->
+  | LCspec _ _ _ _ | LCret _ _ _ | LCgen _ _ _ _ _
+  | LCsub  _ _ _ (LCspec  _ _ _ _) _ _ _ | LCsub  _ _ _ (LCgen _ _ _ _ _) _ _ _ ->
            True
   | LCbind _ #a _ _ cf _ _ cg ->
            lcsub_at_leaves cf /\ (forall (x : a) . lcsub_at_leaves (cg x))
@@ -732,7 +782,7 @@ let rec lc_sub_push
       (ct : lin_cond env t csm prd)
   : Tot (lcsubp_tr ct) (decreases %[ct; 1])
   = match ct with
-  | LCspec _ _ _ _ | LCret  _ _ _ -> ct
+  | LCspec _ _ _ _ | LCret  _ _ _ | LCgen _ _ _ _ _ -> ct
   | LCbind env f_csm f_prd cf g_csm g_prd cg ->
       LCbind env f_csm f_prd (lc_sub_push cf) g_csm g_prd (fun x -> lc_sub_push (cg x))
   | LCbindP env #a #b #wp csm0 prd0 cg ->
@@ -749,7 +799,7 @@ and lc_sub_push_aux
       (prd_f : ((x : a) -> Perm.pequiv_list (sub_prd env csm (prd x) csm') (prd' x)))
   : Tot (lcsubp_tr (LCsub env _ _ ct csm' prd' prd_f)) (decreases %[ct; 0])
   = match ct with
-  | LCspec _ _ _ _ ->
+  | LCspec _ _ _ _ | LCgen _ _ _ _ _ ->
       LCsub _ _ _ ct csm' prd' prd_f
   | LCret  _ #a #x #sl_hint prd0 csm_f0 ->
       lcsubp_LCret env a x sl_hint prd0 csm_f0 csm' prd'

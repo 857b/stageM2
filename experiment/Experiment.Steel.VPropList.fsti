@@ -177,6 +177,7 @@ let vequiv_perm_sl (#vs0 #vs1 : vprop_list) (f : vequiv_perm vs0 vs1)
   = Perm.map_apply_r f Mkvprop'?.t vs0;
     U.cast #(Perm.perm_f (L.length vs0)) (Perm.perm_f (L.length (vprop_list_sels_t vs0))) f    
 
+// TODO? only use the case of an injection (i.e. LV.eij_sl)
 unfold
 let extract_vars (#src #dst : vprop_list)
                  (p : vequiv_perm src dst)

@@ -123,6 +123,7 @@ val repr_steel_of_steel_ghost
       ($f  : SH.unit_steel_ghost a opened pre post req ens)
   : repr_steel_t (SH.KGhost opened) a tr.r_pre tr.r_post tr.r_req tr.r_ens
 
+
 (*** [spec_r] *)
 
 [@@ Learn.Tactics.Util.__tac_helper__]
@@ -232,6 +233,10 @@ type prog_tree : (a : Type u#a) -> Type u#(max (a+1) 3) =
   | Tif    : (a : Type u#a) -> (guard : bool) ->
              (thn : prog_tree a) -> (els : prog_tree a) ->
              prog_tree a
+  // generic combinator
+  | Tgen   : (a : Type u#a) -> (gen_tac : unit -> Tactics.Tac unit) ->
+             (gen_c : spec_r a -> Type u#(max a 2)) ->
+             prog_tree a
 
 
 (*** slprop unification conditions *)
@@ -275,6 +280,14 @@ type tree_cond : (#a : Type u#a) -> (t : prog_tree a) -> (pre : pre_t) -> (post 
               (pre : pre_t) -> (post : post_t a) ->
               (cthn : tree_cond thn pre post) -> (cels : tree_cond els pre post) ->
               tree_cond (Tif a guard thn els) pre post
+  // We expect the combinator to have a splited read-only frame
+  // ALT: only expect a classical {pre,post,req,ens} and use a wrapper to handle the ro frame
+  | TCgen   : (#a : Type u#a) -> (#gen_tac : (unit -> Tactics.Tac unit)) ->
+              (#gen_c : (spec_r a -> Type u#(max a 2))) ->
+              (s : spec_r a) -> (sh : gen_c s) ->
+              (pre : pre_t) -> (pre_eq : Veq.vequiv pre (spc_pre1 s)) ->
+              (post : post_t a) -> (post_eq : ((x : a) -> Veq.vequiv (spc_post1 s x) (post x))) ->
+              tree_cond (Tgen a gen_tac gen_c) pre post
 
 
 (**** requires / ensures *)
@@ -323,7 +336,7 @@ let bind_req (#a : Type)
       (forall (x : a) (sl1 : sl_f (itm x)) .
         ens_f sl0 x sl1 ==> req_g x sl1)
 
-/// Unlike the bind combiner of Steel, our ensures clause does not recall the pre-condition of [f] for
+/// Unlike the bind combinator of Steel, our ensures clause does not recall the pre-condition of [f] for
 /// the reason explained on [Experiment.Repr.Fun.tree_ens]
 
 let bind_ens (#a : Type) (#b : Type)
@@ -362,6 +375,32 @@ let ite_ens (#a : Type) (guard : bool) (#pre : pre_t) (#post : post_t a)
   : ens_t pre a post
   = fun sl0 x sl1 -> if guard then ens_thn sl0 x sl1 else ens_els sl0 x sl1
 
+(** gen *)
+
+/// Similar to spec, but without a frame
+
+let gen_req (#a : Type) (s : spec_r a)
+      (#pre : pre_t) (pre_eq : Veq.vequiv pre (spc_pre1 s))
+      (#post : post_t a) (post_eq : ((x : a) -> Veq.vequiv (spc_post1 s x) (post x)))
+  : req_t pre
+  = fun sl0 ->
+      pre_eq.veq_req sl0 /\
+     (forall (sl0' : sl_f s.spc_pre) (sl_ro : sl_f s.spc_ro) .
+      Veq.veq_ens1 pre_eq sl0 (append_vars sl0' sl_ro) ==>
+     (s.spc_req sl0' sl_ro /\
+     (forall (x : a) (sl1' : sl_f (s.spc_post x)) . s.spc_ens sl0' x sl1' sl_ro ==>
+      (post_eq x).veq_req (append_vars sl1' sl_ro))))
+      
+
+let gen_ens (#a : Type) (s : spec_r a)
+      (#pre : pre_t) (pre_eq : Veq.vequiv pre (spc_pre1 s))
+      (#post : post_t a) (post_eq : ((x : a) -> Veq.vequiv (spc_post1 s x) (post x)))
+  : ens_t pre a post
+  = fun sl0 x sl1 ->
+    exists (sl0' : sl_f s.spc_pre) (sl1' : sl_f (s.spc_post x)) (sl_ro : sl_f s.spc_ro) .
+      Veq.veq_ens1 pre_eq sl0 (append_vars sl0' sl_ro) /\
+      s.spc_ens sl0' x sl1' sl_ro /\
+      Veq.veq_ens1 (post_eq x) (append_vars sl1' sl_ro) sl1
 
 (** prog_tree *)
 
@@ -381,6 +420,8 @@ let rec tree_req (#a : Type u#a) (t : prog_tree a)
              bind_pure_req wp (fun x -> tree_req (g x) (cg x)) sl0
   | TCif #a #guard  pre _ thn els ->
              ite_req #a guard (tree_req _ thn) (tree_req _ els) sl0
+  | TCgen s _  _ pre_eq  _ post_eq ->
+              gen_req s pre_eq post_eq sl0
 
 and tree_ens (#a : Type u#a) (t : prog_tree a)
              (#pre : pre_t) (#post : post_t a) (c : tree_cond t pre post)
@@ -397,6 +438,8 @@ and tree_ens (#a : Type u#a) (t : prog_tree a)
              bind_pure_ens wp (fun x -> tree_ens (g x) (cg x)) sl0 res sl1
   | TCif #a #guard  pre post thn els ->
              ite_ens #a guard (tree_ens _ thn) (tree_ens _ els) sl0 res sl1
+  | TCgen s _  _ pre_eq  _ post_eq ->
+              gen_ens s pre_eq post_eq sl0 res sl1
 
 
 (*** [repr] *)

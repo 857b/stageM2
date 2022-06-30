@@ -1,6 +1,7 @@
 module Experiment.Steel.Repr.LV_to_M
 
 module U    = Learn.Util
+module T    = FStar.Tactics
 module L    = FStar.List.Pure
 module M    = Experiment.Steel.Repr.M
 module Ll   = Learn.List
@@ -189,8 +190,58 @@ val bind_g_csm'_res_env_f
   : Lemma (res_env_f (res_env env f_csm f_prd) (bind_g_csm' env f_csm f_prd g_csm) g_prd
         == res_env_f env (bind_csm env f_csm g_csm) g_prd)
 
+#push-options "--ifuel 0 --fuel 0 --z3rlimit 20"
+(**) private val __begin_opt_0 : unit
+let gen_post_equiv
+      (env : vprop_list)
+      (pre post ro : vprop_list)
+      (pre_f : Perm.pequiv_list env L.(pre @ ro))
+  : vequiv_perm L.(post @ ro)
+                  (res_env env (eij_trg_mask (eij_split pre ro (eij_of_perm_l pre_f))._1) post)
+  =
+    let pre_f' = eij_of_perm_l pre_f               in
+    let m   = mask_not (eij_trg_mask pre_f')       in
+    let flt = filter_mask m env                    in
+    let f : vequiv_perm L.((post @ ro) @ flt)
+                          (res_env env (eij_trg_mask (eij_split pre ro pre_f')._1) post)
+          = spec_post_equiv env pre post ro pre_f' in
+    filter_mask_false m env (fun i -> eij_of_perm_l_trg pre_f i);
+    U.cast _ f
+#pop-options
+(**) private val __end_opt_0 : unit
 
-#push-options "--ifuel 1 --fuel 2 --z3rlimit 30"
+val extract_gen_post_equiv
+      (env : vprop_list) (pre post ro : vprop_list) (pre_f : Perm.pequiv_list env L.(pre @ ro))
+      (sl0 : sl_f env) (sl_post : sl_f post)
+  : Lemma (extract_vars (gen_post_equiv env pre post ro pre_f)
+                        (append_vars sl_post (split_vars pre ro (extract_vars (Perm.perm_f_of_list pre_f) sl0))._2)
+        == append_vars sl_post
+                (filter_sl (mask_not (eij_trg_mask (eij_split pre ro (eij_of_perm_l pre_f))._1)) sl0))
+
+let gen_sub_post_equiv
+      (env : vprop_list) (#a : Type) (s : M.spec_r a) (pre_f : Perm.pequiv_list env (M.spc_pre1 s))
+      (csm1 : csm_t (filter_mask (mask_not (gen_csm pre_f)) env)) (prd1 : prd_t a)
+      (prd_f1 : (x : a) -> Perm.pequiv_list (sub_prd env (gen_csm pre_f) (s.spc_post x) csm1) (prd1 x))
+      (x : a)
+  : vequiv_perm L.(M.spc_post1 s x)
+                  (res_env env (bind_csm env (gen_csm pre_f) csm1) (prd1 x))
+  = Perm.pequiv_trans (gen_post_equiv env s.spc_pre (s.spc_post x) s.spc_ro pre_f)
+                      (sub_prd_framed_equiv env (spec_csm pre_f) (s.spc_post x)
+                                            csm1 (prd1 x) (Perm.perm_f_of_list (prd_f1 x)))
+
+
+val inv_lcsub_at_leaves__LCsub
+      (#env : vprop_list) (#a : Type) (#f : M.prog_tree a)
+      (#csm : csm_t env) (#prd : prd_t a)
+      (cf : lin_cond env f csm prd)
+      (csm' : csm_t (filter_mask (mask_not csm) env)) (prd' : prd_t a)
+      (prd_f : ((x : a) -> Perm.pequiv_list (sub_prd env csm (prd x) csm') (prd' x)))
+  : Lemma (requires lcsub_at_leaves (LCsub env csm prd cf csm' prd' prd_f))
+          (ensures  LCspec? cf \/ LCgen? cf)
+
+#push-options "--ifuel 1 --fuel 1 --z3rlimit 30"
+(**) private val __begin_opt_1 : unit
+
 [@@ strict_on_arguments [5]] (* strict on [lc] *)
 inline_for_extraction
 let rec repr_M_of_LV
@@ -217,13 +268,30 @@ let rec repr_M_of_LV
       M.TCif #a #guard #thn #els env (res_env_f env csm prd)
           (repr_M_of_LV cthn)
           (repr_M_of_LV cels)
+  | LCgen env #a #gen_tac #gen_c s sh pre_f sf ->
+      M.TCgen #a #gen_tac #gen_c s sh
+          env (Veq.vequiv_of_perm (Perm.perm_f_of_list pre_f))
+          (res_env_f env (gen_csm pre_f) s.spc_post)
+          (fun x -> Veq.vequiv_of_perm (gen_post_equiv env s.spc_pre (s.spc_post x) s.spc_ro pre_f))
   | LCsub env #a0 #f0 csm0 prd0 cf csm1 prd1 prd_f1 ->
-      let LCspec env #a #sp s sh pre_f = cf in
-      let prd_f1 (x : a) : Perm.pequiv_list (sub_prd env (spec_csm pre_f) (s.spc_post x) csm1) (prd1 x)
-            = U.cast _ (prd_f1 x)
-      in
-      M.TCspec #a #sp s sh (repr_M_of_LV__tcs_sub env a s pre_f csm1 prd1 prd_f1)
+      (**) inv_lcsub_at_leaves__LCsub cf csm1 prd1 prd_f1;
+      match cf with
+      | LCspec env #a #sp s sh pre_f ->
+          let prd_f1 (x : a) : Perm.pequiv_list (sub_prd env (spec_csm pre_f) (s.spc_post x) csm1) (prd1 x)
+                     = U.cast _ (prd_f1 x)
+          in
+          M.TCspec #a #sp s sh (repr_M_of_LV__tcs_sub env a s pre_f csm1 prd1 prd_f1)
+      | LCgen env #a #gen_tac #gen_c s sh pre_f sf ->
+          let prd_f1 (x : a) : Perm.pequiv_list (sub_prd env (gen_csm pre_f) (s.spc_post x) csm1) (prd1 x)
+                     = U.cast _ (prd_f1 x)
+          in
+          M.TCgen #a #gen_tac #gen_c s sh
+            env (Veq.vequiv_of_perm (Perm.perm_f_of_list pre_f))
+            (res_env_f env (bind_csm env (gen_csm pre_f) csm1) prd1)
+            (fun x -> Veq.vequiv_of_perm (gen_sub_post_equiv env s pre_f csm1 prd1 prd_f1 x))
+
 #pop-options
+(**) private val __end_opt_1 : unit
 
 #push-options "--ifuel 0 --fuel 0"
 inline_for_extraction

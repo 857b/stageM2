@@ -1,6 +1,7 @@
 module Experiment.Steel.Repr.LV_to_SF
 
 module U = Learn.Util
+module TLogic = Learn.Tactics.Logic
 
 open FStar.Tactics
 
@@ -11,8 +12,7 @@ let normal_SF_of_LV : list norm_step =
   [delta_only [`%repr_SF_of_LV; `%sound_SF_of_LV;
               `%tree_req; `%tree_ens;
               `%SF.tree_req; `%SF.tree_ens];
-   iota; zeta; simplify]
-
+   iota; zeta; simplify] 
 
 #push-options "--ifuel 0 --fuel 0"
 let rec repr_SF_of_LV_sound
@@ -42,6 +42,7 @@ let rec repr_SF_of_LV_sound
       repr_SF_of_LV_sound cthn sl0;
       repr_SF_of_LV_sound cels sl0
     end
+    (fun (*LCgen*)  a gen_tac gen_c s sh pre_f sf -> fun sl0 -> ())
     begin fun (*LCsub*)  a f csm0 prd0 cf csm1 prd1 prd_f1 -> fun sl0 ->
       repr_SF_of_LV_sound cf sl0
     end sl0

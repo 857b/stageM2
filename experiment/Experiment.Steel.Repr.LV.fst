@@ -340,7 +340,7 @@ let rec lc_sub_push_at_leaves
       (ct : lin_cond env t csm prd)
   : Lemma (ensures lcsub_at_leaves (lc_sub_push ct)) (decreases %[ct; 1])
   = match ct with
-  | LCspec _ _ _ _ | LCret  _ _ _ -> ()
+  | LCspec _ _ _ _ | LCret  _ _ _ | LCgen _ _ _ _ _ -> ()
   | LCbind env f_csm f_prd cf g_csm g_prd cg ->
       assert (lcsub_at_leaves (lc_sub_push (LCbind env f_csm f_prd cf g_csm g_prd cg)))
           by (norm_lcsbl true;
@@ -412,6 +412,11 @@ and lc_sub_push_aux_at_leaves
               split ();
                 apply_lemma (`lc_sub_push_aux_at_leaves);
                 apply_lemma (`lc_sub_push_aux_at_leaves))
+    end
+    begin fun (*LCgen*)  a gen_tac gen_c s sh pre_f sf -> fun csm2 prd2 prd_f2 ->
+      U.assert_by_tac (fun () ->
+              norm_lcsbl true;
+              trivial ())
     end
     begin fun (*LCsub*)  a f csm0 prd0 cf csm1 prd1 prd_f1 -> fun csm2 prd2 prd_f2 ->
       assert (goal (LCsub env #a #f csm0 prd0 cf csm1 prd1 prd_f1) csm2 prd2 prd_f2)

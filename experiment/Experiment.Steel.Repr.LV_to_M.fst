@@ -225,6 +225,85 @@ let bind_g_csm'_res_env_f
         (_ by (trefl ())) (_ by (trefl ()))
         (fun (x : b) -> filter_bind_g_csm' env f_csm f_prd g_csm)
 
+(**) #push-options "--ifuel 0 --fuel 0 --z3rlimit 20"
+(**) private let __begin_opt_0 = ()
+(**) #pop-options
+(**) private let __end_opt_0 = ()
+
+#push-options "--ifuel 0 --fuel 0 --z3rlimit 20"
+let extract_gen_post_equiv
+      (env : vprop_list) (pre post ro : vprop_list) (pre_f : Perm.pequiv_list env L.(pre @ ro))
+      (sl0 : sl_f env) (sl_post : sl_f post)
+  : Lemma (extract_vars (gen_post_equiv env pre post ro pre_f)
+                        (append_vars sl_post (split_vars pre ro (extract_vars (Perm.perm_f_of_list pre_f) sl0))._2)
+        == append_vars sl_post
+                (filter_sl (mask_not (eij_trg_mask (eij_split pre ro (eij_of_perm_l pre_f))._1)) sl0))
+  =
+    
+    let pre_f' = eij_of_perm_l pre_f               in
+    let m   = mask_not (eij_trg_mask pre_f')       in
+    let flt = filter_mask m env                    in
+    let f : vequiv_perm L.((post @ ro) @ flt)
+                          (res_env env (eij_trg_mask (eij_split pre ro pre_f')._1) post)
+          = spec_post_equiv env pre post ro pre_f' in
+    U.assert_by (flt == []) (fun () ->
+      filter_mask_false m env (fun i -> eij_of_perm_l_trg pre_f i));
+    let sl0' = append_vars sl_post (split_vars pre ro (extract_vars (Perm.perm_f_of_list pre_f) sl0))._2 in
+    calc (==) {
+      extract_vars (gen_post_equiv env pre post ro pre_f) sl0';
+    == { }
+      extract_vars f sl0';
+    == { 
+         calc (==) {
+           vprop_list_sels_t flt;
+         == { }
+           vprop_list_sels_t [];
+         == { U.by_refl () }
+           [];
+         };
+         Fl.nil_uniq (filter_sl m sl0 <: sl_f flt);
+         Fl.flist_extensionality
+           (extract_vars (Perm.perm_f_of_list pre_f) sl0)
+           (eij_sl #L.(pre@ro) (L.index pre_f') sl0)
+           (fun i -> ())
+       }
+      extract_vars f (append_vars (append_vars sl_post (split_vars pre ro (eij_sl (L.index pre_f') sl0))._2)
+                                  (filter_sl m sl0));
+    == { extract_spec_post_equiv env pre post ro pre_f' sl0 sl_post }
+      append_vars sl_post (filter_sl (mask_not (eij_trg_mask (eij_split pre ro pre_f')._1)) sl0);
+    }
+#pop-options
+
+
+#push-options "--ifuel 0 --fuel 1"
+let inv_lcsub_at_leaves__LCsub
+      (#env : vprop_list) (#a : Type) (#f : M.prog_tree a)
+      (#csm : csm_t env) (#prd : prd_t a)
+      (cf : lin_cond env f csm prd)
+      (csm' : csm_t (filter_mask (mask_not csm) env)) (prd' : prd_t a)
+      (prd_f : ((x : a) -> Perm.pequiv_list (sub_prd env csm (prd x) csm') (prd' x)))
+  : Lemma (requires lcsub_at_leaves (LCsub env csm prd cf csm' prd' prd_f))
+          (ensures  LCspec? cf \/ LCgen? cf)
+  =
+    match_lin_cond cf
+      (fun a f csm prd cf -> (csm' : _) -> (prd' : _) -> (prd_f : _) ->
+        squash (Pervasives.norm [delta_only [`%lcsub_at_leaves]; iota; zeta]
+                 (lcsub_at_leaves (LCsub env csm prd cf csm' prd' prd_f)) ==>
+                LCspec? cf \/ LCgen? cf))
+      (fun (*LCspec*)  a sp s sh pre_f -> fun csm' prd' prd_f -> ())
+      (fun (*LCret*)   a x sl_hint prd csm_f -> fun csm' prd' prd_f -> ())
+      (fun (*LCbind*)  a b f g f_csm f_prd cf g_csm g_prd cg -> fun csm' prd' prd_f -> ())
+      (fun (*LCbindP*) a b wp g csm0 prd0 cg -> fun csm1 prd1 prd_f -> ())
+      (fun (*LCif*)    a guard thn els csm0 prd0 cthn cels -> fun csm1 prd1 prd_f -> ())
+      (fun (*LCgen*)   a gen_tac gen_c s sh pre_f sf -> fun csm2 prd2 prd_f2 -> ())
+      (fun (*LCsub*)   a f csm0 prd0 cf csm1 prd1 prd_f1 -> fun csm2 prd2 prd_f2 -> ())
+      csm' prd' prd_f
+#pop-options
+
+(**) #push-options "--ifuel 1 --fuel 1 --z3rlimit 30"
+(**) private let __begin_opt_1 = ()
+(**) #pop-options
+(**) private let __end_opt_1 = ()
 
 (*** Soundness *)
 
@@ -366,8 +445,8 @@ let split_vars_append (v0 v1 : vprop_list) (sl : sl_f L.(v0 @ v1)) ()
 
 let norm_sound_LV2M () : Tac unit =
   norm [delta_only [`%repr_M_of_LV; `%repr_M_of_LV__tcs; `%repr_M_of_LV__tcs_sub;
-                    `%M.tree_req; `%M.spec_req; `%M.return_req; `%M.bind_req;
-                    `%M.tree_ens; `%M.spec_ens; `%M.return_ens; `%M.bind_ens;
+                    `%M.tree_req; `%M.spec_req; `%M.return_req; `%M.bind_req; `%M.gen_req;
+                    `%M.tree_ens; `%M.spec_ens; `%M.return_ens; `%M.bind_ens; `%M.gen_ens;
                     `%Veq.vequiv_of_perm; `%Veq.vequiv_refl;
                     `%Veq.Mkvequiv?.veq_req; `%Veq.Mkvequiv?.veq_ens; `%Veq.Mkvequiv?.veq_eq; `%Veq.veq_ens1;
                     `%tree_req; `%tree_ens;
@@ -543,6 +622,54 @@ let sound_repr_M_of_LV__LCif
   =
     intro_sound_M_of_LV _ _ (fun sl0 -> ()) (fun sl0 y sl2 sl_rem -> ())
 
+
+let sound_repr_M_of_LV__LCgen
+      (env : vprop_list)
+      (a : Type u#a) (gen_tac : unit -> Tactics.Tac unit)
+      (gen_c : M.spec_r a -> Type u#(max a 2))
+      (pre : M.pre_t) (post : M.post_t a) (ro : vprop_list)
+      (req : sl_f pre -> sl_f ro -> Type0) (ens : sl_f pre -> (x : a) -> sl_f (post x) -> sl_f ro -> Type0)
+      (sh : gen_c (M.Mkspec_r pre post ro req ens))
+      (pre_f : Perm.pequiv_list env L.(pre @ ro))
+      (sf : gen_sf (M.Mkspec_r pre post ro req ens))
+  : squash (sound_repr_M_of_LV (LCgen env #a #gen_tac #gen_c (M.Mkspec_r pre post ro req ens) sh pre_f sf))
+  =
+    intro_sound_M_of_LV _ _
+      (fun sl0 ->
+        let split_sl0_lem = split_vars_append pre ro (extract_vars (Perm.perm_f_of_list pre_f) sl0) in
+        U.assert_by_tac (fun () ->
+          norm_sound_LV2M ();
+          rew_iff_l_LV2M true;
+          norm_sound_LV2M (); norm [simplify];
+          apply (`TLogic.rew_iff_left);
+            l_to_r [``@split_sl0_lem];
+            rew_iff_LV2M ();
+            norm [];
+          smt ()))
+      (fun sl0 x sl1 sl_rem ->
+        let extr_sl0      = extract_vars (Perm.perm_f_of_list pre_f) sl0 in
+        let split_sl0_lem = split_vars_append pre ro extr_sl0            in
+        let sl0_pre       = (split_vars pre ro extr_sl0)._1              in
+        let sl0_ro        = (split_vars pre ro extr_sl0)._2              in
+        U.assert_by_tac (fun () ->
+          norm_sound_LV2M ();
+          rew_iff_l_LV2M true;
+          norm_sound_LV2M ();
+          apply (`TLogic.rew_iff_left);
+            l_to_r [``@split_sl0_lem];
+            rew_iff_LV2M ();
+            norm [];
+          TLogic.(
+            apply (`rew_iff_left); apply_raw (`rew_exists_eq (`@sl0_pre));
+              smt (); norm [simplify];
+            apply (`rew_iff_left); apply (`exists_morph_iff); let _ = intro () in
+              apply (`rew_exists_eq (`@sl0_ro ));
+              smt (); norm [simplify]
+          );
+          l_to_r [`extract_gen_post_equiv];
+          rew_iff_l_LV2M false;
+          smt ()))
+
 #pop-options
 
 #push-options "--fuel 0 --ifuel 0"
@@ -551,6 +678,15 @@ let extract_pequiv_trans #v0 #v1 #v2 (f : vequiv_perm v0 v1) (g : vequiv_perm v1
   : Lemma (extract_vars (Perm.pequiv_trans f g) sl == extract_vars g (extract_vars f sl))
   =
     Fl.apply_pequiv_trans (vequiv_perm_sl f) (vequiv_perm_sl g) sl
+
+
+let force_M_tree_req #a #t #pre #post (c : M.tree_cond #a t pre post) sl0
+  : squash (M.tree_req t c sl0 <==> M.tree_req t c sl0)
+  = ()
+
+let force_M_tree_ens #a #t #pre #post (c : M.tree_cond #a t pre post) sl0 x sl1
+  : squash (M.tree_ens t c sl0 x sl1 <==> M.tree_ens t c sl0 x sl1)
+  = ()
 
 // TODO?: factorize with LCspec
 let sound_repr_M_of_LV__LCsub_LCspec
@@ -578,6 +714,10 @@ let sound_repr_M_of_LV__LCsub_LCspec
         let sl0_rem = filter_sl (mask_not (eij_trg_mask pre_f)) sl0               in
         U.assert_by_tac (fun () ->
           norm_sound_LV2M ();
+          // For some reason (maybe the strict_on_arguments + type ascription ?) the reduction of
+          // M.tree_req is blocked. The following line somehow enable the reduction.
+          apply (`TLogic.rew_iff_left); apply (`force_M_tree_req);
+          norm_sound_LV2M ();
           apply (`TLogic.rew_iff_left); rew_iff_LV2M (); norm [simplify];
           l_to_r [`extract_eij_framed_equiv];
           apply (`TLogic.rew_iff_left);
@@ -600,6 +740,8 @@ let sound_repr_M_of_LV__LCsub_LCspec
         let sl0_ro  = (split_vars pre ro (eij_sl (L.index pre_f) sl0))._2         in
         let sl0_rem = filter_sl (mask_not (eij_trg_mask pre_f)) sl0               in
         U.assert_by_tac (fun () ->
+          norm_sound_LV2M ();
+          apply (`TLogic.rew_iff_left); apply (`force_M_tree_ens);
           norm_sound_LV2M ();
           apply (`TLogic.rew_iff_left); rew_iff_LV2M (); norm [simplify];
           l_to_r [`extract_eij_framed_equiv];
@@ -632,7 +774,80 @@ let sound_repr_M_of_LV__LCsub_LCspec
             apply_lemma (`filter_bind_csm);
           norm [delta_only [`%U.cast]; iota];
           l_to_r [`filter_sl_bind_csm];
+          smt ()
+          ))
+
+let sound_repr_M_of_LV__LCsub_LCgen
+      (env : vprop_list)
+      (a : Type u#a) (gen_tac : unit -> Tactics.Tac unit)
+      (gen_c : M.spec_r a -> Type u#(max a 2))
+      (pre : M.pre_t) (post : M.post_t a) (ro : vprop_list)
+      (req : sl_f pre -> sl_f ro -> Type0) (ens : sl_f pre -> (x : a) -> sl_f (post x) -> sl_f ro -> Type0)
+      (sh : gen_c (M.Mkspec_r pre post ro req ens))
+      (pre_f : Perm.pequiv_list env L.(pre @ ro))
+      (sf : gen_sf (M.Mkspec_r pre post ro req ens))
+      (csm1 : csm_t (filter_mask (mask_not (eij_trg_mask (eij_split pre ro (eij_of_perm_l pre_f))._1)) env))
+      (prd1 : prd_t a)
+      (prd_f1 : (x : a) ->
+              Perm.pequiv_list
+                (sub_prd env (eij_trg_mask (eij_split pre ro (eij_of_perm_l pre_f))._1) (post x) csm1)
+                (prd1 x))
+  : (let lc = LCsub env ((eij_trg_mask (eij_split pre ro (eij_of_perm_l pre_f))._1)) post
+                    (LCgen env #a #gen_tac #gen_c (M.Mkspec_r pre post ro req ens) sh pre_f sf)
+                    csm1 prd1 prd_f1
+     in squash (lcsub_at_leaves lc /\ sound_repr_M_of_LV lc))
+  = introduce _ /\ _
+    with _ by (norm [delta_only [`%lcsub_at_leaves]; iota; zeta]; trivial ())
+    and intro_sound_M_of_LV _ _
+      (fun sl0 ->
+        let split_sl0_lem = split_vars_append pre ro (extract_vars (Perm.perm_f_of_list pre_f) sl0) in
+        U.assert_by_tac (fun () ->
+          norm_sound_LV2M ();
+          apply (`TLogic.rew_iff_left); apply (`force_M_tree_req);
+          norm_sound_LV2M ();
+          rew_iff_l_LV2M true;
+          apply (`TLogic.rew_iff_left);
+            l_to_r [``@split_sl0_lem];
+            rew_iff_LV2M ();
+            norm [];
           smt ()))
+      (fun sl0 x sl1 sl_rem ->
+        let extr_sl0      = extract_vars (Perm.perm_f_of_list pre_f) sl0 in
+        let split_sl0_lem = split_vars_append pre ro extr_sl0            in
+        let sl0_pre       = (split_vars pre ro extr_sl0)._1              in
+        let sl0_ro        = (split_vars pre ro extr_sl0)._2              in
+        U.assert_by_tac (fun () ->
+          norm_sound_LV2M ();
+          apply (`TLogic.rew_iff_left); apply (`force_M_tree_ens);
+          norm_sound_LV2M ();
+          apply (`TLogic.rew_iff_left); rew_iff_LV2M (); norm [simplify];
+          apply (`TLogic.rew_iff_left);
+            l_to_r [``@split_sl0_lem];
+            rew_iff_LV2M ();
+            norm [];
+          TLogic.(
+            apply (`rew_iff_left); apply_raw (`rew_exists_eq (`@sl0_pre));
+              smt (); norm [simplify];
+            apply (`rew_iff_left); apply (`exists_morph_iff); let _ = intro () in
+              apply (`rew_exists_eq (`@sl0_ro ));
+              smt (); norm [simplify]
+          );
+          norm [delta_only [`%gen_sub_post_equiv]];
+          norm_sound_LV2M ();
+          l_to_r [`extract_pequiv_trans];
+          l_to_r [`extract_gen_post_equiv];
+          with_policy Goal (fun () ->
+            l_to_r [`extract_sub_prd_framed_equiv]); later ();
+            // guard
+            norm_sound_LV2M (); norm [simplify]; smt ();
+          rew_iff_l_LV2M false;
+            // additional goal generated by [rew_append_var_inj']
+            seq explode (fun () -> try trefl () with | _ -> ());
+            apply_lemma (`filter_bind_csm);
+          norm [delta_only [`%U.cast]; iota];
+          l_to_r [`filter_sl_bind_csm];
+          smt ()))
+
 #pop-options
 
 
@@ -666,7 +881,12 @@ let rec repr_M_of_LV_sound
         (repr_M_of_LV_sound cthn)
         (repr_M_of_LV_sound cels)
     end
+    begin fun (*LCgen*)   a gen_tac gen_c s sh pre_f sf -> fun _ ->
+      let M.Mkspec_r pre post ro req ens = s in
+      sound_repr_M_of_LV__LCgen env a gen_tac gen_c pre post ro req ens sh pre_f sf
+    end
     begin fun (*LCsub*)  a0 f0 csm0 prd0 cf csm1 prd1 prd_f1 -> fun _ ->
+      inv_lcsub_at_leaves__LCsub cf csm1 prd1 prd_f1;
       match_lin_cond cf
         (fun a f csm0 prd0 cf ->
            (csm1   : csm_t (filter_mask (mask_not csm0) env)) -> (prd1 : prd_t a) ->
@@ -682,6 +902,10 @@ let rec repr_M_of_LV_sound
       (fun (*LCbind*)  a b f g f_csm f_prd cf g_csm g_prd cg -> fun _ _ _ _ -> false_elim ())
       (fun (*LCbindP*) a b wp g csm prd cg -> fun _ _ _ _ -> false_elim ())
       (fun (*LCif*)    a guard thn els csm prd cthn cels -> fun _ _ _ _ -> false_elim ())
+      begin fun (*LCgen*)   a gen_tac gen_c s sh pre_f sf -> fun csm1 prd1 prd_f1 _ ->
+        let M.Mkspec_r pre post ro req ens = s in
+        sound_repr_M_of_LV__LCsub_LCgen env a gen_tac gen_c pre post ro req ens sh pre_f sf csm1 prd1 prd_f1
+      end
       (fun (*LCsub*)   a0 f0 csm0 prd0 cf csm1 prd1 prd_f1 -> fun _ _ _ _ -> false_elim ())
       csm1 prd1 prd_f1 ()
     end ()
