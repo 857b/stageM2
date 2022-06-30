@@ -462,4 +462,15 @@ let ghost_to_steel_steel_ct (a : Type) (t : prog_tree a) (pre : pre_t) (post : p
     Steel.Effect.Atomic.return x'
   )
 
+[@@ __repr_M__]
+inline_for_extraction noextract
+let ghost_to_steel_ct (#a : Type) (f : repr (SH.KGhost Set.empty) a)
+      (rv : (x : Ghost.erased a) -> (x' : a { x' == Ghost.reveal x }))
+  : repr SH.KSteel a
+  = {
+    repr_tree  = f.repr_tree;
+    repr_steel = (fun pre post c ->
+                    ghost_to_steel_steel_ct a f.repr_tree pre post c (f.repr_steel _ _ c) rv)
+  }
+
 // TODO: SteelAtomic

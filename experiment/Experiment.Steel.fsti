@@ -152,7 +152,7 @@ let __normal_LV2SF : list norm_step = [
               `%Vpl.filter_sl;
               `%M.post_sl_t; `%Vpl.vprop_list_sels_t;
               `%L.map; `%L.op_At; `%L.append; `%Ll.initi; `%L.length;
-              `%Dl.initi; `%Dl.append; `%Dl.index; `%Fl.dlist_of_f;
+              `%Dl.initi; `%Dl.append; `%Dl.index; `%Dl.dlist_eq2; `%Fl.dlist_of_f; `%Fl.flist_eq2;
               `%Mktuple2?._1; `%Mktuple2?._2];
   delta_attr [`%LV2SF.__LV2SF__; `%Learn.List.Mask.__mask__; `%__tac_helper__; `%SE.__reduce__];
   delta_qualifier ["unfold"];

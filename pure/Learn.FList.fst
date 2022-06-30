@@ -90,6 +90,15 @@ let fdf_id (#ts : ty_list) (f : flist ts)
   = flist_extensionality (flist_of_d (dlist_of_f f)) f (fun i -> ())
 
 
+let flist_eq2 (#ts : ty_list) (f g : flist ts) : prop
+  = Dl.dlist_eq2 (dlist_of_f f) (dlist_of_f g)
+
+let flist_eq2_spec (#ts : ty_list) (f g : flist ts)
+  : Lemma (flist_eq2 f g <==> f == g)
+  =
+    Dl.dlist_eq2_spec (dlist_of_f f) (dlist_of_f g);
+    fdf_id f; fdf_id g
+
 noextract
 let append (#ts0 #ts1 : ty_list) (xs0 : flist ts0) (xs1 : flist ts1)
   : Tot (flist L.(ts0 @ ts1))

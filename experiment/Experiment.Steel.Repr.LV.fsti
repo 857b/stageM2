@@ -295,7 +295,7 @@ type lin_cond :
       lin_cond env (M.Tif a guard thn els) csm prd
   | LCgen :
       (env : vprop_list) ->
-      (#a : Type u#a) -> (#gen_tac : (unit -> Tactics.Tac unit)) ->
+      (#a : Type u#a) -> (#gen_tac : M.gen_tac_t) ->
       (#gen_c : (M.spec_r a -> Type u#(max a 2))) ->
       (s : M.spec_r a) -> (sh : gen_c s) ->
       (pre_f : Perm.pequiv_list env (M.spc_pre1 s)) ->
@@ -364,7 +364,7 @@ let match_lin_cond
                                  csm0 == csm /\ prd0 == prd /\
                                  ct0 == LCif env #a #guard #thn #els csm prd cthn cels)
                        (ensures fun _ -> True))
-      (c_LCgen  : (a : Type u#a) -> (gen_tac : (unit -> Tactics.Tac unit)) ->
+      (c_LCgen  : (a : Type u#a) -> (gen_tac : M.gen_tac_t) ->
                   (gen_c : (M.spec_r a -> Type u#(max a 2))) ->
                   (s : M.spec_r a) -> (sh : gen_c s) ->
                   (pre_f : Perm.pequiv_list env (M.spc_pre1 s)) ->

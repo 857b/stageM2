@@ -1225,7 +1225,7 @@ let build_spec_r fr ctx : Tac unit =
 (*** Misc *)
 
 let match_M_prog_tree (#a : Type) fr ctx (n : name)
-      (c_Tspec : a) (c_Tret : a) (c_Tbind : a) (c_TbindP : a) (c_Tif : a)
+      (c_Tspec : a) (c_Tret : a) (c_Tbind : a) (c_TbindP : a) (c_Tif : a) (c_Tgen : a)
   : Tac a
   =
     let fail_shape ()
@@ -1239,4 +1239,5 @@ let match_M_prog_tree (#a : Type) fr ctx (n : name)
     | "Tbind"  -> c_Tbind
     | "TbindP" -> c_TbindP
     | "Tif"    -> c_Tif
+    | "Tgen"   -> c_Tgen
     | _        -> fail_shape ()

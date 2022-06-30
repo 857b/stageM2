@@ -7,6 +7,7 @@ module Fl   = Learn.FList
 module Ll   = Learn.List
 module SE   = Steel.Effect
 module SH   = Experiment.Steel.Steel
+module Itf  = Experiment.Steel.Interface
 module Mem  = Steel.Memory
 module Veq  = Experiment.Steel.VEquiv
 module Perm = Learn.Permutation
@@ -213,6 +214,11 @@ type spec_r_steel (#a : Type u#a) (pre : SE.pre_t) (post : SE.post_t a)
 
 (*** [prog_tree] *)
 
+/// A tactic taht will be called to solves the goal:
+///   [LV.lin_cond env (Tgen a gen_tac gen_c) ?csm ?prd]
+/// using [LV.LCgen], unifying [?csm] and [?prd].
+type gen_tac_t = Itf.flags_record -> Tactics.Tac unit
+
 noeq
 type prog_tree : (a : Type u#a) -> Type u#(max (a+1) 3) =
   // A specification of the subprogram, used to represent function calls
@@ -234,8 +240,8 @@ type prog_tree : (a : Type u#a) -> Type u#(max (a+1) 3) =
              (thn : prog_tree a) -> (els : prog_tree a) ->
              prog_tree a
   // generic combinator
-  | Tgen   : (a : Type u#a) -> (gen_tac : unit -> Tactics.Tac unit) ->
-             (gen_c : spec_r a -> Type u#(max a 2)) ->
+  | Tgen   : (a : Type u#a) -> (gen_tac : gen_tac_t) ->
+             (gen_c : (spec_r a -> Type u#(max a 2))) ->
              prog_tree a
 
 
@@ -282,7 +288,7 @@ type tree_cond : (#a : Type u#a) -> (t : prog_tree a) -> (pre : pre_t) -> (post 
               tree_cond (Tif a guard thn els) pre post
   // We expect the combinator to have a splited read-only frame
   // ALT: only expect a classical {pre,post,req,ens} and use a wrapper to handle the ro frame
-  | TCgen   : (#a : Type u#a) -> (#gen_tac : (unit -> Tactics.Tac unit)) ->
+  | TCgen   : (#a : Type u#a) -> (#gen_tac : gen_tac_t) ->
               (#gen_c : (spec_r a -> Type u#(max a 2))) ->
               (s : spec_r a) -> (sh : gen_c s) ->
               (pre : pre_t) -> (pre_eq : Veq.vequiv pre (spc_pre1 s)) ->

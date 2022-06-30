@@ -288,6 +288,16 @@ let __build_LCif
          (lcsub_add_csm env els els_csm els_prd (cels ())
                         thn_csm prd veq)
 
+/// Just an utility to extract the tactic.
+[@@ __cond_solver__]
+let __build_LCgen
+      (env : vprop_list) (a : Type u#a) (gen_tac : M.gen_tac_t) (gen_c : M.spec_r a -> Type u#(max a 2))
+      (_ : extract_term gen_tac)
+      (csm : csm_t env) (prd : prd_t a)
+      (lc : lin_cond env (M.Tgen a gen_tac gen_c) csm prd)
+  : lin_cond env (M.Tgen a gen_tac gen_c) csm prd
+  = lc
+
 #pop-options
 
 
@@ -325,6 +335,13 @@ let build_LCret fr prd_hint_b : Tac unit
     exact (binder_to_term (Opt.dflt ret_hint prd_hint_b));
     // csm_f
     build_eq_injection_l fr (fun () -> [Info_location "at the return statement"])
+
+
+let build_LCgen fr prd_hint_b : Tac unit
+  =
+    apply (`__build_LCgen);
+    let gen_tac = extract_term_tac (fun gtc -> unquote #M.gen_tac_t gtc) in
+    gen_tac fr
 
 let rec build_LCbind fr prd_hint_b : Tac unit
   =
@@ -385,7 +402,7 @@ and build_lin_cond (fr : flags_record) (prd_hint_b : option binder) : Tac unit
       | Tv_FVar fv | Tv_UInst fv _ ->
           let nd = inspect_fv fv in
           match_M_prog_tree fr dummy_ctx nd
-            build_LCspec build_LCret build_LCbind build_LCbindP build_LCif
+            build_LCspec build_LCret build_LCbind build_LCbindP build_LCif build_LCgen
       | r -> fail_shape ()
     in
     // changes [lin_cond env t ?csm0 ?prd0]

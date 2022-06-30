@@ -35,6 +35,19 @@ let rec dlist_extensionality (#ts : ty_list) (xs ys : dlist ts)
                 dlist_extensionality #ts' xs' ys' (fun i -> pf (i+1))
 
 
+let rec dlist_eq2 (#ts : ty_list) (f g : dlist ts)
+  : Tot prop (decreases ts)
+  = match (|ts, f, g|) <: ts : ty_list & dlist ts & dlist ts with
+  | (|[], DNil, DNil|) -> True
+  | (|t :: ts, DCons _ x _ xs, DCons _ y _ ys|) -> x == y /\ dlist_eq2 #ts xs ys
+
+let rec dlist_eq2_spec (#ts : ty_list) (f g : dlist ts)
+  : Lemma (dlist_eq2 f g <==> f == g)
+  = match (|ts, f, g|) <: ts : ty_list & dlist ts & dlist ts with
+  | (|[], DNil, DNil|) -> ()
+  | (|t :: ts, DCons _ x _ xs, DCons _ y _ ys|) -> dlist_eq2_spec #ts xs ys
+  
+
 let rec append (#ts0 #ts1 : ty_list) (xs0 : dlist ts0) (xs1 : dlist ts1)
   : Tot (dlist L.(ts0 @ ts1)) (decreases xs0)
   = match xs0 with

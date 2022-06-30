@@ -625,7 +625,7 @@ let sound_repr_M_of_LV__LCif
 
 let sound_repr_M_of_LV__LCgen
       (env : vprop_list)
-      (a : Type u#a) (gen_tac : unit -> Tactics.Tac unit)
+      (a : Type u#a) (gen_tac : M.gen_tac_t)
       (gen_c : M.spec_r a -> Type u#(max a 2))
       (pre : M.pre_t) (post : M.post_t a) (ro : vprop_list)
       (req : sl_f pre -> sl_f ro -> Type0) (ens : sl_f pre -> (x : a) -> sl_f (post x) -> sl_f ro -> Type0)
@@ -779,7 +779,7 @@ let sound_repr_M_of_LV__LCsub_LCspec
 
 let sound_repr_M_of_LV__LCsub_LCgen
       (env : vprop_list)
-      (a : Type u#a) (gen_tac : unit -> Tactics.Tac unit)
+      (a : Type u#a) (gen_tac : M.gen_tac_t)
       (gen_c : M.spec_r a -> Type u#(max a 2))
       (pre : M.pre_t) (post : M.post_t a) (ro : vprop_list)
       (req : sl_f pre -> sl_f ro -> Type0) (ens : sl_f pre -> (x : a) -> sl_f (post x) -> sl_f ro -> Type0)
