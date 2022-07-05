@@ -55,6 +55,18 @@ val vprop_equiv_flat (vp : vprop) (ve : vprop_with_emp vp)
   : Lemma (equiv (vprop_of_list (flatten_vprop ve)) vp)
 
 
+noeq
+type vprop_to_list (v : vprop) : (vs : vprop_list) -> Type =
+  | VPropToList : (ve : vprop_with_emp v) -> vprop_to_list v (flatten_vprop ve)
+
+let vprop_to_list_equiv (#v : vprop) (#vs : vprop_list) (t : vprop_to_list v vs)
+  : Lemma (v `equiv` vprop_of_list vs)
+  =
+    let VPropToList ve = t in
+    vprop_equiv_flat v ve;
+    equiv_sym (vprop_of_list vs) v
+
+
 (***** selectors *)
 
 (* ALT? dependent arrrow Fin.fin n -> _ *)
@@ -169,6 +181,40 @@ let append_vars (#vs0 #vs1 : vprop_list) (xs : sl_f vs0) (ys : sl_f vs1)
     (**) Ll.map_append Mkvprop'?.t vs0 vs1;
     Fl.append xs ys
 
+let split_vars_append (v0 v1 : vprop_list) (sl : sl_f L.(v0 @ v1)) ()
+  : Lemma (sl == (let sls = split_vars v0 v1 sl in append_vars sls._1 sls._2))
+  =
+    Ll.pat_append ();
+    Fl.splitAt_ty_append (vprop_list_sels_t v0) (vprop_list_sels_t v1) sl
+
+let append_split_vars (v0 v1 : vprop_list) (sl0 : sl_f v0) (sl1 : sl_f v1) ()
+  : Lemma (split_vars v0 v1 (append_vars sl0 sl1) == (sl0, sl1))
+  =
+    Ll.pat_append ();
+    Fl.append_splitAt_ty (vprop_list_sels_t v0) (vprop_list_sels_t v1) sl0 sl1
+
+
+let rew_append_var_inj (#t0 #t1 : vprop_list) (x0 x1 : sl_f t0) (y0 y1 : sl_f t1)
+  : squash ((append_vars x0 y0 == append_vars x1 y1) <==> (x0 == x1 /\ y0 == y1))
+  = Fl.append_splitAt_ty _ _ x0 y0; Fl.append_splitAt_ty _ _ x1 y1
+
+let rew_append_var_inj'
+    #tx0 (x0 : sl_f tx0) #tx1 (x1 : sl_f tx1)
+    #ty0 (y0 : sl_f ty0) #ty1 (y1 : sl_f ty1)
+    #teq (_ : squash (tx0 == tx1 /\ ty0 == ty1 /\ teq == L.(tx0 @ ty0)))
+  : squash (eq2 #(sl_f teq) (append_vars #tx0 #ty0 x0 y0) (append_vars #tx1 #ty1 x1 y1)
+        <==> (x0 == x1 /\ y0 == y1))
+  = rew_append_var_inj x0 x1 y0 y1
+
+val rew_forall_sl_f_app (v0 v1 : vprop_list) (p0 : sl_f L.(v0 @ v1) -> Type) (p1 : Type)
+    (_ : squash ((forall (sl0 : sl_f v0) (sl1 : sl_f v1) . p0 (append_vars sl0 sl1)) <==> p1))
+  : squash ((forall (sl : sl_f L.(v0 @ v1)) . p0 sl) <==> p1)
+
+val rew_exists_sl_f_app (v0 v1 : vprop_list) (p0 : sl_f L.(v0 @ v1) -> Type) (p1 : Type)
+    (_ : squash ((exists (sl0 : sl_f v0) (sl1 : sl_f v1) . p0 (append_vars sl0 sl1)) <==> p1))
+  : squash ((exists (sl : sl_f L.(v0 @ v1)) . p0 sl) <==> p1)
+
+
 let vequiv_perm : vprop_list -> vprop_list -> Type = Perm.pequiv #vprop'
 
 unfold
@@ -204,6 +250,32 @@ let filter_sl
   : sl_f (Msk.filter_mask mask vs)
   = Msk.filter_mask_fl mask (vprop_list_sels_t vs) xs
 
+
+// ALT? direct definition
+let append_vars_mask
+      (#vs : vprop_list) (m : Msk.mask_t vs)
+      (sl0 : sl_f Msk.(filter_mask m vs)) (sl1 : sl_f Msk.(filter_mask (mask_not m) vs))
+  : sl_f vs
+  =
+    extract_vars (Msk.mask_pequiv_append' m vs) (append_vars sl0 sl1)
+
+val append_vars_mask_index
+      (#vs : vprop_list) (m : Msk.mask_t vs)
+      (sl0 : sl_f Msk.(filter_mask m vs)) (sl1 : sl_f Msk.(filter_mask (mask_not m) vs))
+      (i : Ll.dom vs)
+  : Lemma (append_vars_mask m sl0 sl1 i
+       == (if L.index m i then U.cast _ (sl0 Msk.(mask_push m i))
+                          else U.cast _ (sl1 Msk.(mask_push (mask_not m) i))))
+
+val append_filter_vars_mask
+      (#vs : vprop_list) (m : Msk.mask_t vs) (sl : sl_f vs)
+  : Lemma (append_vars_mask m (filter_sl m sl) (filter_sl (Msk.mask_not m) sl) == sl)
+
+val filter_append_vars_mask
+      (#vs : vprop_list) (m : Msk.mask_t vs)
+      (sl0 : sl_f Msk.(filter_mask m vs)) (sl1 : sl_f Msk.(filter_mask (mask_not m) vs))
+  : Lemma (filter_sl               m  (append_vars_mask m sl0 sl1) == sl0 /\
+           filter_sl (Msk.mask_not m) (append_vars_mask m sl0 sl1) == sl1)
 
 
 val steel_elim_vprop_of_list_cons_f (#opened : Mem.inames) (v : vprop') (vs : vprop_list)
@@ -257,3 +329,22 @@ val intro_filter_mask (#opened : Mem.inames) (vs : vprop_list) (mask : Ll.vec (L
           sel_list Msk.(filter_mask mask vs) h1 == Msk.filter_mask_dl mask _ (sel_list vs h0) /\
           sel_list Msk.(filter_mask (mask_not mask) vs) h1 ==
             Msk.filter_mask_dl (Msk.mask_not mask) _ (sel_list vs h0))
+
+
+val elim_filter_mask_append (#opened : Mem.inames) (vs : vprop_list) (m : Ll.vec (L.length vs) bool)
+  : SteelGhost unit opened
+      (vprop_of_list Msk.(filter_mask           m  vs) `star` 
+       vprop_of_list Msk.(filter_mask (mask_not m) vs))
+      (fun () -> vprop_of_list vs)
+      (requires fun _ -> True) (ensures fun h0 () h1 ->
+          sel_f vs h1 == append_vars_mask m (sel_f Msk.(filter_mask m vs) h0)
+                                            (sel_f Msk.(filter_mask (mask_not m) vs) h0))
+
+val intro_filter_mask_append (#opened : Mem.inames) (vs : vprop_list) (m : Ll.vec (L.length vs) bool)
+  : SteelGhost unit opened
+      (vprop_of_list vs)
+      (fun () -> vprop_of_list Msk.(filter_mask           m  vs) `star` 
+              vprop_of_list Msk.(filter_mask (mask_not m) vs))
+      (requires fun _ -> True) (ensures fun h0 () h1 ->
+          sel_f vs h0 == append_vars_mask m (sel_f Msk.(filter_mask m vs) h1)
+                                            (sel_f Msk.(filter_mask (mask_not m) vs) h1))

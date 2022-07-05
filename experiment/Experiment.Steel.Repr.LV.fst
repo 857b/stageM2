@@ -92,11 +92,9 @@ let eij_split1_trg_mask (#a : Type) (src0 src1 #trg : list a) (eij : eq_injectio
 
 
 let bind_g_csm'_len
-      (env : vprop_list)
-      (f_csm : csm_t env) (f_prd : vprop_list)
-      (g_csm : csm_t (filter_mask (mask_not f_csm) env))
-  : Lemma (mask_len (bind_g_csm' env f_csm f_prd g_csm) == length f_prd + mask_len g_csm)
-          [SMTPat (mask_len (bind_g_csm' env f_csm f_prd g_csm))]
+      (f_prd : vprop_list) (#env : vprop_list) (g_csm : csm_t env)
+  : Lemma (mask_len (bind_g_csm' f_prd g_csm) == L.length f_prd + mask_len g_csm)
+          [SMTPat (mask_len (bind_g_csm' f_prd g_csm))]
   =
     append_count (Ll.repeat (length f_prd) true) g_csm true;
     Ll.repeat_count (length f_prd) true true
@@ -114,14 +112,12 @@ let rec bind_g_csm'_or_aux
 #pop-options
 
 let bind_g_csm'_or
-      (env : vprop_list)
-      (f_csm : csm_t env) (f_prd : vprop_list)
-      (g_csm : csm_t (filter_mask (mask_not f_csm) env))
-      (csm1  : csm_t (filter_mask (mask_not g_csm) (filter_mask (mask_not f_csm) env)))
-  : Lemma (mask_comp_or (bind_g_csm' env f_csm f_prd g_csm) csm1
-        == bind_g_csm' env f_csm f_prd (mask_comp_or g_csm csm1))
+      (f_prd : vprop_list) (#env : vprop_list) (g_csm : csm_t env)
+      (csm1  : csm_t (filter_mask (mask_not g_csm) env))
+  : Lemma (mask_comp_or (bind_g_csm' f_prd g_csm) csm1
+        == bind_g_csm' f_prd (mask_comp_or g_csm csm1))
   =
-    bind_g_csm'_or_aux (length f_prd) (mask_len (mask_not f_csm)) g_csm csm1
+    bind_g_csm'_or_aux (length f_prd) (length env) g_csm csm1
 
 #push-options "--ifuel 0 --fuel 0"
 
@@ -147,59 +143,82 @@ let filter_sl_bind_csm
     mask_not_comp_or f_csm g_csm;
     filter_mask_fl_and (mask_not f_csm) (mask_not g_csm) (vprop_list_sels_t env) sl
 
+#push-options "--fuel 1 --ifuel 1"
+let rec bind_g_csm'_as_comp_or
+      (f_prd : vprop_list) (#env : vprop_list) (g_csm : csm_t env)
+  : Lemma (ensures bind_g_csm' f_prd g_csm
+                == mask_comp_or (mask_split_l (L.length f_prd) (L.length env)) g_csm)
+          (decreases f_prd)
+  = match f_prd with
+  | [] -> mask_comp_or_repeat_true (L.length env) g_csm
+  | _ :: f_prd -> bind_g_csm'_as_comp_or f_prd g_csm
+#pop-options
+
+let filter_csm_bind_g_csm'
+      (f_prd : vprop_list) (#env : vprop_list) (g_csm : csm_t env)
+  : Lemma (filter_mask (bind_g_csm' f_prd g_csm) L.(f_prd @ env)
+        == L.(f_prd @ filter_mask g_csm env))
+  =
+    filter_mask_append (Ll.repeat (L.length f_prd) true) g_csm f_prd env;
+    filter_mask_true (Ll.repeat (L.length f_prd) true) f_prd (fun i -> ())
 
 let filter_bind_g_csm'
-      (env : vprop_list)
-      (f_csm : csm_t env) (f_prd : vprop_list)
-      (g_csm : csm_t (filter_mask (mask_not f_csm) env))
-  : Lemma (filter_mask (mask_not (bind_g_csm' env f_csm f_prd g_csm)) (res_env env f_csm f_prd)
-        == filter_mask (mask_not (bind_csm env f_csm g_csm)) env)
+      (f_prd : vprop_list) (#env : vprop_list) (g_csm : csm_t env)
+  : Lemma (filter_mask (mask_not (bind_g_csm' f_prd g_csm)) L.(f_prd @ env)
+        == filter_mask (mask_not g_csm) env)
   =
-    let env1 = filter_mask (mask_not f_csm) env in
-    let m1 : Ll.vec (length f_prd + mask_len (mask_not f_csm)) bool
+    let m1 : Ll.vec (length f_prd + L.length env) bool
       = Ll.repeat (length f_prd) true @ g_csm in
-    let m2 : Ll.vec (length f_prd + mask_len (mask_not f_csm)) bool
+    let m2 : Ll.vec (length f_prd + L.length env) bool
       = Ll.repeat (length f_prd) false @ mask_not g_csm in
     calc (==) {
-      filter_mask (mask_not (bind_g_csm' env f_csm f_prd g_csm)) (res_env env f_csm f_prd) <: vprop_list;
+      filter_mask (mask_not (bind_g_csm' f_prd g_csm)) L.(f_prd @ env) <: vprop_list;
     == { }
-      filter_mask (mask_not m1) (f_prd @ env1);
+      filter_mask (mask_not m1) (f_prd @ env);
     == { Ll.pat_append () }
-      filter_mask m2 (f_prd @ env1);
-    == { filter_mask_append (Ll.repeat (length f_prd) false) (mask_not g_csm) f_prd env1 }
-      filter_mask (Ll.repeat (length f_prd) false) f_prd @ filter_mask (mask_not g_csm) env1;
+      filter_mask m2 (f_prd @ env);
+    == { filter_mask_append (Ll.repeat (length f_prd) false) (mask_not g_csm) f_prd env }
+      filter_mask (Ll.repeat (length f_prd) false) f_prd @ filter_mask (mask_not g_csm) env;
     == { filter_mask_false (Ll.repeat (length f_prd) false) f_prd (fun _ -> ()) }
-      [] @ filter_mask (mask_not g_csm) env1;
+      [] @ filter_mask (mask_not g_csm) env;
     == { _ by (Tactics.trefl ()) }
-      filter_mask (mask_not g_csm) env1;
-    == { filter_bind_csm env f_csm g_csm }
-      filter_mask (mask_not (bind_csm env f_csm g_csm)) env;
+      filter_mask (mask_not g_csm) env;
+    == {  }
+      filter_mask (mask_not g_csm) env;
     }
 
-let filter_sl_bind_g_csm'
+let filter_bind_g_csm'1
       (env : vprop_list)
       (f_csm : csm_t env) (f_prd : vprop_list)
       (g_csm : csm_t (filter_mask (mask_not f_csm) env))
-      (sl0 : sl_f f_prd) (sl1 : sl_f (filter_mask (mask_not f_csm) env))
-  : Lemma (filter_bind_g_csm' env f_csm f_prd g_csm; filter_bind_csm env f_csm g_csm;
-       filter_sl (mask_not (bind_g_csm' env f_csm f_prd g_csm)) (append_vars sl0 sl1)
+  : Lemma (filter_mask (mask_not (bind_g_csm'1 env f_csm f_prd g_csm)) (res_env env f_csm f_prd)
+        == filter_mask (mask_not (bind_csm env f_csm g_csm)) env)
+  =
+    filter_bind_g_csm' f_prd g_csm;
+    filter_bind_csm env f_csm g_csm
+
+
+let filter_sl_bind_g_csm'
+      (f_prd : vprop_list) (#env : vprop_list) (g_csm : csm_t env)
+      (sl0 : sl_f f_prd) (sl1 : sl_f env)
+  : Lemma (filter_bind_g_csm' f_prd g_csm;
+       filter_sl (mask_not (bind_g_csm' f_prd g_csm)) (append_vars sl0 sl1)
     == filter_sl (mask_not g_csm) sl1)
   =
-    filter_bind_g_csm' env f_csm f_prd g_csm; filter_bind_csm env f_csm g_csm;
+    filter_bind_g_csm' f_prd g_csm;
     Ll.pat_append ();
-    let env1 = filter_mask (mask_not f_csm) env in
-    let m1 : Ll.vec (length f_prd + mask_len (mask_not f_csm)) bool
+    let m1 : Ll.vec (length f_prd + length env) bool
       = Ll.repeat (length f_prd) true @ g_csm in
-    let m2 : Ll.vec (length f_prd + mask_len (mask_not f_csm)) bool
+    let m2 : Ll.vec (length f_prd + length env) bool
       = Ll.repeat (length f_prd) false @ mask_not g_csm in
     let rep0 = Ll.repeat (length f_prd) false in
 
-    filter_mask_append rep0 (mask_not g_csm) f_prd env1;
+    filter_mask_append rep0 (mask_not g_csm) f_prd env;
     filter_mask_false rep0 f_prd (fun _ -> ());
     assert_norm (vprop_list_sels_t [] == []);
     
-    calc (===) {
-      filter_sl (mask_not (bind_g_csm' env f_csm f_prd g_csm)) (append_vars sl0 sl1);
+    calc (==) {
+      filter_sl (mask_not (bind_g_csm' f_prd g_csm)) (append_vars sl0 sl1);
     == { }
       filter_sl (mask_not m1) (append_vars sl0 sl1);
     == { }
@@ -212,9 +231,36 @@ let filter_sl_bind_g_csm'
       filter_sl (mask_not g_csm) sl1;
     }
 
+let gen_csm_pequiv_append (env : vprop_list) (csm : csm_t env)
+  : Lemma (eij_trg_mask (eij_split (filter_mask csm env) (filter_mask (mask_not csm) env)
+                                                 (Perm.perm_f_to_list (mask_pequiv_append csm env)))._1
+           == csm)
+  =
+    let m0   = (filter_mask csm env)                            in
+    let m1   = (filter_mask (mask_not csm) env)                 in
+    let n0   = L.length m0                                      in
+    let f    = Perm.perm_f_to_list (mask_pequiv_append csm env) in
+    let f'   = (eij_split m0 m1 f)._1                           in
+    let csm' = eij_trg_mask f'                                  in
+    Ll.list_extensionality csm' csm
+      (fun j ->
+        calc (<==>) {
+          b2t (L.index csm' j);
+        <==> { Ll.memP_iff j f' }
+          exists (i : Fin.fin n0) . L.index f' i == j;
+        <==> { Ll.splitAt_index n0 f }
+          exists (i : Fin.fin n0) . L.index f  i == j;
+        <==> { FStar.Classical.forall_intro (mask_perm_append_index csm) }
+          exists (i : Fin.fin n0) . mask_pull csm i == j;
+        <==> { assert (L.index csm j ==> mask_pull csm (mask_push csm j) == j) }
+          L.index csm j;
+        }
+      )
+
 #pop-options
 
-(**) private let __end_bind_lem = ()
+(**) private let __begin_lin_cond = ()
+
 
 #set-options "--ifuel 0 --fuel 0"
 
@@ -387,9 +433,9 @@ and lc_sub_push_aux_at_leaves
                         L.length (filter_mask (mask_not g_csm) (filter_mask (mask_not f_csm) env)))
               = filter_bind_csm env f_csm g_csm in
       let gd1 (x : a) : squash (L.length csm' =
-                        L.length (filter_mask (mask_not (bind_g_csm' env f_csm (f_prd x) g_csm))
+                        L.length (filter_mask (mask_not (bind_g_csm'1 env f_csm (f_prd x) g_csm))
                                               (res_env env f_csm (f_prd x))))
-              = filter_bind_g_csm' env f_csm (f_prd x) g_csm in
+              = filter_bind_g_csm' (f_prd x) g_csm in
       FStar.Classical.forall_intro_squash_gtot gd1;
       assert (goal (LCbind env #a #b #f #g f_csm f_prd cf g_csm g_prd cg) csm' prd' prd_f)
           by (norm_lcsbl true;

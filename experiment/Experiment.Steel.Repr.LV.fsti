@@ -152,11 +152,18 @@ val eij_split1_trg_mask (#a : Type) (src0 src1 #trg : list a) (eij : eq_injectio
 
 [@@ __lin_cond__]
 let bind_g_csm'
+      (f_prd : vprop_list) (#env : vprop_list) (g_csm : csm_t env)
+  : csm_t L.(f_prd @ env)
+  = L.(Ll.repeat (length f_prd) true @ g_csm)
+
+[@@ __lin_cond__]
+unfold
+let bind_g_csm'1
       (env : vprop_list)
       (f_csm : csm_t env) (f_prd : vprop_list)
       (g_csm : csm_t (filter_mask (mask_not f_csm) env))
   : csm_t (res_env env f_csm f_prd)
-  = L.(Ll.repeat (length f_prd) true @ g_csm)
+  = bind_g_csm' f_prd #(filter_mask (mask_not f_csm) env) g_csm
 
 [@@ __lin_cond__]
 let bind_csm
@@ -167,19 +174,15 @@ let bind_csm
   = mask_comp_or f_csm g_csm
 
 val bind_g_csm'_len
-      (env : vprop_list)
-      (f_csm : csm_t env) (f_prd : vprop_list)
-      (g_csm : csm_t (filter_mask (mask_not f_csm) env))
-  : Lemma (mask_len (bind_g_csm' env f_csm f_prd g_csm) == L.length f_prd + mask_len g_csm)
-          [SMTPat (mask_len (bind_g_csm' env f_csm f_prd g_csm))]
+      (f_prd : vprop_list) (#env : vprop_list) (g_csm : csm_t env)
+  : Lemma (mask_len (bind_g_csm' f_prd g_csm) == L.length f_prd + mask_len g_csm)
+          [SMTPat (mask_len (bind_g_csm' f_prd g_csm))]
 
 val bind_g_csm'_or
-      (env : vprop_list)
-      (f_csm : csm_t env) (f_prd : vprop_list)
-      (g_csm : csm_t (filter_mask (mask_not f_csm) env))
-      (csm1  : csm_t (filter_mask (mask_not g_csm) (filter_mask (mask_not f_csm) env)))
-  : Lemma (mask_comp_or (bind_g_csm' env f_csm f_prd g_csm) csm1
-        == bind_g_csm' env f_csm f_prd (mask_comp_or g_csm csm1))
+      (f_prd : vprop_list) (#env : vprop_list) (g_csm : csm_t env)
+      (csm1  : csm_t (filter_mask (mask_not g_csm) env))
+  : Lemma (mask_comp_or (bind_g_csm' f_prd g_csm) csm1
+        == bind_g_csm' f_prd (mask_comp_or g_csm csm1))
 
 val filter_bind_csm
       (env : vprop_list)
@@ -199,24 +202,35 @@ val filter_sl_bind_csm
     == filter_sl (mask_not g_csm) (filter_sl (mask_not f_csm) sl))
 
 
+val bind_g_csm'_as_comp_or
+      (f_prd : vprop_list) (#env : vprop_list) (g_csm : csm_t env)
+  : Lemma (bind_g_csm' f_prd g_csm
+           == mask_comp_or (mask_split_l (L.length f_prd) (L.length env)) g_csm)
+
+val filter_csm_bind_g_csm'
+      (f_prd : vprop_list) (#env : vprop_list) (g_csm : csm_t env)
+  : Lemma (filter_mask (bind_g_csm' f_prd g_csm) L.(f_prd @ env)
+        == L.(f_prd @ filter_mask g_csm env))
+
 val filter_bind_g_csm'
+      (f_prd : vprop_list) (#env : vprop_list) (g_csm : csm_t env)
+  : Lemma (filter_mask (mask_not (bind_g_csm' f_prd g_csm)) L.(f_prd @ env)
+        == filter_mask (mask_not g_csm) env)
+
+val filter_bind_g_csm'1
       (env : vprop_list)
       (f_csm : csm_t env) (f_prd : vprop_list)
       (g_csm : csm_t (filter_mask (mask_not f_csm) env))
-  : Lemma (filter_mask (mask_not (bind_g_csm' env f_csm f_prd g_csm)) (res_env env f_csm f_prd)
+  : Lemma (filter_mask (mask_not (bind_g_csm'1 env f_csm f_prd g_csm)) (res_env env f_csm f_prd)
         == filter_mask (mask_not (bind_csm env f_csm g_csm)) env)
 
 val filter_sl_bind_g_csm'
-      (env : vprop_list)
-      (f_csm : csm_t env) (f_prd : vprop_list)
-      (g_csm : csm_t (filter_mask (mask_not f_csm) env))
-      (sl0 : sl_f f_prd) (sl1 : sl_f (filter_mask (mask_not f_csm) env))
-  : Lemma (filter_bind_g_csm' env f_csm f_prd g_csm; filter_bind_csm env f_csm g_csm;
-       filter_sl (mask_not (bind_g_csm' env f_csm f_prd g_csm)) (append_vars sl0 sl1)
+      (f_prd : vprop_list) (#env : vprop_list) (g_csm : csm_t env)
+      (sl0 : sl_f f_prd) (sl1 : sl_f env)
+  : Lemma (filter_bind_g_csm' f_prd g_csm;
+       filter_sl (mask_not (bind_g_csm' f_prd g_csm)) (append_vars sl0 sl1)
     == filter_sl (mask_not g_csm) sl1)
 
-
-(**) private val __end_bind_lem : unit
 
 [@@ __lin_cond__]
 let sub_prd
@@ -245,12 +259,20 @@ let gen_csm (#env : vprop_list) (#a : Type) (#s : M.spec_r a) (pre_f : Perm.pequ
   : csm_t env
   = spec_csm (eij_of_perm_l pre_f)
 
+val gen_csm_pequiv_append (env : vprop_list) (csm : csm_t env)
+  : Lemma (eij_trg_mask (eij_split (filter_mask csm env) (filter_mask (mask_not csm) env)
+                                   (Perm.perm_f_to_list (mask_pequiv_append csm env)))._1
+           == csm)
+
+
 let gen_sf (#a : Type) (s : M.spec_r a) : Type
   = (sl0 : sl_f s.spc_pre) -> (sl_ro : sl_f s.spc_ro) ->
     t : SF.prog_tree a (M.post_sl_t s.spc_post) {
       (SF.tree_req t <==> s.spc_req sl0 sl_ro) /\
       (forall (x : a) (sl1 : sl_f (s.spc_post x)) .
         SF.tree_ens t x sl1 <==> s.spc_ens sl0 x sl1 sl_ro) }
+
+(**) private val __begin_lin_cond : unit
 
 noeq
 type lin_cond : 
@@ -279,7 +301,7 @@ type lin_cond :
       // [g_csm] and [g_prd] are independent of the return value [x : a] of [f]
       (g_csm : csm_t (filter_mask (mask_not f_csm) env)) -> (g_prd : prd_t b) ->
       (cg : ((x : a) ->
-        lin_cond (res_env env f_csm (f_prd x)) (g x) (bind_g_csm' env f_csm (f_prd x) g_csm) g_prd)) ->
+        lin_cond (res_env env f_csm (f_prd x)) (g x) (bind_g_csm'1 env f_csm (f_prd x) g_csm) g_prd)) ->
       lin_cond env (M.Tbind a b f g) (bind_csm env f_csm g_csm) g_prd
   | LCbindP :
       (env : vprop_list) ->
@@ -339,7 +361,7 @@ let match_lin_cond
                   (g_csm : csm_t (filter_mask (mask_not f_csm) env)) -> (g_prd : prd_t b) ->
                   (cg : ((x : a) ->
                         lin_cond (res_env env f_csm (f_prd x)) (g x)
-                                 (bind_g_csm' env f_csm (f_prd x) g_csm) g_prd)
+                                 (bind_g_csm'1 env f_csm (f_prd x) g_csm) g_prd)
                         {forall (x : a) . {:pattern (cg x)} cg x << ct0}) ->
                   Pure (r _ _ _ _ (LCbind env #a #b #f #g f_csm f_prd cf g_csm g_prd cg))
                        (requires a0 == b /\ t0 == M.Tbind a b f g /\
@@ -589,9 +611,9 @@ let lcsubp_LCbind_prd_f
       (prd_f1 : (y : b) -> Perm.pequiv_list (sub_prd env (bind_csm env f_csm g_csm) (g_prd y) csm1) (prd1 y))
       (y : b)
   : Perm.pequiv_list
-      (sub_prd (res_env env f_csm f_prd) (bind_g_csm' env f_csm f_prd g_csm) (g_prd y) csm1) (prd1 y)  
+      (sub_prd (res_env env f_csm f_prd) (bind_g_csm'1 env f_csm f_prd g_csm) (g_prd y) csm1) (prd1 y)  
   =
-    (**) filter_bind_g_csm' env f_csm f_prd g_csm;
+    (**) filter_bind_g_csm'1 env f_csm f_prd g_csm;
     U.cast _ (prd_f1 y)
 
 type lcsubp_LCbind_rc_g
@@ -599,12 +621,12 @@ type lcsubp_LCbind_rc_g
       (a : Type u#a) (b : Type u#a) (g : a -> M.prog_tree b)
       (f_csm : csm_t env) (f_prd : prd_t a)
       (g_csm : csm_t (filter_mask (mask_not f_csm) env)) (g_prd : prd_t b)
-      (cg : (x : a) -> lin_cond (res_env env f_csm (f_prd x)) (g x) (bind_g_csm' env f_csm (f_prd x) g_csm) g_prd)
+      (cg : (x : a) -> lin_cond (res_env env f_csm (f_prd x)) (g x) (bind_g_csm'1 env f_csm (f_prd x) g_csm) g_prd)
       (csm1 : csm_t (filter_mask (mask_not (bind_csm env f_csm g_csm)) env)) (prd1 : prd_t b)
       (prd_f1 : (y : b) -> Perm.pequiv_list (sub_prd env (bind_csm env f_csm g_csm) (g_prd y) csm1) (prd1 y))
   = (x : a) -> lcsubp_tr (
        LCsub (res_env env f_csm (f_prd x))
-             (bind_g_csm' env f_csm (f_prd x) g_csm) g_prd (cg x)
+             (bind_g_csm'1 env f_csm (f_prd x) g_csm) g_prd (cg x)
              csm1 prd1 (lcsubp_LCbind_prd_f f_csm (f_prd x) g_csm g_prd csm1 prd1 prd_f1))
 
 [@@ __lin_cond__]
@@ -614,7 +636,7 @@ let lcsubp_LCbind
       (f_csm : csm_t env) (f_prd : prd_t a)
       (cf : lin_cond env f f_csm f_prd)
       (g_csm : csm_t (filter_mask (mask_not f_csm) env)) (g_prd : prd_t b)
-      (cg : (x : a) -> lin_cond (res_env env f_csm (f_prd x)) (g x) (bind_g_csm' env f_csm (f_prd x) g_csm) g_prd)
+      (cg : (x : a) -> lin_cond (res_env env f_csm (f_prd x)) (g x) (bind_g_csm'1 env f_csm (f_prd x) g_csm) g_prd)
       (csm1 : csm_t (filter_mask (mask_not (bind_csm env f_csm g_csm)) env)) (prd1 : prd_t b)
       (prd_f1 : (y : b) -> Perm.pequiv_list (sub_prd env (bind_csm env f_csm g_csm) (g_prd y) csm1) (prd1 y))
 
@@ -626,7 +648,7 @@ let lcsubp_LCbind
     LCbind env f_csm f_prd rc_f
        (mask_comp_or g_csm csm1) prd1
        (fun (x : a) ->
-         (**) bind_g_csm'_or env f_csm (f_prd x) g_csm csm1;
+         (**) bind_g_csm'_or (f_prd x) g_csm csm1;
          rc_g x)
 #pop-options
 
@@ -813,9 +835,9 @@ and lc_sub_push_aux
       let rc_g : lcsubp_LCbind_rc_g env a b g f_csm f_prd g_csm g_prd cg csm1 prd1 prd_f1
         = fun (x : a) ->
            let env'   = res_env env f_csm (f_prd x) in
-           let g_csm' = bind_g_csm' env f_csm (f_prd x) g_csm in
+           let g_csm' = bind_g_csm'1 env f_csm (f_prd x) g_csm in
            let cg   : lin_cond env' (g x) g_csm' g_prd = cg x in
-           (**) filter_bind_g_csm' env f_csm (f_prd x) g_csm;
+           (**) filter_bind_g_csm'1 env f_csm (f_prd x) g_csm;
            let csm1 : csm_t (filter_mask (mask_not g_csm') env') = csm1 in
            lc_sub_push_aux
              #env' #b #(g x)

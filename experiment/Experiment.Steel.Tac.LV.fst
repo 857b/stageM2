@@ -130,7 +130,6 @@ type prd_hint (#a : Type) (prd : prd_t a) = unit
 #push-options "--fuel 0 --ifuel 0"
 
 [@@ __mask__]
-unfold
 let filter_diff (#a : Type) (#n : nat) (m0 m1 : Ll.vec n bool) (l : Ll.vec n a) : list a
   = filter_mask (mask_diff m0 m1) (filter_mask (mask_not m0) l)
 
@@ -204,7 +203,7 @@ let __build_LCbind
         let g_csm1 = mask_split_l n0 n1 in
 
         let g_csm_0 = mask_comp_or (g_csm0 x) (mask_diff (g_csm0 x) g_csm1) in
-        let g_csm_1 = bind_g_csm' env f_csm (f_prd x) g_csm                 in
+        let g_csm_1 = bind_g_csm'1 env f_csm (f_prd x) g_csm                 in
         Ll.list_extensionality g_csm_0 g_csm_1
           (fun i ->
             Ll.pat_append ();

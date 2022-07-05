@@ -68,11 +68,16 @@ let rew_exists_eq (#a : Type) (#p : a -> Type0) (x : a)
   : squash ((exists x' . p x') <==> p x)
   = ()
 
+let rm_squash p p'
+    (_ : squash (p <==> p'))
+  : squash (squash p <==> p')
+  = ()
+
 
 /// Used to rewrite a [prop] to an equivalent ([<==>]) one.
 /// Solves a goal of the form [p <==> ?p']
 // TODO: currently, this can backtrack: prevent backtracking / option ?
-let rec rew_iff (pre : (unit -> Tac unit) -> Tac unit) : Tac unit =
+let rec rew_iff (pre  : (unit -> Tac unit) -> Tac unit) : Tac unit =
   let r () = rew_iff pre in
   first [
     (fun () -> pre r);

@@ -20,6 +20,7 @@ module SH     = Experiment.Steel.Steel
 module Fun    = Experiment.Repr.Fun
 module Vpl    = Experiment.Steel.VPropList
 module Veq    = Experiment.Steel.VEquiv
+module GCb    = Experiment.Steel.GCombinators
 module ST2SF  = Experiment.Steel.Repr.ST_to_SF.Spec
 module SF2Fun = Experiment.Steel.Repr.SF_to_Fun
 
@@ -557,3 +558,28 @@ let test3_LV (r0 r1 : ref U32.t)
 // time Fun_wp    : 19ms
 // time extract   : 103ms
 // total time : 399ms [300ms-500ms]
+
+////////// test GCombinators //////////
+
+inline_for_extraction
+let test_slrewrite (r0 r1 r2 : ref U32.t)
+  : F.steel unit
+      (vptr r0 `star` vptr r1) (fun _ -> vptr r2 `star` vptr r1)
+      (requires fun _ -> r0 == r2)
+      (ensures  fun h0 _ h1 -> sel r0 h0 == sel r2 h1 /\ sel r1 h0 == sel r1 h1)
+  = F.(to_steel (
+      MC.ghost_to_steel_ct (GCb.slrewrite r0 r2) (fun _ -> U.Unit');;
+      return ()
+    ) #(_ by (mk_steel [Timer; Extract])) ())
+
+inline_for_extraction
+let test_with_invariant_g (r0 : ghost_ref U32.t) (r1 : ref U32.t) (i : inv (ghost_vptr r0))
+  : F.steel (Ghost.erased U32.t) (vptr r1) (fun _ -> vptr r1)
+            (requires fun _ -> True) (ensures fun h0 _ h1 -> frame_equalities (vptr r1) h0 h1)
+  = F.(to_steel (
+    MC.ghost_to_steel (GCb.with_invariant_g i (
+      call_g ghost_read r0
+    ))
+    ) #(_ by (mk_steel [Timer; Extract])) ())
+// time extract : 2651ms
+// total time   : 3124ms

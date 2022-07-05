@@ -18,6 +18,11 @@ open Experiment.Steel.Repr.LV
 #set-options "--fuel 1 --ifuel 1"
 (**) private val __begin_module : unit
 
+(**** Efficient operations on sl_list *)
+
+/// The following operations on [sl_list] (that is [Dl.dlist] of types of [vprop']) are equivalent to the operations
+/// on [sl_f] (that is [Fl.flist]) used in the specifications. They are reduced in the phase LV2SF.
+
 [@@ __LV2SF__]
 let rec len_eff (#a : Type) (l : list a) : n : nat { n == L.length l } =
   match l with
@@ -102,6 +107,24 @@ let sub_prd_sl_l
   =
     extract_vars_l prd_f (append_vars_l sl1 Msk.(filter_sl_l csm' (filter_sl_l (mask_not csm) sl0)))
 
+#push-options "--ifuel 0 --fuel 0"
+(**) private val __begin_opt_0 : unit
+[@@ __LV2SF__]
+let append_vars_mask_l
+      (#vs : vprop_list) (m : Msk.mask_t vs)
+      (sl0 : sl_list Msk.(filter_mask m vs)) (sl1 : sl_list Msk.(filter_mask (mask_not m) vs))
+  : sl : sl_list vs { Fl.flist_of_d sl == append_vars_mask m (Fl.flist_of_d sl0) (Fl.flist_of_d sl1) }
+  =
+    let sl : sl_list vs = Msk.dl_append_on_mask m sl0 sl1 in
+    Fl.flist_extensionality (Fl.flist_of_d sl) (append_vars_mask m (Fl.flist_of_d sl0) (Fl.flist_of_d sl1))
+      (fun i -> Msk.dl_append_on_mask_index m sl0 sl1 i;
+             Msk.mask_perm_append'_index m i);
+    sl
+#pop-options
+(**) private val __begin_opt_1 : unit
+
+
+(*** [repr_SF_of_LV] *)
 
 [@@ __LV2SF__; strict_on_arguments [5]] (* strict on [lc] *)
 let rec repr_SF_of_LV

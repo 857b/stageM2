@@ -124,6 +124,14 @@ let mk_truth_refl_list fr ctx (ps : term) : Tac (list bool & term & binder) =
 
 (*** Building a [M.vprop_with_emp] *)
 
+/// Steps for normalizing [M.flatten_vprop v].
+let __normal_flatten_vprop : list norm_step = [
+  delta_only [`%flatten_vprop; `%flatten_vprop_aux];
+  delta_attr [`%SE.__reduce__];
+  delta_qualifier ["unfold"];
+  iota; zeta; primops
+]
+
 #push-options "--ifuel 2"
 (**) private val __begin_opt_0 : unit
 
@@ -139,6 +147,23 @@ let rec build_vprop_with_emp fr ctx : Tac unit =
 
 #pop-options
 (**) private val __end_opt_0 : unit
+
+[@@ __cond_solver__]
+let __build_vprop_to_list
+      (v : SE.vprop) (ve : vprop_with_emp v)
+      (vs : vprop_list) (vs_eq : squash (vs == flatten_vprop ve))
+  : vprop_to_list v vs
+  = VPropToList ve
+
+/// Solves a goal [vprop_to_list p ?p']
+let build_vprop_to_list fr ctx : Tac unit
+  =
+    apply_raw (`__build_vprop_to_list);
+    // ve
+    build_vprop_with_emp fr ctx;
+    // vs <-
+    norm __normal_flatten_vprop;
+    trefl ()
 
 
 (*** Finding an element in a list *)
@@ -177,14 +202,6 @@ let build_elem_index fr ctx : Tac unit =
 
 
 (*** Building a [M.to_repr_t] *)
-
-/// Steps for normalizing [M.flatten_vprop v].
-let __normal_flatten_vprop : list norm_step = [
-  delta_only [`%flatten_vprop; `%flatten_vprop_aux];
-  delta_attr [`%SE.__reduce__];
-  delta_qualifier ["unfold"];
-  iota; zeta; primops
-]
 
 /// Steps for the normalisation of Steel's requires and ensures clauses.
 /// We use:

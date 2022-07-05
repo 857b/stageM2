@@ -212,18 +212,18 @@ let extract_sub_prd_framed_equiv
 #pop-options
 
 
-let bind_g_csm'_res_env_f
+let bind_g_csm'1_res_env_f
       (env : vprop_list) (b : Type)
       (f_csm : csm_t env) (f_prd : vprop_list)
       (g_csm : csm_t (filter_mask (mask_not f_csm) env)) (g_prd : prd_t b)
-  : Lemma (res_env_f (res_env env f_csm f_prd) (bind_g_csm' env f_csm f_prd g_csm) g_prd
+  : Lemma (res_env_f (res_env env f_csm f_prd) (bind_g_csm'1 env f_csm f_prd g_csm) g_prd
         == res_env_f env (bind_csm env f_csm g_csm) g_prd)
   =
     U.funext_eta
-        (res_env_f (res_env env f_csm f_prd) (bind_g_csm' env f_csm f_prd g_csm) g_prd)
+        (res_env_f (res_env env f_csm f_prd) (bind_g_csm'1 env f_csm f_prd g_csm) g_prd)
         (res_env_f env (bind_csm env f_csm g_csm) g_prd)
         (_ by (trefl ())) (_ by (trefl ()))
-        (fun (x : b) -> filter_bind_g_csm' env f_csm f_prd g_csm)
+        (fun (x : b) -> filter_bind_g_csm'1 env f_csm f_prd g_csm)
 
 (**) #push-options "--ifuel 0 --fuel 0 --z3rlimit 20"
 (**) private let __begin_opt_0 = ()
@@ -361,57 +361,6 @@ let vequiv_of_perm_sel_eq_list
                 <==> sl1 == extract_vars f sl0)
   = Veq.vequiv_of_perm_sel_eq f sl0 sl1
 
-let rew_append_var_inj (#t0 #t1 : vprop_list) (x0 x1 : sl_f t0) (y0 y1 : sl_f t1)
-  : squash ((append_vars x0 y0 == append_vars x1 y1) <==> (x0 == x1 /\ y0 == y1))
-  = Fl.append_splitAt_ty _ _ x0 y0; Fl.append_splitAt_ty _ _ x1 y1
-
-let rew_append_var_inj'
-    #tx0 (x0 : sl_f tx0) #tx1 (x1 : sl_f tx1)
-    #ty0 (y0 : sl_f ty0) #ty1 (y1 : sl_f ty1)
-    #teq (_ : squash (tx0 == tx1 /\ ty0 == ty1 /\ teq == L.(tx0 @ ty0)))
-  : squash (eq2 #(sl_f teq) (append_vars #tx0 #ty0 x0 y0) (append_vars #tx1 #ty1 x1 y1)
-        <==> (x0 == x1 /\ y0 == y1))
-  = rew_append_var_inj x0 x1 y0 y1
-
-let rew_forall_sl_f_app (v0 v1 : vprop_list) (p0 : sl_f L.(v0 @ v1) -> Type) (p1 : Type)
-    (_ : squash ((forall (sl0 : sl_f v0) (sl1 : sl_f v1) . p0 (append_vars sl0 sl1)) <==> p1))
-  : squash ((forall (sl : sl_f L.(v0 @ v1)) . p0 sl) <==> p1)
-  =
-    introduce (forall (sl0 : sl_f v0) (sl1 : sl_f v1) . p0 (append_vars sl0 sl1)) ==>
-              (forall (sl : sl_f L.(v0 @ v1)) . p0 sl)
-      with _ . introduce forall sl . _
-      with (let sl0, sl1 = split_vars v0 v1 sl in
-            Ll.pat_append ();
-            FStar.Classical.forall_intro (Fl.splitAt_ty_append (vprop_list_sels_t v0) (vprop_list_sels_t v1));
-            assert (sl == append_vars sl0 sl1);
-            eliminate forall (sl0 : sl_f v0) (sl1 : sl_f v1) . p0 (append_vars sl0 sl1) with sl0 sl1);
-    introduce (forall (sl : sl_f L.(v0 @ v1)) . p0 sl) ==>
-              (forall (sl0 : sl_f v0) (sl1 : sl_f v1) . p0 (append_vars sl0 sl1))
-      with _ . introduce forall sl0 sl1 . _
-      with eliminate forall (sl : sl_f L.(v0 @ v1)) . p0 sl with (append_vars sl0 sl1)
-
-let rew_exists_sl_f_app (v0 v1 : vprop_list) (p0 : sl_f L.(v0 @ v1) -> Type) (p1 : Type)
-    (_ : squash ((exists (sl0 : sl_f v0) (sl1 : sl_f v1) . p0 (append_vars sl0 sl1)) <==> p1))
-  : squash ((exists (sl : sl_f L.(v0 @ v1)) . p0 sl) <==> p1)
-  =
-    introduce (exists (sl0 : sl_f v0) (sl1 : sl_f v1) . p0 (append_vars sl0 sl1)) ==>
-              (exists (sl : sl_f L.(v0 @ v1)) . p0 sl)
-      with _ . eliminate exists (sl0 : sl_f v0) (sl1 : sl_f v1) . p0 (append_vars sl0 sl1)
-      returns _
-      with _ . introduce exists (sl : sl_f L.(v0 @ v1)) . p0 sl
-        with (append_vars sl0 sl1) and ();
-    introduce (exists (sl : sl_f L.(v0 @ v1)) . p0 sl) ==>
-              (exists (sl0 : sl_f v0) (sl1 : sl_f v1) . p0 (append_vars sl0 sl1))
-      with _ . eliminate exists (sl : sl_f L.(v0 @ v1)) . p0 sl
-      returns _
-      with _ . (
-         let sl0, sl1 = split_vars v0 v1 sl in
-         Ll.pat_append ();
-         FStar.Classical.forall_intro (Fl.splitAt_ty_append (vprop_list_sels_t v0) (vprop_list_sels_t v1));
-         assert (sl == append_vars sl0 sl1);
-         introduce exists (sl0 : sl_f v0) (sl1 : sl_f v1) . p0 (append_vars sl0 sl1)
-           with sl0 sl1 and ())
-
 #pop-options
 
 let vequiv_refl_sel_eq
@@ -435,12 +384,6 @@ let rew_iff_LV2M () : Tac unit =
 
 let rew_iff_l_LV2M (smp : bool) : Tac unit =
   apply (`TLogic.rew_iff_left); rew_iff_LV2M (); norm (if smp then [simplify] else [])
-
-let split_vars_append (v0 v1 : vprop_list) (sl : sl_f L.(v0 @ v1)) ()
-  : Lemma (sl == (let sls = split_vars v0 v1 sl in append_vars sls._1 sls._2))
-  =
-    Ll.pat_append ();
-    Fl.splitAt_ty_append (vprop_list_sels_t v0) (vprop_list_sels_t v1) sl
 
 
 let norm_sound_LV2M () : Tac unit =
@@ -545,7 +488,7 @@ let sound_repr_M_of_LV__LCbind
       (cf : lin_cond env f f_csm f_prd)
       (g_csm : csm_t (filter_mask (mask_not f_csm) env)) (g_prd : prd_t b)
       (cg : ((x : a) ->
-        lin_cond (res_env env f_csm (f_prd x)) (g x) (bind_g_csm' env f_csm (f_prd x) g_csm) g_prd))
+        lin_cond (res_env env f_csm (f_prd x)) (g x) (bind_g_csm'1 env f_csm (f_prd x) g_csm) g_prd))
 
       (_ : squash (lcsub_at_leaves (LCbind env #a #b #f #g f_csm f_prd cf g_csm g_prd cg)))
       (h_f : squash (sound_repr_M_of_LV cf))
@@ -554,12 +497,12 @@ let sound_repr_M_of_LV__LCbind
   =
     introduce forall (x : a) .
             res_env_f env (bind_csm env f_csm g_csm) g_prd
-         == res_env_f (res_env env f_csm (f_prd x)) (bind_g_csm' env f_csm (f_prd x) g_csm) g_prd
-      with bind_g_csm'_res_env_f env b f_csm (f_prd x) g_csm g_prd;
+         == res_env_f (res_env env f_csm (f_prd x)) (bind_g_csm'1 env f_csm (f_prd x) g_csm) g_prd
+      with bind_g_csm'1_res_env_f env b f_csm (f_prd x) g_csm g_prd;
     introduce forall (x : a) .
-            filter_mask (mask_not (bind_g_csm' env f_csm (f_prd x) g_csm)) (res_env env f_csm (f_prd x))
+            filter_mask (mask_not (bind_g_csm'1 env f_csm (f_prd x) g_csm)) (res_env env f_csm (f_prd x))
          == filter_mask (mask_not (bind_csm env f_csm g_csm)) env
-      with filter_bind_g_csm' env f_csm (f_prd x) g_csm;
+      with filter_bind_g_csm'1 env f_csm (f_prd x) g_csm;
     let h_g_req x sl0
       : squash (M.tree_req (g x) #_ #(res_env_f env (bind_csm env f_csm g_csm) g_prd) (repr_M_of_LV (cg x)) sl0
              <==> tree_req (cg x) sl0)
@@ -569,7 +512,7 @@ let sound_repr_M_of_LV__LCbind
                   #_ #(res_env_f env (bind_csm env f_csm g_csm) g_prd) (repr_M_of_LV (cg x))
                   sl0 y (res_env_app sl1 sl_rem)
             <==> (tree_ens (cg x) sl0 y sl1 /\
-                sl_rem == filter_sl (mask_not (bind_g_csm' env f_csm (f_prd x) g_csm)) sl0))
+                sl_rem == filter_sl (mask_not (bind_g_csm'1 env f_csm (f_prd x) g_csm)) sl0))
       = sound_M_of_LV_ens (h_g x) sl0 y sl1 sl_rem
     in
     intro_sound_M_of_LV _ _

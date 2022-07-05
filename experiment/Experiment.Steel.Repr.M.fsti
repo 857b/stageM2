@@ -220,18 +220,18 @@ type gen_tac_t = Itf.flags_record -> Tactics.Tac unit
 noeq
 type prog_tree : (a : Type u#a) -> Type u#(max (a+1) 3) =
   // A specification of the subprogram, used to represent function calls
-  | Tspec  : (a : Type u#a) -> (sp : spec_r a -> Type u#(max a 2)) ->
+  | Tspec  : (a : Type u#a) -> (sp : (spec_r a -> Type u#(max a 2))) ->
              prog_tree a
   // return, with a hint for introducing dependencies on the returned value
   | Tret   : (a : Type u#a) -> (x : a) -> (sl_hint : post_t a) ->
              prog_tree a
   // bind
   | Tbind  : (a : Type u#a) -> (b : Type u#a) ->
-             (f : prog_tree a) -> (g : a -> prog_tree b) ->
+             (f : prog_tree a) -> (g : (a -> prog_tree b)) ->
              prog_tree b
   // bind pure, models a polymonadic bind between PURE and our monad
   | TbindP : (a : Type u#a) -> (b : Type u#a) ->
-             (wp : pure_wp a) -> (g : a -> prog_tree b) ->
+             (wp : pure_wp a) -> (g : (a -> prog_tree b)) ->
              prog_tree b
   // if-then-else
   | Tif    : (a : Type u#a) -> (guard : bool) ->

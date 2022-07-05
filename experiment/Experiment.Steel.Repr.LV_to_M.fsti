@@ -183,11 +183,11 @@ let repr_M_of_LV__tcs_sub
     tcs_post_eq = (fun x -> Veq.vequiv_of_perm (spec_sub_post_equiv env s pre_f csm1 prd1 prd_f1 x))
   }
 
-val bind_g_csm'_res_env_f
+val bind_g_csm'1_res_env_f
       (env : vprop_list) (b : Type)
       (f_csm : csm_t env) (f_prd : vprop_list)
       (g_csm : csm_t (filter_mask (mask_not f_csm) env)) (g_prd : prd_t b)
-  : Lemma (res_env_f (res_env env f_csm f_prd) (bind_g_csm' env f_csm f_prd g_csm) g_prd
+  : Lemma (res_env_f (res_env env f_csm f_prd) (bind_g_csm'1 env f_csm f_prd g_csm) g_prd
         == res_env_f env (bind_csm env f_csm g_csm) g_prd)
 
 #push-options "--ifuel 0 --fuel 0 --z3rlimit 20"
@@ -260,7 +260,7 @@ let rec repr_M_of_LV
       M.TCbind #a #b #f #g env (res_env_f env f_csm f_prd) (res_env_f env (bind_csm env f_csm g_csm) g_prd)
           (repr_M_of_LV cf)
           (fun (x : a) ->
-            (**) bind_g_csm'_res_env_f env b f_csm (f_prd x) g_csm g_prd;
+            (**) bind_g_csm'1_res_env_f env b f_csm (f_prd x) g_csm g_prd;
             repr_M_of_LV (cg x))
   | LCbindP env #a #b #wp #g csm prd cg ->
       M.TCbindP #a #b #wp #g env (res_env_f env csm prd) (fun x -> repr_M_of_LV (cg x))

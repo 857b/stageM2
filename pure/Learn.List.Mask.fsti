@@ -86,8 +86,11 @@ let mask_diff (#n : nat) (m0 m1 : vec n bool)
   = filter_mask (mask_not m0) m1
 
 [@@ __mask__]
-let mask_split_l (n0 n1 : nat) : vec (n0 + n1) bool
-  = repeat n0 true @ repeat n1 false
+let mask_split_l (n0 n1 : nat) : (m : vec (n0 + n1) bool { mask_len m == n0 })
+  =
+    (**) append_count (repeat n0 true) (repeat n1 false) true;
+    (**) repeat_count n0 true true; repeat_count n1 false true;
+    repeat n0 true @ repeat n1 false
 
 
 (* TODO? optimize *)
@@ -299,6 +302,18 @@ let mask_or_pequiv_append
     Perm.perm_cast _ (mask_or_append_f m0 m1)
 
 
+let rec mask_push_repeat_true (n : nat) (i : Fin.fin n)
+  : Lemma (ensures mask_push (repeat n true) i == i)
+          (decreases i)
+  = if i > 0 then mask_push_repeat_true (n-1) (i-1)
+
+let mask_comp_or_repeat_true (n : nat) (m : vec n bool)
+  : Lemma (repeat_count n true true;
+           mask_comp_or (repeat n false) m == m)
+  = repeat_count n true true;
+    list_extensionality (mask_comp_or (repeat n false) m) m (fun i -> mask_push_repeat_true n i)
+
+
 (*** [filter_mask_dl], [filter_mask_fl] *)
 
 [@@__mask__]
@@ -321,6 +336,29 @@ val filter_mask_dl_append
   : Lemma (filter_mask_append m0 m1 ts0 ts1;
         filter_mask_dl #(n0 + n1) (m0 @ m1) (ts0 @ ts1) (Dl.append xs0 xs1)
      == Dl.append (filter_mask_dl m0 ts0 xs0) (filter_mask_dl m1 ts1 xs1))
+
+let rec dl_append_on_mask
+      (#ts : Dl.ty_list) (m : mask_t ts)
+      (l0 : Dl.dlist (filter_mask m ts)) (l1 : Dl.dlist (filter_mask (mask_not m) ts))
+  : Tot (Dl.dlist ts) (decreases ts)
+  = match ts, m with
+  | [], [] -> Dl.DNil
+  | t0 :: ts, true :: m ->
+       let m : mask_t ts  = m in
+       let Dl.DCons _ x0 _ l0 = l0 in
+       Dl.DCons t0 x0 ts (dl_append_on_mask m l0 l1)
+  | t0 :: ts, false :: m ->
+       let m : mask_t ts  = m in
+       let Dl.DCons _ x0 _ l1 = l1 in
+       Dl.DCons t0 x0 ts (dl_append_on_mask m l0 l1)
+
+val dl_append_on_mask_index
+      (#ts : Dl.ty_list) (m : mask_t ts)
+      (l0 : Dl.dlist (filter_mask m ts)) (l1 : Dl.dlist (filter_mask (mask_not m) ts))
+      (i : dom ts)
+  : Lemma (Dl.index (dl_append_on_mask m l0 l1) i ==
+          (if index m i then U.cast _ (Dl.index l0 (mask_push m i))
+                        else U.cast _ (Dl.index l1 (mask_push (mask_not m) i))))
 
 
 [@@__mask__]

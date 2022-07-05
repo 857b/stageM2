@@ -417,6 +417,28 @@ let rec filter_mask_dl_append
              filter_mask_dl_append #(n0-1) m0 m1 ts0 ts1 xs0 xs1
 #pop-options
 
+#push-options "--z3rlimit 10"
+let rec dl_append_on_mask_index
+      (#ts : Dl.ty_list) (m : mask_t ts)
+      (l0 : Dl.dlist (filter_mask m ts)) (l1 : Dl.dlist (filter_mask (mask_not m) ts))
+      (i : dom ts)
+  : Lemma (ensures
+           Dl.index (dl_append_on_mask m l0 l1) i ==
+          (if index m i then U.cast _ (Dl.index l0 (mask_push m i))
+                        else U.cast _ (Dl.index l1 (mask_push (mask_not m) i))))
+          (decreases ts)
+  = match ts, m with
+  | t0 :: ts, true :: m ->
+       let m : mask_t ts  = m in
+       let Dl.DCons _ x0 _ l0 = l0 in
+       if i > 0 then dl_append_on_mask_index m l0 l1 (i-1)
+  | t0 :: ts, false :: m ->
+       let m : mask_t ts  = m in
+       let Dl.DCons _ x0 _ l1 = l1 in
+       if i > 0 then dl_append_on_mask_index m l0 l1 (i-1)
+#pop-options
+
+
 #push-options "--ifuel 0 --fuel 0"
 let filter_mask_fl_perm_append (#n : nat) (m : vec n bool) (ts : vec n Type) (xs : Fl.flist ts)
   : Lemma (Fl.apply_pequiv (mask_pequiv_append m ts) xs

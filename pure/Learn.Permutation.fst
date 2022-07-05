@@ -911,6 +911,23 @@ let pequiv_move_to_head #a (x : a) (l0 l1 : list a)
     (**) append_assoc l0 [x] l1;
     U.cast _ (pequiv_append (pequiv_snoc_cons x l0) (pequiv_refl l1))
 
+#push-options "--ifuel 0 --fuel 0"
+let pequiv_append_swap (#a : Type) (l0 l1 : list a)
+  : pequiv (l0 @ l1) (l1 @ l0)
+  =
+    let n0 = length l0 in
+    let n1 = length l1 in
+    let n  = n0 + n1     in
+    let f (i : Fin.fin n) : Fin.fin n =
+      if i < n1 then n0 + i else i - n1 in
+    let g (i : Fin.fin n) : Fin.fin n =
+      if i < n0 then n1 + i else i - n0 in
+    let f' = perm_f_of_pair f g in
+    list_extensionality (l1 @ l0) (apply_perm_r f' (l0 @ l1)) (fun i ->
+      pat_append (); if i < n1 then () else ());
+    perm_cast _ f'
+#pop-options
+
 
 (***** [perm_f_list] *)
 

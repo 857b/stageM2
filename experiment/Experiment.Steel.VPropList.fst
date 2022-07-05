@@ -127,6 +127,78 @@ let sel_eq' : squash (sel == sel_f')
       sel_f_eq' vs h))
 
 
+let rew_forall_sl_f_app (v0 v1 : vprop_list) (p0 : sl_f L.(v0 @ v1) -> Type) (p1 : Type)
+    (_ : squash ((forall (sl0 : sl_f v0) (sl1 : sl_f v1) . p0 (append_vars sl0 sl1)) <==> p1))
+  : squash ((forall (sl : sl_f L.(v0 @ v1)) . p0 sl) <==> p1)
+  =
+    introduce (forall (sl0 : sl_f v0) (sl1 : sl_f v1) . p0 (append_vars sl0 sl1)) ==>
+              (forall (sl : sl_f L.(v0 @ v1)) . p0 sl)
+      with _ . introduce forall sl . _
+      with (let sl0, sl1 = split_vars v0 v1 sl in
+            Ll.pat_append ();
+            FStar.Classical.forall_intro (Fl.splitAt_ty_append (vprop_list_sels_t v0) (vprop_list_sels_t v1));
+            assert (sl == append_vars sl0 sl1);
+            eliminate forall (sl0 : sl_f v0) (sl1 : sl_f v1) . p0 (append_vars sl0 sl1) with sl0 sl1);
+    introduce (forall (sl : sl_f L.(v0 @ v1)) . p0 sl) ==>
+              (forall (sl0 : sl_f v0) (sl1 : sl_f v1) . p0 (append_vars sl0 sl1))
+      with _ . introduce forall sl0 sl1 . _
+      with eliminate forall (sl : sl_f L.(v0 @ v1)) . p0 sl with (append_vars sl0 sl1)
+
+let rew_exists_sl_f_app (v0 v1 : vprop_list) (p0 : sl_f L.(v0 @ v1) -> Type) (p1 : Type)
+    (_ : squash ((exists (sl0 : sl_f v0) (sl1 : sl_f v1) . p0 (append_vars sl0 sl1)) <==> p1))
+  : squash ((exists (sl : sl_f L.(v0 @ v1)) . p0 sl) <==> p1)
+  =
+    introduce (exists (sl0 : sl_f v0) (sl1 : sl_f v1) . p0 (append_vars sl0 sl1)) ==>
+              (exists (sl : sl_f L.(v0 @ v1)) . p0 sl)
+      with _ . eliminate exists (sl0 : sl_f v0) (sl1 : sl_f v1) . p0 (append_vars sl0 sl1)
+      returns _
+      with _ . introduce exists (sl : sl_f L.(v0 @ v1)) . p0 sl
+        with (append_vars sl0 sl1) and ();
+    introduce (exists (sl : sl_f L.(v0 @ v1)) . p0 sl) ==>
+              (exists (sl0 : sl_f v0) (sl1 : sl_f v1) . p0 (append_vars sl0 sl1))
+      with _ . eliminate exists (sl : sl_f L.(v0 @ v1)) . p0 sl
+      returns _
+      with _ . (
+         let sl0, sl1 = split_vars v0 v1 sl in
+         Ll.pat_append ();
+         FStar.Classical.forall_intro (Fl.splitAt_ty_append (vprop_list_sels_t v0) (vprop_list_sels_t v1));
+         assert (sl == append_vars sl0 sl1);
+         introduce exists (sl0 : sl_f v0) (sl1 : sl_f v1) . p0 (append_vars sl0 sl1)
+           with sl0 sl1 and ())
+
+
+#push-options "--ifuel 0 --fuel 0"
+let append_vars_mask_index
+      (#vs : vprop_list) (m : Msk.mask_t vs)
+      (sl0 : sl_f Msk.(filter_mask m vs)) (sl1 : sl_f Msk.(filter_mask (mask_not m) vs))
+      (i : Ll.dom vs)
+  : Lemma (append_vars_mask m sl0 sl1 i
+       == (if L.index m i then U.cast _ (sl0 Msk.(mask_push m i))
+                          else U.cast _ (sl1 Msk.(mask_push (mask_not m) i))))
+  = Msk.mask_perm_append'_index m i
+#pop-options
+
+let append_filter_vars_mask
+      (#vs : vprop_list) (m : Msk.mask_t vs) (sl : sl_f vs)
+  : Lemma (append_vars_mask m (filter_sl m sl) (filter_sl (Msk.mask_not m) sl) == sl)
+  =
+    (**) Ll.pat_append ();
+    Msk.filter_mask_fl_perm_append' m _ sl
+
+#push-options "--fuel 0 --ifuel 0"
+let filter_append_vars_mask
+      (#vs : vprop_list) (m : Msk.mask_t vs)
+      (sl0 : sl_f Msk.(filter_mask m vs)) (sl1 : sl_f Msk.(filter_mask (mask_not m) vs))
+  : Lemma (filter_sl               m  (append_vars_mask m sl0 sl1) == sl0 /\
+           filter_sl (Msk.mask_not m) (append_vars_mask m sl0 sl1) == sl1)
+  =
+    Fl.flist_extensionality (filter_sl               m  (append_vars_mask m sl0 sl1)) sl0
+      (fun i -> Msk.mask_perm_append'_index m (Msk.mask_pull m i));
+    Fl.flist_extensionality (filter_sl Msk.(mask_not m) (append_vars_mask m sl0 sl1)) sl1
+      (fun i -> Msk.mask_perm_append'_index m Msk.(mask_pull (mask_not m) i))
+#pop-options
+
+
 let split_vars__cons (v0 : vprop') (vs0 vs1 : vprop_list) (x0 : v0.t) (xs : sl_list L.(vs0@vs1))
   : Lemma (ensures split_vars_list (v0 :: vs0) vs1 (Dl.DCons v0.t x0 (vprop_list_sels_t L.(vs0@vs1)) xs)
                == (let xs0, xs1 = split_vars_list vs0 vs1 xs in
@@ -407,3 +479,45 @@ let rec intro_filter_mask #opened (vs : vprop_list) (mask : Ll.vec (L.length vs)
         (**) assert (vpl_sels _ sl1_f === filter_mask_dl (Msk.mask_not mask) _ l0)
   )
 #pop-options
+
+
+let intro_elim_filter_mask_append_lem
+      (vs : vprop_list) (m : Ll.vec (L.length vs) bool)
+      (sl : sl_list vs) (sl0 : sl_list Msk.(filter_mask m vs)) (sl1 : sl_list Msk.(filter_mask (mask_not m) vs))
+  : Lemma (requires sl0 == Msk.filter_mask_dl m _ sl /\ sl1 == Msk.filter_mask_dl (Msk.mask_not m) _ sl)
+          (ensures  Fl.flist_of_d sl == append_vars_mask m (Fl.flist_of_d sl0) (Fl.flist_of_d sl1))
+  =
+    Msk.filter_mask_f_dl_f m _ (Fl.flist_of_d sl);
+    assert (Fl.flist_of_d sl0 == Msk.filter_mask_fl m _ (Fl.flist_of_d sl));
+    Msk.filter_mask_f_dl_f (Msk.mask_not m) _ (Fl.flist_of_d sl);
+    append_filter_vars_mask m (Fl.flist_of_d sl)
+
+let elim_filter_mask_append (#opened : Mem.inames) (vs : vprop_list) (m : Ll.vec (L.length vs) bool)
+  : SteelGhost unit opened
+      (vprop_of_list Msk.(filter_mask           m  vs) `star` 
+       vprop_of_list Msk.(filter_mask (mask_not m) vs))
+      (fun () -> vprop_of_list vs)
+      (requires fun _ -> True) (ensures fun h0 () h1 ->
+          sel_f vs h1 == append_vars_mask m (sel_f Msk.(filter_mask m vs) h0)
+                                            (sel_f Msk.(filter_mask (mask_not m) vs) h0))
+  =
+    let sl0 = gget (vprop_of_list Msk.(filter_mask           m  vs)) in
+    let sl1 = gget (vprop_of_list Msk.(filter_mask (mask_not m) vs)) in
+    elim_filter_mask vs m;
+    let sl  = gget (vprop_of_list vs)                                in
+    intro_elim_filter_mask_append_lem vs m (vpl_sels _ sl) (vpl_sels _ sl0) (vpl_sels _ sl1)
+
+let intro_filter_mask_append (#opened : Mem.inames) (vs : vprop_list) (m : Ll.vec (L.length vs) bool)
+  : SteelGhost unit opened
+      (vprop_of_list vs)
+      (fun () -> vprop_of_list Msk.(filter_mask           m  vs) `star` 
+              vprop_of_list Msk.(filter_mask (mask_not m) vs))
+      (requires fun _ -> True) (ensures fun h0 () h1 ->
+          sel_f vs h0 == append_vars_mask m (sel_f Msk.(filter_mask m vs) h1)
+                                            (sel_f Msk.(filter_mask (mask_not m) vs) h1))
+  =
+    let sl  = gget (vprop_of_list vs)                                in
+    intro_filter_mask vs m;
+    let sl0 = gget (vprop_of_list Msk.(filter_mask           m  vs)) in
+    let sl1 = gget (vprop_of_list Msk.(filter_mask (mask_not m) vs)) in
+    intro_elim_filter_mask_append_lem vs m (vpl_sels _ sl) (vpl_sels _ sl0) (vpl_sels _ sl1)

@@ -108,3 +108,10 @@ let print_util (#a : Type) (x : a) : prop = True
 
 
 type eq_dec (a : Type) = (x : a) -> (y : a) -> (b : bool {b <==> x == y})
+
+
+let get_rfn (#a : Type) (#p : a -> Type) (x : a { p x })
+  : Lemma (exists (r : p x) . True)
+  =
+    let r : squash (p x) = () in
+    Squash.bind_squash #(p x) #(exists (r : p x) . True) r (fun r -> ())

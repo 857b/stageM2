@@ -29,3 +29,13 @@ uint32_t Experiment_Steel_Test_Extract_test_ghost(uint32_t *r)
   return r[0U];
 }
 
+void Experiment_Steel_Test_Extract_test_slrewrite(uint32_t *r0, uint32_t *r1, uint32_t *r2)
+{
+
+}
+
+void Experiment_Steel_Test_Extract_test_with_invariant_g(uint32_t *r1)
+{
+
+}
+

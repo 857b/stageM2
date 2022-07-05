@@ -9,6 +9,7 @@ module SH   = Experiment.Steel.Steel
 module Ll   = Learn.List
 module Dl   = Learn.DList
 module Fl   = Learn.FList
+module Msk  = Learn.List.Mask
 module Perm = Learn.Permutation
 
 module M   = Experiment.Steel.Repr.M
@@ -142,7 +143,7 @@ let __normal_lc_sub_push : list norm_step = [
               `%Perm.perm_f_to_list; `%Perm.perm_f_of_list;
               `%Perm.comp; `%Perm.mk_perm_f; `%Perm.perm_f_append; `%Perm.perm_f_cons; `%Perm.id_n;
               `%Perm.perm_f_cons_snoc]);
-  delta_attr [`%LV.__lin_cond__; `%Learn.List.Mask.__mask__; `%__tac_helper__];
+  delta_attr [`%LV.__lin_cond__; `%Msk.__mask__; `%__tac_helper__];
   delta_qualifier ["unfold"];
   iota; zeta; primops
 ]
@@ -151,10 +152,12 @@ let __normal_LV2SF : list norm_step = [
   delta_only [`%prog_LV_to_Fun; `%LV2SF.repr_SF_of_LV;
               `%Vpl.filter_sl;
               `%M.post_sl_t; `%Vpl.vprop_list_sels_t;
-              `%L.map; `%L.op_At; `%L.append; `%Ll.initi; `%L.length;
-              `%Dl.initi; `%Dl.append; `%Dl.index; `%Dl.dlist_eq2; `%Fl.dlist_of_f; `%Fl.flist_eq2;
+              `%L.map; `%L.op_At; `%L.append; `%Ll.initi; `%L.length; `%Ll.repeat;
+              `%Dl.initi; `%Dl.append; `%Dl.index; `%Dl.dlist_eq2; `%Msk.dl_append_on_mask;
+              `%Fl.dlist_of_f; `%Fl.flist_eq2;
+              `%Fl.append; `%Fl.splitAt_ty;
               `%Mktuple2?._1; `%Mktuple2?._2];
-  delta_attr [`%__LV2SF__; `%Learn.List.Mask.__mask__; `%__tac_helper__; `%SE.__reduce__];
+  delta_attr [`%__LV2SF__; `%LV.__lin_cond__; `%Msk.__mask__; `%__tac_helper__; `%SE.__reduce__];
   delta_qualifier ["unfold"];
   iota; zeta; primops
 ]
@@ -199,7 +202,7 @@ let __normal_Fun_spec : list norm_step = [
               `%SF2Fun.Mksl_tys_r?.vl;    `%SF2Fun.Mksl_tys_r?.sl;
               `%Vpl.vprop_of_list; `%Vpl.vprop_of_list'; `%Vpl.vpl_sels];
   delta_qualifier ["unfold"];
-  delta_attr [`%SE.__steel_reduce__; `%Learn.List.Mask.__mask__];
+  delta_attr [`%SE.__steel_reduce__; `%Msk.__mask__];
   iota; zeta; primops
 ]
 
