@@ -12,13 +12,11 @@ open Steel.FractionalPermission
 open Steel.Reference
 
 
-#push-options "--__no_positivity"
 noeq
 type cell (a: Type0) = {
   next: ref (cell a);
   data: a;
 }
-#pop-options
 
 inline_for_extraction noextract
 let cell_gs_next (#a : Type) : US.get_set_t (cell a) (ref (cell a)) = {

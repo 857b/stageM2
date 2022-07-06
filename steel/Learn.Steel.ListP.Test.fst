@@ -15,14 +15,12 @@ open Learn.Steel.ListP
 
 #set-options "--ide_id_info_off"
 
-#push-options "--__no_positivity"
 noeq
 type cell0 = {
   next: ref cell0;
   data_x: U32.t;
   data_y: bool
 }
-#pop-options
 
 inline_for_extraction noextract
 let p0 : list_param =
@@ -49,13 +47,11 @@ let p0_reverse (r : ref cell0)
 
 (* ------------------------------------------------------------------- *)
 
-#push-options "--__no_positivity"
 noeq
 type cell1 = {
   next: ref cell1;
   data_p: ref U32.t
 }
-#pop-options
 
 inline_for_extraction noextract
 let p1 : list_param =
@@ -120,14 +116,12 @@ let test_p1_ext1 (l : ref cell1)
 
 module Mem = Steel.Memory
 
-#push-options "--__no_positivity"
 noeq
 type cell2 = {
   next: ref cell2;
   data_b: ghost_ref bool;
   data_p: ref U32.t;
 }
-#pop-options
 
 inline_for_extraction noextract
 let p2_0 : list_param =
