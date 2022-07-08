@@ -50,3 +50,28 @@ let cell_t (p : list_param) : Type = dtuple2 (ref p.r) (data_t p)
 unfold let vcell (p:list_param) (x:ref p.r)
   : vprop
   = (p.cell x).vp
+
+[@@ __steel_reduce__]
+let g_cref (#q:vprop) (p:list_param) (d : direction) (x:ref p.r)
+  (h:rmem q{FStar.Tactics.with_tactic selector_tactic (can_be_split q (vcell p x) /\ True)})
+  : GTot (ref p.r)
+  = (p.cell x).get_ref (h (vcell p x)) d
+
+[@@ __steel_reduce__]
+let g_data (#q:vprop) (p:list_param) (x:ref p.r)
+  (h:rmem q{FStar.Tactics.with_tactic selector_tactic (can_be_split q (vcell p x) /\ True)})
+  : GTot (data_t p x)
+  = (p.cell x).get_data (h (vcell p x))
+
+[@@ __steel_reduce__]
+let g_cell (#q:vprop) (p:list_param) (x:ref p.r)
+  (h:rmem q{FStar.Tactics.with_tactic selector_tactic (can_be_split q (vcell p x) /\ True)})
+  : GTot (cell_t p)
+  = (|x, g_data p x h|)
+
+let list_cell_not_null #opened (p : list_param) (x:ref p.r)
+  : SteelGhost unit opened (vcell p x) (fun () -> (vcell p x))
+              (requires fun _ -> True)
+              (ensures fun h0 () h1 -> frame_equalities (vcell p x) h0 h1 /\
+                                    is_null x = false)
+  = extract_info_raw (vcell p x) (is_null x == false) (p.nnull x)

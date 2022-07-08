@@ -36,6 +36,29 @@ let rec list_eq (#a : Type) (eq_a : U.eq_dec a) (l0 l1 : list a)
   | x :: xs, y :: ys -> x `eq_a` y && xs `list_eq eq_a` ys
   | _ -> false
 
+(* [last], [init], [unsnoc] *)
+
+#push-options "--ifuel 2 --fuel 2"
+let rec last_index (#a : Type) (l : list a)
+  : Lemma (requires Cons? l) (ensures last l == index l (length l - 1)) (decreases l)
+  = match l with
+  | [x] -> ()
+  | x :: xs -> last_index xs
+#pop-options
+
+let rec init_length (#a : Type) (l : list a {Cons? l})
+  : Lemma (ensures length (init l) == length l - 1) (decreases l)
+          [SMTPat (length (init l))]
+  = match l with
+  | [_] -> ()
+  | _ :: tl -> init_length tl
+
+let rec unsnoc_eq_init (#a : Type) (l : list a {Cons? l})
+  : Lemma (ensures unsnoc l == (init l, last l)) (decreases l)
+  = match l with
+  | [_] -> ()
+  | _ :: tl -> unsnoc_eq_init tl
+
 (* [memP] *)
 
 #push-options "--ifuel 1 --fuel 1"

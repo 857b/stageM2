@@ -2,7 +2,6 @@ module Learn.Steel.DLList.Data
 
 module U   = Learn.Util
 module T   = FStar.Tactics
-module L   = FStar.List.Pure
 module TL  = Learn.Tactics.Logic
 module US  = Learn.Steel.Util
 module Mem = Steel.Memory
@@ -19,11 +18,7 @@ let rec dllist0 (p : list_param) (entry : ref p.r) (len : nat) (exit : ref p.r)
     if len = 0
     then
       vrewrite emp #(dllist_sel_t p entry len exit)
-        (fun _ -> {
-            dll_sg  = [];
-            dll_prv = exit;
-            dll_nxt = entry;
-        })
+        (fun _ -> dll_nil entry exit)
     else
       let len' = len - 1 in
       vrewrite (vcell p entry `vdep` (fun c ->
@@ -31,7 +26,8 @@ let rec dllist0 (p : list_param) (entry : ref p.r) (len : nat) (exit : ref p.r)
           dllist0 p entry' len' exit `vrefine` (fun sl1 ->
             let sl1 : dllist_sel_t p entry' len' exit = U.cast _ sl1 in
             sl1.dll_prv == entry)))
-        #(dllist_sel_t p entry len exit) (fun (|c, sl1|) -> cons_sel p entry len' exit c sl1)
+        #(dllist_sel_t p entry len exit)
+        (fun (|c, sl1|) -> dll_cons #p #entry #((p.cell entry).get_ref c Forward) #len' #exit c sl1)
 
 
 (**** Expansion the vprop *)
@@ -52,11 +48,7 @@ let dllist_eq0 (p : list_param) (entry : ref p.r) (len : nat) (exit : ref p.r)
 
 let dllist_nil_interp (p : list_param) (entry : ref p.r) (exit : ref p.r) (m : Mem.mem)
   : squash (Mem.interp (hp_of (dllist0 p entry 0 exit)) m /\
-            sel_of (dllist0 p entry 0 exit) m == {
-              dll_sg  = [];
-              dll_prv = exit;
-              dll_nxt = entry;
-            })
+            sel_of (dllist0 p entry 0 exit) m == dll_nil entry exit)
   =
     let g0 : squash (Mem.interp (hp_of emp) m)
       = reveal_emp ();
@@ -78,7 +70,7 @@ let rec process_hyps (ts : list (T.term -> T.Tac (list T.term))) (hs : list T.te
   = T.(match hs with
     | [] -> []
     | h0 :: hs -> try first (map (fun (t : term -> Tac (list term)) () ->
-                               let hs0 = t h0 in process_hyps ts L.(hs0 @ hs)) ts)
+                               let hs0 = t h0 in process_hyps ts (hs0 @ hs)) ts)
                 with | _ -> h0 :: process_hyps ts hs
   )
 
@@ -195,7 +187,7 @@ let dllist_cons_sel_eq0
             let entry' = (p.cell entry).get_ref c Forward               in
             let sl1 = sel_of (dllist0 p entry' len exit) m              in
             sel_of (dllist0 p entry (len + 1) exit) m
-              == cons_sel p entry len exit c sl1)
+              == dll_cons #p #entry #entry' #len #exit c sl1)
   =
     let _ = dllist_cons_interp0 p entry len exit m in
     let rew_len_neq_0 () : Lemma (len + 1 = 0 == false) = () in

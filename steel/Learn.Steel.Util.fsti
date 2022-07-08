@@ -11,6 +11,12 @@ open FStar.Classical.Sugar
 open Steel.FractionalPermission
 open Steel.Reference
 
+
+unfold
+let hsel (v : vprop) (#p : vprop) (h : rmem p {FStar.Tactics.with_tactic selector_tactic (can_be_split p v /\ True)})
+  : GTot (normal (t_of v))
+  = h v
+
 /// A lemma similar to [Steel.Reference.pts_to_ref_injective] but stronger since it requires an [h_and] instead of
 /// a [star]. However we (can?) only prove a version where the two permissions are equals.
 let pts_to_ref_injective_and
