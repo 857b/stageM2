@@ -1,6 +1,7 @@
 module Learn.Tactics.Logic
 
 module U = Learn.Util
+module L = FStar.List.Pure
 
 open FStar.Tactics
 
@@ -91,3 +92,10 @@ let rec rew_iff (pre  : (unit -> Tac unit) -> Tac unit) : Tac unit =
     (fun () -> apply (`iff_morph_iff); iseq [r; r]);
     (fun () -> apply (`iff_refl))
   ]
+
+let rec process_hyps (ts : list (term -> Tac (list term))) (hs : list term) : Tac (list term)
+  = match hs with
+    | [] -> []
+    | h0 :: hs -> try first (map (fun (t : term -> Tac (list term)) () ->
+                               let hs0 = t h0 in process_hyps ts L.(hs0 @ hs)) ts)
+                with | _ -> h0 :: process_hyps ts hs
