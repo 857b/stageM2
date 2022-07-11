@@ -182,7 +182,7 @@ dist/Makefile.basic: $(ALL_KRML_FILES) c/*
 	  -bundle 'Learn.LowStar.Queue.Test=Learn.LowStar.Queue,Learn.LowStar.Queue.*'[rename=queue] \
 	  -bundle 'Learn.Steel.List.Impl=Learn.Steel.List.*'[rename=list_steel] \
 	  -bundle 'Learn.Steel.ListP.Test=Learn.Steel.ListP.*'[rename=list_param] \
-	  -bundle 'Learn.Steel.DLList=Learn.Steel.DLList.*'[rename=dllist] \
+	  -bundle 'Learn.Steel.DLList.Test=Learn.Steel.DLList.*'[rename=dllist] \
 	  -bundle 'Learn.Steel.QueueP.Test=Learn.Steel.QueueP.*'[rename=queue_steel] \
 	  -minimal \
 	  -header krml_header.txt \

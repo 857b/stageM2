@@ -19,6 +19,7 @@ include Learn.Steel.DLList.Derived
 
 let fin_arg_pos (#n : nat) (i : Fin.fin n) : Lemma (n > 0) = ()
 
+inline_for_extraction
 let remove (p : list_param) (r0 : ref p.r) (len : erased nat) (r1 : erased (ref p.r))
            (r : ref p.r) (i : erased (Fin.fin len))
   : Steel (ref p.r & erased (ref p.r)) // r0' & r1'
@@ -33,12 +34,12 @@ let remove (p : list_param) (r0 : ref p.r) (len : erased nat) (r1 : erased (ref 
       (ensures  fun h0 rs h1 ->
         (**) fin_arg_pos i;
         let sl0 = sel_dllist p r0 len r1 h0 in
-        index sl0.dll_sg i == (|r, g_data p r h1|) /\
+        index sl0.dll_sg i == g_rcell p r h1 /\
         sel_dllist p rs._1 (len-1) rs._2 h1 `dll_eq3` (dll_remove i sl0)._3)
   =
     (**) let sl0 : erased (dllist_sel_t p r0 len r1) = gget (dllist p r0 len r1) in
     let rs = dllist_splitOn p r0 len r1 r i in
-    (**) // if we try to use [i] directly as a length, the VC seems to contains parts equivalents
+    (**) // if we try to use [i] directly as a length, the VC seems to contains parts equivalent
     (**) // to [Fin.fin len == nat]:
     (**) //    forall (k: int) (x: unit). pair (0 <= k) (k < reveal len) <==> equals (k >= 0) true;
     (**) let len0 : erased nat = hide (reveal i)   in

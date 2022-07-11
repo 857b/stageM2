@@ -3,7 +3,6 @@ module Learn.Steel.DLList.Derived
 module U   = Learn.Util
 module G   = FStar.Ghost
 module Ll  = Learn.List
-module SU  = Learn.Steel.Util
 module Mem = Steel.Memory
 
 open FStar.List.Pure
@@ -37,11 +36,11 @@ let dll_eq3 #p #r0 #len #r1 (sl : dllist_sel_t p r0 len r1) #r0' #len' #r1' (sl'
   = r0 == r0' /\ len == len' /\ r1 == r1' /\ sl == sl'
 
 
-let sg_entry_index (#p : list_param) (l : list (cell_t p)) (nxt : ref p.r)
+let sg_entry_index (#p : list_param) (l : list (rcell_t p)) (nxt : ref p.r)
   : Lemma (sg_entry l nxt == (if length l > 0 then (index l 0)._1 else nxt))
   = ()
 
-let sg_exit_index (#p : list_param) (prv : ref p.r) (l : list (cell_t p))
+let sg_exit_index (#p : list_param) (prv : ref p.r) (l : list (rcell_t p))
   : Lemma (sg_exit prv l == (if length l > 0 then (index l (length l - 1))._1 else prv))
   = if Cons? l then Ll.last_index l
 
@@ -78,7 +77,7 @@ let dll_tail
 
 let dll_tail_cons
       (#p : list_param) (#r0 #r1 : ref p.r) (#len' : nat) (#r2 : ref p.r)
-      (c : t_of (vcell p r0))
+      (c  : cell_t p r0)
       (sl1 : dllist_sel_t p r1 len' r2 {sl1.dll_prv == r0})
   : Lemma (dll_tail (dll_cons c sl1) == sl1) [SMTPat (dll_tail (dll_cons c sl1))]
   = ()
@@ -89,16 +88,16 @@ let dll_tail_cons
 let dll_snoc
       (#p : list_param) (#r0 : ref p.r) (#len : nat) (#r1 #r2 : ref p.r)
       (sl : dllist_sel_t p r0 len r1 {sl.dll_nxt == r2})
-      (c  : t_of (vcell p r2))
+      (c  : cell_t p r2)
   : GTot (dllist_sel_t p r0 (len + 1) r2)
   =
-    let sg_c = (|r2, (p.cell r2).get_data c|) in
+    let sg_c = (|r2, c.cl_data|) in
     (**) lemma_append_last sl.dll_sg [sg_c];
     (**) assert_norm (length [sg_c] == 1);
     {
       dll_sg  = snoc (sl.dll_sg, sg_c);
       dll_prv = sl.dll_prv;
-      dll_nxt = (p.cell r2).get_ref c Forward;
+      dll_nxt = c.cl_nxt;
     }
 
 
@@ -121,10 +120,10 @@ let dll_init
 let dll_init_snoc
       (#p : list_param) (#r0 : ref p.r) (#len : nat) (#r1 r2 : ref p.r)
       (sl : dllist_sel_t p r0 len r1 {sl.dll_nxt == r2})
-      (c  : t_of (vcell p r2))
+      (c  : cell_t p r2)
   : Lemma (dll_prv0 (dll_snoc sl c) == r1 /\ dll_init (dll_snoc sl c) == sl)
   =
-    let sg_c = (|r2, (p.cell r2).get_data c|) in
+    let sg_c = (|r2, c.cl_data|) in
     Ll.unsnoc_eq_init (snoc (sl.dll_sg, sg_c))
 
 
@@ -153,7 +152,7 @@ let dll_append
 
 let dll_append_cons
       (p : list_param) (r0 r0' : ref p.r) (len0 : nat) (r1 r2 : ref p.r) (len1 : nat) (r3 : ref p.r)
-      (c   : t_of (vcell p r0))
+      (c   : cell_t p r0)
       (sl0 : dllist_sel_t p r0' len0 r1 { sl0.dll_prv == r0 /\ sl0.dll_nxt == r2 })
       (sl1 : dllist_sel_t p r2  len1 r3 { sl1.dll_prv == r1 })
   : Lemma (dll_append (dll_cons c sl0) sl1 == dll_cons c (dll_append sl0 sl1))
@@ -170,17 +169,17 @@ val dll_tail_append
 
 #push-options "--fuel 2"
 
-let dll_sglt (#p : list_param) (#r : ref p.r) (c : t_of (vcell p r))
+let dll_sglt (#p : list_param) (#r : ref p.r) (c : cell_t p r)
   : GTot (dllist_sel_t p r 1 r)
   = {
-    dll_sg  = [(|r, (p.cell r).get_data c|)];
-    dll_prv = (p.cell r).get_ref c Backward;
-    dll_nxt = (p.cell r).get_ref c Forward;
+    dll_sg  = [(|r, c.cl_data|)];
+    dll_prv = c.cl_prv;
+    dll_nxt = c.cl_nxt;
   }
 
 let dll_cons_as_append
       (#p : list_param) (#r0 #r1 : ref p.r) (#len' : nat) (#r2 : ref p.r)
-      (c : t_of (vcell p r0) {(p.cell r0).get_ref c Forward == r1})
+      (c : cell_t p r0 {c.cl_nxt == r1})
       (sl : dllist_sel_t p r1 len' r2 {sl.dll_prv == r0})
   : Lemma (c `dll_cons` sl == dll_sglt c `dll_append` sl)
   = ()
@@ -188,7 +187,7 @@ let dll_cons_as_append
 let dll_snoc_as_append
       (#p : list_param) (#r0 : ref p.r) (#len : nat) (#r1 #r2 : ref p.r)
       (sl : dllist_sel_t p r0 len r1 {sl.dll_nxt == r2})
-      (c  : t_of (vcell p r2) {(p.cell r2).get_ref c Backward == r1})
+      (c  : cell_t p r2 {c.cl_prv == r1})
   : Lemma (sl `dll_snoc` c == sl `dll_append` dll_sglt c)
   = ()
 
@@ -289,12 +288,12 @@ val intro_dllist_cons (#opened : Mem.inames) (p : list_param) (r0 r1 : ref p.r) 
   : SteelGhost unit opened
       (vcell p r0 `star` dllist p r1 len r2) (fun () -> dllist p r0 (len+1) r2)
       (requires fun h0 ->
-        g_cref p Forward r0 h0 == r1 /\
+        (g_cl p r0 h0).cl_nxt == r1 /\
         (sel_dllist p r1 len r2 h0).dll_prv == r0)
       (ensures  fun h0 () h1 ->
-        let c_0 = h0 (vcell p r0)           in
+        let c_0 = g_cl p r0 h0              in
         let sl1 = sel_dllist p r1 len r2 h0 in
-        (p.cell r0).get_ref c_0 Forward == r1 /\
+        c_0.cl_nxt  == r1 /\
         sl1.dll_prv == r0 /\
         sel_dllist p r0 (len+1) r2 h1 == dll_cons c_0 sl1)
 
@@ -304,10 +303,10 @@ val elim_dllist_cons (#opened : Mem.inames) (p : list_param) (r0 : ref p.r) (len
       (requires fun _ -> True)
       (ensures  fun h0 r1 h1 ->
         let sl0 = sel_dllist p r0 (len+1) r2 h0 in
-        let c_0 = h1 (vcell p r0)               in
+        let c_0 = g_cl p r0 h1                  in
         let sl1 = sel_dllist p r1 len r2 h1     in
         G.reveal r1 == dll_nxt0 sl0 /\
-        (p.cell r0).get_ref c_0 Forward == G.reveal r1 /\ sl1.dll_prv == r0 /\
+        c_0.cl_nxt == G.reveal r1 /\ sl1.dll_prv == r0 /\
         sl0 == dll_cons c_0 sl1)
 
 
@@ -316,10 +315,10 @@ let intro_dllist_sglt (#opened : Mem.inames) (p : list_param) (r : ref p.r)
       (vcell p r) (fun () -> dllist p r 1 r)
       (requires fun _ -> True)
       (ensures  fun h0 () h1 ->
-        sel_dllist p r 1 r h1 == dll_sglt (h0 (vcell p r)))
+        sel_dllist p r 1 r h1 == dll_sglt (g_cl p r h0))
   =
-    let c   = gget (vcell p r)             in
-    let nxt = (p.cell r).get_ref c Forward in
+    let c   = gget_cl p r in
+    let nxt = c.cl_nxt    in
     intro_dllist_nil  p nxt r;
     intro_dllist_cons p r nxt 0 r
 
@@ -329,7 +328,7 @@ let elim_dllist_sglt_2 (#opened : Mem.inames) (p : list_param) (r0 r1 : ref p.r)
       (requires fun _ -> True)
       (ensures  fun h0 () h1 ->
         r0 == r1 /\
-        sel_dllist p r0 1 r1 h0 == dll_sglt (h1 (vcell p r0)))
+        sel_dllist p r0 1 r1 h0 == dll_sglt (g_cl p r0 h1))
   =
     let nxt = elim_dllist_cons p r0 0 r1 in
     elim_dllist_nil p nxt r1
@@ -339,7 +338,7 @@ let elim_dllist_sglt (#opened : Mem.inames) (p : list_param) (r : ref p.r)
       (dllist p r 1 r) (fun () -> vcell p r)
       (requires fun _ -> True)
       (ensures  fun h0 () h1 ->
-        sel_dllist p r 1 r h0 == dll_sglt (h1 (vcell p r)))
+        sel_dllist p r 1 r h0 == dll_sglt (g_cl p r h1))
   = elim_dllist_sglt_2 p r r
 
 
@@ -375,11 +374,11 @@ val intro_dllist_snoc (#opened : Mem.inames) (p : list_param) (r0 : ref p.r) (le
       (dllist p r0 len r1 `star` vcell p r2) (fun () -> dllist p r0 (len+1) r2)
       (requires fun h0 ->
          (sel_dllist p r0 len r1 h0).dll_nxt == r2 /\
-         g_cref p Backward r2 h0 == r1)
+         (g_cl p r2 h0).cl_prv == r1)
       (ensures  fun h0 () h1 ->
-         let c   = h0 (vcell p r2)           in
+         let c   = g_cl p r2 h0              in
          let sl0 = sel_dllist p r0 len r1 h0 in
-         sl0.dll_nxt == r2 /\ (p.cell r2).get_ref c Backward == r1 /\
+         sl0.dll_nxt == r2 /\ c.cl_prv == r1 /\
          sel_dllist p r0 (len+1) r2 h1 == sl0 `dll_snoc` c)
 
 val elim_dllist_snoc (#opened : Mem.inames) (p : list_param) (r0 : ref p.r) (len : nat) (r2 : ref p.r)
@@ -388,10 +387,10 @@ val elim_dllist_snoc (#opened : Mem.inames) (p : list_param) (r0 : ref p.r) (len
       (requires fun _ -> True)
       (ensures  fun h0 r1 h1 ->
          let sl1 = sel_dllist p r0 (len+1) r2 h0 in
-         let c   = h1 (vcell p r2)               in
+         let c   = g_cl p r2 h1                  in
          let sl0 = sel_dllist p r0 len r1 h1     in
          G.reveal r1 == dll_prv0 sl1 /\
-         sl0.dll_nxt == r2 /\ (p.cell r2).get_ref c Backward == G.reveal r1 /\
+         sl0.dll_nxt == r2 /\ c.cl_prv == G.reveal r1 /\
          sl1 == sl0 `dll_snoc` c)
 
 (***** Null *)
@@ -431,10 +430,10 @@ val dllist_read_next
       (requires fun _ -> True)
       (ensures  fun h0 r1 h1 ->
         let sl0 = sel_dllist p r0 len r2 h0  in
-        let c_0 = h1 (vcell p r0)            in
+        let c_0 = g_cl p r0 h1               in
         let sl1 = sel_dllist p r1 len' r2 h1 in
         r1 == dll_nxt0 sl0 /\
-        (p.cell r0).get_ref c_0 Forward == r1 /\ sl1.dll_prv == r0 /\
+        c_0.cl_nxt == r1 /\ sl1.dll_prv == r0 /\
         sl0 == dll_cons c_0 sl1)
 
 // ALT? ghost version
@@ -451,15 +450,12 @@ val dllist_splitOn
         let sl  = sel_dllist p   r0     len      r1    h0 in
         let sl0 = sel_dllist p   r0      i     rs._1   h1 in
         let sl1 = sel_dllist p rs._2 (len-i-1)   r1    h1 in
-        let c : t_of (vcell p r) = SU.hsel (vcell p r) h1 in
+        let c : cell_t p r = g_cl p r h1                  in
         let sls = dll_splitAt i sl                        in
         sl0 `dll_eq3` sls._3 /\
         sl1 `dll_eq3` dll_tail sls._4 /\
-        index sl.dll_sg i == (|r, (p.cell r).get_data c|) /\
-        sl0.dll_nxt == r /\
-        (p.cell r).get_ref c Backward == rs._1 /\
-        (p.cell r).get_ref c Forward  == rs._2 /\
-        sl1.dll_prv == r /\
+        index sl.dll_sg i == (|r, c.cl_data|) /\
+        sl0.dll_nxt == r /\ c.cl_prv == rs._1 /\ c.cl_nxt == rs._2 /\ sl1.dll_prv == r /\
         sl `dll_eq3` (sl0 `dll_append` (c `dll_cons` sl1)))
 
 inline_for_extraction

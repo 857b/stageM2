@@ -4,35 +4,37 @@ module Mem = Steel.Memory
 
 open Steel.Effect
 open Steel.Effect.Atomic
+open Steel.FractionalPermission
 open Steel.Reference
 
 
-type direction =
-  | Forward
-  | Backward
+(*** Definition *)
 
-noeq inline_for_extraction
-type list_param_r' (r : Type) = {
-  vp       : vprop;
-  cdata_t  : Type;
-  get_ref  : normal (t_of vp) -> direction -> GTot (ref r);
-  set_ref  : normal (t_of vp) -> (d : direction) -> (x : ref r) -> GTot (c : normal (t_of vp) { get_ref c d == x });
-  get_data : normal (t_of vp) -> GTot (normal cdata_t);
-
-  read_ref  : (d : direction) ->
-              Steel (ref r) vp (fun _ -> vp) (requires fun _ -> True)
-                (ensures fun h0 x h1 -> frame_equalities vp h0 h1 /\ x == get_ref (h0 vp) d);
-  write_ref : (d : direction) -> (x : ref r) ->
-              Steel unit vp (fun _ -> vp) (requires fun _ -> True)
-                (ensures fun h0 () h1 -> h1 vp == set_ref (h0 vp) d x)
+noeq inline_for_extraction noextract
+type cell_r (r : Type) (d : Type) = {
+  cl_prv  : ref r;
+  cl_nxt  : ref r;
+  cl_data : d;
 }
 
-inline_for_extraction noextract
-type list_param_r (r : Type) = p:list_param_r' r {
-  (forall (s : normal (t_of p.vp)) (d d' : direction) (x:ref r) . {:pattern (p.get_ref (p.set_ref s d x) d')}
-     d <> d' ==> p.get_ref (p.set_ref s d x) d' == p.get_ref s d') /\
-  (forall (s : normal (t_of p.vp)) (d : direction) (x:ref r) . {:pattern (p.get_data (p.set_ref s d x))}
-     p.get_data (p.set_ref s d x) == p.get_data s)
+noeq inline_for_extraction
+type list_param_r (r : Type) = {
+  vp       : vprop;
+  cdata_t  : Type;
+  cl_f     : normal (t_of vp) -> GTot (cell_r r cdata_t);
+
+  read_prv  : unit ->
+              Steel (ref r) vp (fun _ -> vp) (requires fun _ -> True)
+                (ensures fun h0 x h1 -> frame_equalities vp h0 h1 /\ x == (cl_f (h0 vp)).cl_prv);
+  read_nxt  : unit ->
+              Steel (ref r) vp (fun _ -> vp) (requires fun _ -> True)
+                (ensures fun h0 x h1 -> frame_equalities vp h0 h1 /\ x == (cl_f (h0 vp)).cl_nxt);
+  write_prv : (cl_prv : ref r) ->
+              Steel unit vp (fun _ -> vp) (requires fun _ -> True)
+                (ensures fun h0 () h1 -> cl_f (h1 vp) == {cl_f (h0 vp) with cl_prv});
+  write_nxt : (cl_nxt : ref r) ->
+              Steel unit vp (fun _ -> vp) (requires fun _ -> True)
+                (ensures fun h0 () h1 -> cl_f (h1 vp) == {cl_f (h0 vp) with cl_nxt});
 }
 
 noeq inline_for_extraction
@@ -44,34 +46,65 @@ type list_param = {
                  (ensures  is_null x == false)
 }
 
-let data_t (p : list_param) (x : ref p.r) : Type = (p.cell x).cdata_t
-let cell_t (p : list_param) : Type = dtuple2 (ref p.r) (data_t p)
+
+(*** Derived *)
+
+let data_t  (p : list_param) (x : ref p.r) : Type = (p.cell x).cdata_t
+let cell_t  (p : list_param) (x : ref p.r) : Type = cell_r p.r (data_t p x)
+let rcell_t (p : list_param) : Type = dtuple2 (ref p.r) (data_t p)
 
 unfold let vcell (p:list_param) (x:ref p.r)
   : vprop
   = (p.cell x).vp
 
 [@@ __steel_reduce__]
-let g_cref (#q:vprop) (p:list_param) (d : direction) (x:ref p.r)
+let g_cl (#q:vprop) (p:list_param) (x:ref p.r)
   (h:rmem q{FStar.Tactics.with_tactic selector_tactic (can_be_split q (vcell p x) /\ True)})
-  : GTot (ref p.r)
-  = (p.cell x).get_ref (h (vcell p x)) d
+  : GTot (cell_t p x)
+  = (p.cell x).cl_f (h (vcell p x))
 
 [@@ __steel_reduce__]
-let g_data (#q:vprop) (p:list_param) (x:ref p.r)
+let g_rcell (#q:vprop) (p:list_param) (x:ref p.r)
   (h:rmem q{FStar.Tactics.with_tactic selector_tactic (can_be_split q (vcell p x) /\ True)})
-  : GTot (data_t p x)
-  = (p.cell x).get_data (h (vcell p x))
+  : GTot (rcell_t p)
+  = (|x, (g_cl p x h).cl_data|)
 
-[@@ __steel_reduce__]
-let g_cell (#q:vprop) (p:list_param) (x:ref p.r)
-  (h:rmem q{FStar.Tactics.with_tactic selector_tactic (can_be_split q (vcell p x) /\ True)})
-  : GTot (cell_t p)
-  = (|x, g_data p x h|)
+let gget_cl #opened (p : list_param) (x : ref p.r)
+  : SteelGhost (Ghost.erased (cell_t p x)) opened (vcell p x) (fun _ -> vcell p x)
+      (requires fun _ -> True)
+      (ensures  fun h0 c h1 -> frame_equalities (vcell p x) h0 h1 /\
+                            Ghost.reveal c == g_cl p x h0)
+  =
+    let c = gget (vcell p x) in
+    (p.cell x).cl_f c
 
 let list_cell_not_null #opened (p : list_param) (x:ref p.r)
-  : SteelGhost unit opened (vcell p x) (fun () -> (vcell p x))
+  : SteelGhost unit opened (vcell p x) (fun () -> vcell p x)
               (requires fun _ -> True)
               (ensures fun h0 () h1 -> frame_equalities (vcell p x) h0 h1 /\
                                     is_null x = false)
   = extract_info_raw (vcell p x) (is_null x == false) (p.nnull x)
+
+
+(*** Building a [list_param] *)
+
+inline_for_extraction
+let list_param_of_vptr
+      (c cdata_t : Type) (cl_f : c -> Tot (cell_r c cdata_t))
+      (set_prv : (x : c) -> (cl_prv : ref c) -> (y : c {cl_f y == {cl_f x with cl_prv}}))
+      (set_nxt : (x : c) -> (cl_nxt : ref c) -> (y : c {cl_f y == {cl_f x with cl_nxt}}))
+  : list_param
+  = {
+    r    = c;
+    cell = (fun (r : ref c) -> {
+        vp = vptr r;
+        cdata_t;
+        cl_f;
+        read_prv  = (fun () -> let s = read r in (cl_f s).cl_prv);
+        read_nxt  = (fun () -> let s = read r in (cl_f s).cl_nxt);
+        write_prv = (fun x  -> let s = read r in write r (set_prv s x));
+        write_nxt = (fun x  -> let s = read r in write r (set_nxt s x));
+      });
+    nnull = (fun r m -> ptrp_sel_interp r full_perm m;
+                     pts_to_not_null r full_perm (ptrp_sel r full_perm m) m);
+  }

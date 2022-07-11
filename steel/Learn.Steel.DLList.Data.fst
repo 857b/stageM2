@@ -20,11 +20,11 @@ let rec dllist_tp (p : list_param) (entry : ref p.r) (len : nat) (exit : ref p.r
     else begin
       let len' = len - 1 in
       c   <-- vprt (t_of (vcell p entry)) (vcell p entry); 
-      let entry' = (p.cell entry).get_ref c Forward in
+      let c      = (p.cell entry).cl_f c in
+      let entry' = c.cl_nxt              in
       sl1 <-- tpr (dllist_tp p entry' len' exit);
       _   <-- tpure (sl1.dll_prv == entry);
-      return #(dllist_sel_t p entry len exit)
-             (dll_cons #p #entry #((p.cell entry).get_ref c Forward) #len' #exit c sl1)
+      return #(dllist_sel_t p entry len exit) (dll_cons #p #entry #entry' #len' #exit c sl1)
     end
   )
 
@@ -51,11 +51,11 @@ let dllist_cons_interp (p : list_param) (entry : ref p.r) (len : nat) (exit : re
     let tp = dllist_tp p entry (len + 1) exit in
     assert (Mem.interp (hp_of (dllist p entry (len + 1) exit)) m
          <==> Mem.interp (hp_of (vcell p entry)) m /\
-           (let c = sel_of (vcell p entry) m              in
-            let entry' = (p.cell entry).get_ref c Forward in
+           (let      c = (p.cell entry).cl_f (sel_of (vcell p entry) m) in
+            let entry' = c.cl_nxt                                       in
             Mem.interp (hp_of (vcell p entry) `Mem.star` hp_of (dllist p entry' len exit)) m /\
            (let sl1 : dllist_sel_t p entry' len exit
-                    = sel_of (dllist p entry' len exit) m in
+                    = sel_of (dllist p entry' len exit) m               in
             sl1.dll_prv == entry)))
       by T.(let _ = TP.pose_interp_lemma (`(`@tp)) (``@m) rew [2] in smt ())
 
@@ -64,9 +64,9 @@ let dllist_cons_sel_eq
   =
     let tp = dllist_tp p entry (len + 1) exit in
     dllist_cons_interp p entry len exit m;
-    assert (let c      = sel_of (vcell p entry) m            in
-            let entry' = (p.cell entry).get_ref c Forward    in
-            let sl1    = sel_of (dllist p entry' len exit) m in
-            sel_of (dllist p entry (len + 1) exit) m
-              == dll_cons #p #entry #entry' #len #exit c sl1)
+    assert (dllist_cons_interp p entry len exit m;
+            let c      = (p.cell entry).cl_f (sel_of (vcell p entry) m) in
+            let entry' = c.cl_nxt                                       in
+            let sl1    = sel_of (dllist p entry' len exit) m            in
+            sel_of (dllist p entry (len + 1) exit) m == dll_cons #p #entry #entry' #len #exit c sl1)
       by T.(let _ = TP.pose_interp_lemma (`(`@tp)) (``@m) rew [2] in smt ())
