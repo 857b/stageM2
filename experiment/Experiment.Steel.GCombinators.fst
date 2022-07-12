@@ -3,7 +3,6 @@ module Experiment.Steel.GCombinators
 module U      = Learn.Util
 module L      = FStar.List.Pure
 module M      = Experiment.Steel.Repr.M
-module MC     = Experiment.Steel.Combinators
 module LV     = Experiment.Steel.Repr.LV
 module SF     = Experiment.Steel.Repr.SF
 module SH     = Experiment.Steel.Steel
@@ -17,6 +16,7 @@ module Mem    = Steel.Memory
 module Perm   = Learn.Permutation
 module LV2M   = Experiment.Steel.Repr.LV_to_M
 module LV2SF  = Experiment.Steel.Repr.LV_to_SF
+module SF2Fun = Experiment.Steel.Repr.SF_to_Fun
 module TLogic = Learn.Tactics.Logic
 
 open Steel.Effect
@@ -415,8 +415,8 @@ let __build_with_invariant
       (#a : Type u#a) (#ek : SH.effect_kind) (f : M.repr ek a) (#p : vprop) (#gen_tac : M.gen_tac_t)
       (p' : vprop_list) (tp : vprop_to_list p p')
       (csm : LV.csm_t env) (prd : LV.prd_t a)
-      (cf : (Msk.filter_mask_split_l (L.length p') (L.length env) p' env;
-             lin_cond_st L.(p' @ env) (let M.Mkrepr t _ = f in t)
+      (cf : (Msk.filter_mask_split_l p' env;
+             lin_cond_st L.(p' @ env) f.repr_tree
                (Msk.mask_split_l (L.length p') (L.length env)) (fun _ -> p')
                csm prd))
   : LV.lin_cond env (M.Tgen a gen_tac (with_invariant_gen_c a ek f p)) csm prd
@@ -467,3 +467,390 @@ let with_invariant_g
          with_invariant_g_steel a opened i p' tp pre post ro req ens inner)
 
 #pop-options
+
+
+(*** for_loop *)
+
+module SU   = Learn.Steel.Util
+module U32  = FStar.UInt32
+
+#push-options "--ifuel 0 --fuel 1"
+// We could give [U32.v start <= i] as an additional hypothesis
+inline_for_extraction
+let for_loop_sl
+      (start : U32.t) (finish : U32.t { U32.v start <= U32.v finish })
+      (inv  : (i : nat { i <= U32.v finish }) -> vprop)
+      (invp : (i : nat { i <= U32.v finish }) -> t_of (inv i) -> Type0)
+      (body : (i : U32.t { U32.v i < U32.v finish }) ->
+              Steel unit (inv (U32.v i)) (fun () -> inv (U32.v i + 1))
+                (requires fun h0      -> invp (U32.v i)     (h0 (inv (U32.v i))))
+                (ensures  fun _ () h1 -> invp (U32.v i + 1) (h1 (inv (U32.v i + 1)))))
+  : Steel unit (inv (U32.v start)) (fun () -> inv (U32.v finish))
+      (requires fun h0      -> invp (U32.v  start) (h0 (inv (U32.v  start))))
+      (ensures  fun _ () h1 -> invp (U32.v finish) (h1 (inv (U32.v finish))))
+  =
+    let inv_ref (i : nat {i <= U32.v finish}) (sl : t_of (inv i)) : prop
+      = invp i sl /\True             in
+    intro_vrefine (inv (U32.v start)) (inv_ref (U32.v start));
+    Steel.Loops.for_loop start finish (fun i -> inv i `vrefine` inv_ref i)
+    begin fun i ->
+      elim_vrefine (inv (U32.v i)) (inv_ref (U32.v i));
+      body i;
+      intro_vrefine (inv (U32.v i + 1)) (inv_ref (U32.v i + 1))
+    end;
+    elim_vrefine (inv (U32.v finish)) (inv_ref (U32.v finish))
+#pop-options
+
+#push-options "--ifuel 0 --fuel 0"
+
+let for_loop_preserve
+      (finish : U32.t)
+      (inv  : (i : nat { i <= U32.v finish }) -> vprop_list)
+      (invp : (i : nat { i <= U32.v finish }) -> sl_f (inv i) -> Type0)
+      (ro   : vprop_list)
+      (req   : ((i : U32.t { U32.v i < U32.v finish }) -> sl_f (inv (U32.v i)) -> sl_f ro -> Type0))
+      (ens   : ((i : U32.t { U32.v i < U32.v finish }) -> sl_f (inv (U32.v i)) -> sl_f (inv (U32.v i + 1)) ->
+               sl_f ro -> Type0))
+      (sl_ro : sl_f ro)
+  : prop
+  = forall (i : U32.t { U32.v i < U32.v finish }) (sl_inv0 : sl_f (inv (U32.v i))) .
+    invp (U32.v i) sl_inv0 ==> (req i sl_inv0 sl_ro /\
+   (forall (sl_inv1 : sl_f (inv (U32.v i + 1))) .
+    ens i sl_inv0 sl_inv1 sl_ro ==> invp (U32.v i + 1) sl_inv1))
+
+let elim_for_loop_preserve
+      (finish : U32.t)
+      (inv  : (i : nat { i <= U32.v finish }) -> vprop_list)
+      (invp : (i : nat { i <= U32.v finish }) -> sl_f (inv i) -> Type0)
+      (ro   : vprop_list)
+      (req   : ((i : U32.t { U32.v i < U32.v finish }) -> sl_f (inv (U32.v i)) -> sl_f ro -> Type0))
+      (ens   : ((i : U32.t { U32.v i < U32.v finish }) -> sl_f (inv (U32.v i)) -> sl_f (inv (U32.v i + 1)) ->
+               sl_f ro -> Type0))
+      (sl_ro : sl_f ro) (i : U32.t { U32.v i < U32.v finish }) (sl_inv0 : sl_f (inv (U32.v i)))
+  : Lemma (requires for_loop_preserve finish inv invp ro req ens sl_ro /\
+                    invp (U32.v i) sl_inv0)
+          (ensures  req i sl_inv0 sl_ro /\
+                   (forall (sl_inv1 : sl_f (inv (U32.v i + 1))) . {:pattern (ens i sl_inv0 sl_inv1 sl_ro)}
+                    ens i sl_inv0 sl_inv1 sl_ro ==> invp (U32.v i + 1) sl_inv1))
+  = ()
+
+[@@ __LV2SF__]
+inline_for_extraction
+let for_loop_spec_r
+      (start : U32.t) (finish : U32.t { U32.v start <= U32.v finish })
+      (inv  : (i : nat { i <= U32.v finish }) -> vprop_list)
+      (invp : (i : nat { i <= U32.v finish }) -> sl_f (inv i) -> Type0)
+      (ro   : vprop_list)
+      (lreq : sl_f ro -> Type0)
+  : M.spec_r (U.unit' u#a)
+  = M.Mkspec_r
+        (inv (U32.v start)) (fun _ -> inv (U32.v finish)) ro
+        (fun sl0 sl_ro -> invp (U32.v start) sl0 /\ lreq sl_ro)
+        (fun _ _ sl1 _ -> invp (U32.v finish) sl1)
+
+/// Since the weakest-precondition is (theoretically) not complete, we only require [lreq] to imply the preservation
+/// of the invariant by the body of the loop.
+noeq
+type for_loop_gen_c
+      (start : U32.t) (finish : U32.t { U32.v start <= U32.v finish })
+      (inv  : (i : nat { i <= U32.v finish }) -> vprop_list)
+      (invp : (i : nat { i <= U32.v finish }) -> sl_f (inv i) -> Type0)
+      (body : (i : U32.t { U32.v i < U32.v finish }) -> M.repr u#a SH.KSteel U.unit')
+  : M.spec_r (U.unit' u#a) -> Type u#(max a 2) =
+  | ForLoop :
+      (ro    : vprop_list) ->
+      (req   : ((i : U32.t { U32.v i < U32.v finish }) -> sl_f (inv (U32.v i)) -> sl_f ro -> Type0)) ->
+      (ens   : ((i : U32.t { U32.v i < U32.v finish }) -> sl_f (inv (U32.v i)) -> sl_f (inv (U32.v i + 1)) ->
+               sl_f ro -> Type0)) ->
+      (lreq  : (sl_ro : sl_f ro -> (rq : Type0 { rq ==> for_loop_preserve finish inv invp ro req ens sl_ro }))) ->
+      (body' : ((i : U32.t { U32.v i < U32.v finish }) ->
+               M.spc_steel_t u#a SH.KSteel #U.unit'
+                 (M.Mkspec_r (inv (U32.v i)) (fun _ -> inv (U32.v i + 1)) ro
+                             (req i) (fun sl0 _ sl1 sl_ro -> ens i sl0 sl1 sl_ro)))) ->
+      for_loop_gen_c start finish inv invp body (for_loop_spec_r start finish inv invp ro lreq)
+
+// ALT? can be defined directly on inv using pre_f : inv -> env{trg}
+[@@ __cond_solver__]
+let build_for_loop_pre_f
+      (env : vprop_list) (inv : vprop_list) (pre_f : LV.eq_injection_l inv env)
+  : Perm.pequiv_list env L.(inv @ Msk.(filter_mask (mask_not (LV.eij_trg_mask pre_f)) env))
+  =
+    let flt0 = Msk.(filter_mask (          LV.eij_trg_mask pre_f ) env) in
+    let flt1 = Msk.(filter_mask (mask_not (LV.eij_trg_mask pre_f)) env) in
+    let f0 : Perm.pequiv env L.(flt0 @ flt1)
+        = Msk.mask_pequiv_append (LV.eij_trg_mask pre_f) env            in 
+    let f1 : Perm.pequiv flt0 inv
+        = LV.eij_equiv pre_f                                            in
+    let f  : Perm.pequiv env L.(inv @ flt1)
+        = Perm.(pequiv_trans f0 (pequiv_append f1 (pequiv_refl flt1)))  in
+    (**) Perm.pequiv_as_eq f;
+    Perm.perm_f_to_list f
+
+#push-options "--z3rlimit 20"
+let build_for_loop_pre_f_csm
+      (env : vprop_list) (inv : vprop_list) (pre_f : LV.eq_injection_l inv env)
+  : Lemma LV.(eij_trg_mask (eij_split inv Msk.(filter_mask (mask_not (LV.eij_trg_mask pre_f)) env)
+                                      (build_for_loop_pre_f env inv pre_f))._1
+           == eij_trg_mask pre_f)
+  =
+    let n0   = L.length inv                                             in
+    let flt0 = Msk.(filter_mask (          LV.eij_trg_mask pre_f ) env) in
+    let flt1 = Msk.(filter_mask (mask_not (LV.eij_trg_mask pre_f)) env) in
+    let f    = build_for_loop_pre_f env inv pre_f                       in
+    let f0   = (LV.eij_split inv flt1 f)._1                             in
+    let csm0 = LV.eij_trg_mask pre_f                                    in
+    let csm1 = LV.eij_trg_mask f0                                       in
+    Ll.list_extensionality csm1 csm0 (fun j ->
+      calc (<==>) {
+        b2t (L.index csm1 j);
+      <==> { Ll.memP_iff j f0 }
+        exists (i : Fin.fin n0) . L.index f0 i == j;
+      <==> { introduce forall (i : Fin.fin n0) . L.index f0 i == L.index pre_f i
+           with begin
+             L.lemma_index_memP pre_f i;
+             calc (==) {
+               L.index f0 i;
+             == { Ll.splitAt_index n0 f }
+               L.index f i;
+             == {  }
+               Msk.mask_perm_append csm0 (Msk.mask_push csm0 (L.index pre_f i));
+             == { Msk.mask_perm_append_index csm0 (Msk.mask_push csm0 (L.index pre_f i)) }
+               Msk.mask_pull csm0 (Msk.mask_push csm0 (L.index pre_f i));
+             == { }
+               L.index pre_f i;
+             }
+           end }
+        exists (i : Fin.fin n0) . L.index pre_f i  == j;
+      <==> { Ll.memP_iff j pre_f }
+        L.index csm0 j;
+      }
+    )
+#pop-options
+
+let for_loop_body_lc
+      (finish : U32.t)
+      (inv  : (i : nat { i <= U32.v finish }) -> vprop_list)
+      (ro   : vprop_list)
+      (i    : U32.t { U32.v i < U32.v finish })
+      (body : M.prog_tree U.unit')
+  =
+    LV.lin_cond L.(inv (U32.v i) @ ro) body
+         (Msk.mask_split_l (L.length (inv (U32.v i))) (L.length ro)) (fun _ -> inv (U32.v i + 1))
+
+let for_loop_body_lem
+      (#finish : U32.t)
+      (#inv  : (i : nat { i <= U32.v finish }) -> vprop_list)
+      (#ro   : vprop_list)
+      (#i    : U32.t { U32.v i < U32.v finish })
+      (#body : M.prog_tree U.unit')
+      (lc   : for_loop_body_lc finish inv ro i body)
+  : Lemma (lc_pre lc == inv (U32.v i) /\ lc_ro lc == ro)
+  =
+    Msk.filter_mask_split_l (inv (U32.v i)) ro;
+    Msk.filter_mask_split_r (inv (U32.v i)) ro
+
+let for_loop_body_req
+      (#finish : U32.t)
+      (#inv  : (i : nat { i <= U32.v finish }) -> vprop_list)
+      (#ro   : vprop_list)
+      (#body : (i : U32.t { U32.v i < U32.v finish }) -> M.prog_tree U.unit')
+      (lc   : (i : U32.t { U32.v i < U32.v finish }) -> for_loop_body_lc finish inv ro i (body i))
+      (i : U32.t { U32.v i < U32.v finish })
+  : sl_f (inv (U32.v i)) -> sl_f ro -> Type0
+  = for_loop_body_lem (lc i); lc_req (lc i)
+
+let for_loop_body_ens
+      (#finish : U32.t)
+      (#inv  : (i : nat { i <= U32.v finish }) -> vprop_list)
+      (#ro   : vprop_list)
+      (#body : (i : U32.t { U32.v i < U32.v finish }) -> M.prog_tree U.unit')
+      (lc   : (i : U32.t { U32.v i < U32.v finish }) -> for_loop_body_lc finish inv ro i (body i))
+      (i : U32.t { U32.v i < U32.v finish }) (sl0 : sl_f (inv (U32.v i)))
+  : sl_f (inv (U32.v i + 1)) -> sl_f ro -> Type0
+  = for_loop_body_lem (lc i); lc_ens (lc i) sl0 U.Unit'
+
+[@@ __LV2SF__]
+let for_loop_preserve_sf
+      (#finish : U32.t)
+      (#inv  : (i : nat { i <= U32.v finish }) -> vprop_list)
+      (invp : (i : nat { i <= U32.v finish }) -> sl_f (inv i) -> Type0)
+      (#ro   : vprop_list)
+      (#body : (i : U32.t { U32.v i < U32.v finish }) -> M.prog_tree U.unit')
+      (lc   : (i : U32.t { U32.v i < U32.v finish }) -> for_loop_body_lc finish inv ro i (body i))
+      (sl_ro : sl_f ro)
+  : Type0
+  =
+    forall (i : U32.t { U32.v i < U32.v finish }) .
+      Fl.forall_flist (vprop_list_sels_t (inv (U32.v i))) (fun (sl_inv0 : sl_f (inv (U32.v i))) ->
+      (**) for_loop_body_lem (lc i);
+      invp (U32.v i) sl_inv0 ==> (
+        lc_wp (lc i) sl_inv0 sl_ro (fun sl_inv1 -> invp (U32.v i + 1) sl_inv1.sel_v)))
+
+let for_loop_preserve_sf_sound
+      (#finish : U32.t)
+      (#inv  : (i : nat { i <= U32.v finish }) -> vprop_list)
+      (invp : (i : nat { i <= U32.v finish }) -> sl_f (inv i) -> Type0)
+      (#ro   : vprop_list)
+      (#body : (i : U32.t { U32.v i < U32.v finish }) -> M.prog_tree U.unit')
+      (lc   : (i : U32.t { U32.v i < U32.v finish }) -> for_loop_body_lc finish inv ro i (body i))
+      (sl_ro : sl_f ro)
+  : Lemma (requires for_loop_preserve_sf invp lc sl_ro)
+          (ensures  for_loop_preserve finish inv invp ro (for_loop_body_req lc) (for_loop_body_ens lc) sl_ro)
+  =
+    introduce forall (i : U32.t { U32.v i < U32.v finish }) (sl_inv0 : sl_f (inv (U32.v i))) .
+                invp (U32.v i) sl_inv0 ==> (for_loop_body_req lc i sl_inv0 sl_ro /\
+               (forall (sl_inv1 : sl_f (inv (U32.v i + 1))) .
+                for_loop_body_ens lc i sl_inv0 sl_inv1 sl_ro ==> invp (U32.v i + 1) sl_inv1))
+      with introduce _ ==> _ with _ .
+    begin
+      for_loop_body_lem (lc i);
+      let wp = lc_wp (lc i) sl_inv0 sl_ro in
+      let pt (sl_inv1 : SF2Fun.sl_tys_v ({val_t = U.unit'; sel_t = _})) = invp (U32.v i + 1) sl_inv1.sel_v in
+      assert (wp pt);
+      lc_wp_sound (lc i) sl_inv0 sl_ro pt
+    end
+
+
+#push-options "--z3rlimit 20"
+[@@ LV.__lin_cond__]
+let __build_for_loop
+      (env : vprop_list)
+      (start : U32.t) (finish : U32.t { U32.v start <= U32.v finish })
+      (inv  : (i : nat { i <= U32.v finish }) -> vprop_list)
+      (invp : (i : nat { i <= U32.v finish }) -> sl_f (inv i) -> Type0)
+      (body : (i : U32.t { U32.v i < U32.v finish }) -> M.repr u#a SH.KSteel U.unit')
+      (gen_tac : M.gen_tac_t)
+      (pre_f : LV.eq_injection_l (inv (U32.v start)) env)
+      (ro : vprop_list)
+      (ro_eq : squash (ro == Msk.(filter_mask (mask_not (LV.eij_trg_mask pre_f)) env)))
+      (pre_f' : Perm.pequiv_list env L.(inv (U32.v start) @ ro))
+      (pre_f'_eq : squash (pre_f' == build_for_loop_pre_f env (inv (U32.v start)) pre_f))
+      (lc_body : (i : U32.t { U32.v i < U32.v finish }) ->
+                 (lc : for_loop_body_lc finish inv ro i (body i).repr_tree
+                  { LV.lcsub_at_leaves lc}))
+  : LV.lin_cond env (M.Tgen (U.unit' u#a) gen_tac (for_loop_gen_c start finish inv invp body))
+                (LV.eij_trg_mask pre_f) (fun _ -> inv (U32.v finish))
+  =
+    let req  = for_loop_body_req lc_body                   in
+    let ens  = for_loop_body_ens lc_body                   in
+    let lreq (sl_ro : sl_f ro)
+      : rq : Type0 { rq ==> for_loop_preserve finish inv invp ro req ens sl_ro }
+      = FStar.Classical.move_requires (for_loop_preserve_sf_sound invp lc_body) sl_ro;
+        for_loop_preserve_sf invp lc_body sl_ro                 in
+    let s = for_loop_spec_r start finish inv invp ro lreq  in
+    let body' (i : U32.t { U32.v i < U32.v finish })
+      : M.spc_steel_t u#a SH.KSteel #U.unit'
+                 (M.Mkspec_r (inv (U32.v i)) (fun _ -> inv (U32.v i + 1)) ro
+                             (req i) (fun sl0 _ sl1 sl_ro -> ens i sl0 sl1 sl_ro))
+      = for_loop_body_lem (lc_body i);
+        lc_to_spc_steel_t (body i) (lc_body i)             in
+    let sf : LV.gen_sf s = gen_sf_Tspec s                  in
+    (**) build_for_loop_pre_f_csm env (inv (U32.v start)) pre_f;
+    LV.LCgen env s (ForLoop ro req ens lreq body') pre_f' sf
+#pop-options
+
+let build_for_loop (fr : flags_record) : Tac unit
+  =
+    apply_raw (`__build_for_loop);
+    // pre_f
+    norm_lc ();
+    build_eq_injection_l fr (fun () -> [Info_location "before the for loop"]);
+    // ro
+    dismiss ();
+    norm_lc ();
+    trefl ();
+    // pre_f'
+    dismiss ();
+    norm [delta_only (L.append __delta_list (L.append __delta_perm [`%Msk.mask_pequiv_append; `%Perm.perm_f_cons]));
+          delta_attr [`%__cond_solver__; `%Msk.__mask__; `%LV.__lin_cond__];
+          delta_qualifier ["unfold"];
+          iota; zeta; primops];
+    trefl ();
+    // lc_body
+    let i = intro () in
+    apply (`build_lcsub_at_leaves_lc);
+    norm_lc ();
+    build_lin_cond_exact fr (fun () -> [Info_location "in the for loop body"])
+
+
+// Quite long
+#push-options "--fuel 1 --z3rlimit 40"
+inline_for_extraction
+let for_loop_steel
+      (start : U32.t) (finish : U32.t { U32.v start <= U32.v finish })
+      (inv  : (i : nat { i <= U32.v finish }) -> vprop_list)
+      (invp : (i : nat { i <= U32.v finish }) -> sl_f (inv i) -> Type0)
+      (ro   : vprop_list)
+      (req  : (i : U32.t { U32.v i < U32.v finish }) -> sl_f (inv (U32.v i)) -> sl_f ro -> Type0)
+      (ens   : ((i : U32.t { U32.v i < U32.v finish }) -> sl_f (inv (U32.v i)) -> sl_f (inv (U32.v i + 1)) ->
+               sl_f ro -> Type0))
+      (lreq  : (sl_ro : sl_f ro -> (rq : Type0 { rq ==> for_loop_preserve finish inv invp ro req ens sl_ro })))
+      (body : (i : U32.t { U32.v i < U32.v finish }) ->
+               M.spc_steel_t u#a SH.KSteel #U.unit'
+                 (M.Mkspec_r (inv (U32.v i)) (fun _ -> inv (U32.v i + 1)) ro
+                             (req i) (fun sl0 _ sl1 sl_ro -> ens i sl0 sl1 sl_ro)))
+  : M.spc_steel_t u#a SH.KSteel (for_loop_spec_r start finish inv invp ro lreq)
+  = SH.steel_f (fun () ->
+    let ro0 = gget_f ro in
+    assert (for_loop_preserve finish inv invp ro req ens ro0);
+    for_loop_sl start finish
+      (fun i -> vprop_of_list (inv i) `star` vprop_of_list ro)
+      (fun i sl -> invp i (vpl_sels_f (inv i) sl._1) /\ vpl_sels_f ro sl._2 == Ghost.reveal ro0)
+    begin fun i ->
+      (**) let sl_i  = gget_f (inv (U32.v i)) in
+      (**) let ro1   = gget_f ro              in
+      (**) assert (ro1 == ro0);
+      (**) elim_for_loop_preserve finish inv invp ro req ens ro0 i sl_i;
+      (**) assert (req i sl_i ro1);
+      let _ = SH.steel_u (body i) ()     in
+      (**) let sl_i' = gget_f (inv (U32.v i + 1)) in
+      (**) assert (ens i sl_i sl_i' ro0);
+      SA.return ()
+    end;
+    U.Unit'
+  )
+#pop-options
+
+
+// TODO? it may be necessary to norm the [L.index] used in [sl_f (inv i)] in [invp]
+// TODO? if vprop' was erasable, we could take as argument a [list (v : vprop {VUnit? v})] instead of a
+//       [list vprop']
+[@@ __repr_M__]
+inline_for_extraction
+let for_loop
+      (start : U32.t) (finish : U32.t { U32.v start <= U32.v finish })
+      (inv  : (i : nat { i <= U32.v finish }) -> vprop_list)
+      (invp : (i : nat { i <= U32.v finish }) -> sl_f (inv i) -> Type0)
+      (body : (i : U32.t { U32.v i < U32.v finish }) -> M.repr u#a SH.KSteel U.unit')
+  : M.repr SH.KSteel (U.unit' u#a)
+  =
+    make_combinator (U.unit' u#a) SH.KSteel build_for_loop (for_loop_gen_c start finish inv invp body)
+      (fun _ (ForLoop ro req ens lreq body') -> for_loop_steel start finish inv invp ro req ens lreq body')
+
+#pop-options
+
+
+(*** while_loop *)
+
+// FIXME: this does not seems implementable with [Steel.Loops.while_loop]
+(*
+#push-options "--ifuel 0 --fuel 1"
+inline_for_extraction
+let while_loop_sl
+      (inv  : vprop)
+      (invp : t_of inv -> Type0)
+      (#guard_post : post_t bool) (#guard_ens : t_of inv -> (b : bool) -> t_of (guard_post b) -> Type0)
+      (guard : unit -> Steel bool inv guard_post
+                 (requires fun h0      -> invp (h0 inv))
+                 (ensures  fun h0 b h1 -> guard_ens (h0 inv) b (h1 (guard_post b))))
+      (body  : unit -> Steel unit (guard_post true) (fun () -> inv)
+                 (requires fun h0      -> exists (sl_inv : t_of inv) .
+                                         invp sl_inv /\ guard_ens sl_inv true (h0 (guard_post true)))
+                 (ensures  fun _ () h1 -> invp (h1 inv)))
+  : Steel unit inv (fun () -> guard_post false)
+      (requires fun h0      -> invp (h0 inv))
+      (ensures  fun _ () h1 -> exists (sl_inv : t_of inv) .
+                              invp sl_inv /\ guard_ens sl_inv false (h1 (guard_post false)))
+  = ...
+#pop-options
+*)

@@ -583,3 +583,47 @@ let test_with_invariant_g (r0 : ghost_ref U32.t) (r1 : ref U32.t) (i : inv (ghos
     ) #(_ by (mk_steel [Timer; Extract])) ())
 // time extract : 2651ms
 // total time   : 3124ms
+
+
+inline_for_extraction
+let test_for_loop_0 (r0 : ref U32.t)
+  : F.steel (U.unit') (vptr r0) (fun _ -> vptr r0)
+            (requires fun h0 -> True)
+            (ensures  fun h0 _ h1 -> True)
+  = F.(to_steel (
+      GCb.for_loop 0ul 10ul (fun _ -> [vptr' r0 full_perm]) (fun i v -> True)
+      begin fun i ->
+        return U.Unit'
+      end
+    ) #(_ by (mk_steel [Timer; Extract])) ())
+// time specs     : 18ms
+// time lin_cond  : 42ms
+// time sub_push  : 43ms
+// time LV2SF     : 38ms
+// time SF2Fun    : 3ms
+// time Fun_wp    : 10ms
+// time extract   : 252ms
+// total time : 406ms
+
+inline_for_extraction
+let test_for_loop_1 (r0 r1 : ref U32.t)
+  : F.steel (U.unit') (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
+            (requires fun h0 -> U32.v (sel r0 h0) <= 100)
+            (ensures  fun h0 _ h1 -> U32.v (sel r0 h1) = U32.v (sel r0 h0) + 10 /\ sel r1 h1 == sel r1 h0)
+  = F.(to_steel (
+      v0 <-- MC.ghost_to_steel (call_g gget (vptr r0));
+      GCb.for_loop 0ul 10ul (fun _ -> [vptr' r0 full_perm]) (fun i v -> U32.v (v 0) = U32.v v0 + i)
+      begin fun i ->
+        _ <-- call read r1;
+        x <-- call read r0;
+        call (write r0) U32.(x +%^ 1ul);;
+        return U.Unit'
+      end
+    ) #(_ by (mk_steel [Timer])) ())
+// time specs     : 83ms
+// time lin_cond  : 560ms
+// time sub_push  : 5147ms
+// time LV2SF     : 7379ms
+// time SF2Fun    : 12ms
+// time Fun_wp    : 1473ms
+// total time : 14654ms

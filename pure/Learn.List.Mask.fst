@@ -14,7 +14,7 @@ let rec mask_len_le (mask : list bool)
   | [] -> ()
   | _ :: mask -> mask_len_le mask
 
-let rec mask_not_len (#n : nat) ($mask : vec n bool)
+let rec mask_not_len (#n : nat) (mask : vec n bool)
   : Lemma (ensures mask_len (mask_not mask) = n - mask_len mask) (decreases n)
           [SMTPat (mask_len (mask_not mask))]
   = match mask with
@@ -169,11 +169,23 @@ let rec filter_mask_diff_comm (#a : Type) (#n : nat) (m0 m1 : vec n bool) (l : v
   | [], [], [] -> ()
   | _ :: m0, _ :: m1, x :: xs -> filter_mask_diff_comm #a #(n-1) m0 m1 xs
 
-let filter_mask_split_l (#a : Type) (n0 n1 : nat) (l0 : vec n0 a) (l1 : vec n1 a)
+let filter_mask_split_l #a l0 l1
   =
+    let n0 = length l0 in
+    let n1 = length l1 in
     filter_mask_append (repeat n0 true) (repeat n1 false) l0 l1;
     filter_mask_true   (repeat n0  true) l0 (fun _ -> ());
     filter_mask_false  (repeat n1 false) l1 (fun _ -> ())
+
+let filter_mask_split_r #a l0 l1
+  =
+    let n0 = length l0 in
+    let n1 = length l1 in
+    pat_append ();
+    assert (mask_not (mask_split_l n0 n1) == repeat n0 false @ repeat n1 true);
+    filter_mask_append (repeat n0 false) (repeat n1 true) l0 l1;
+    filter_mask_false  (repeat n0 false) l0 (fun _ -> ());
+    filter_mask_true   (repeat n1  true) l1 (fun _ -> ())
 
 let mask_or_sym (#n : nat) (m0 m1 : vec n bool)
   : Lemma (mask_or m0 m1 == mask_or m1 m0)
@@ -440,6 +452,7 @@ let rec dl_append_on_mask_index
 
 
 #push-options "--ifuel 0 --fuel 0"
+
 let filter_mask_fl_perm_append (#n : nat) (m : vec n bool) (ts : vec n Type) (xs : Fl.flist ts)
   : Lemma (Fl.apply_pequiv (mask_pequiv_append m ts) xs
         == Fl.append (filter_mask_fl m ts xs) (filter_mask_fl (mask_not m) ts xs))

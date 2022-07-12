@@ -109,6 +109,7 @@ let test_build_pequiv_list
 let __normal_lc : list norm_step = [
   delta_only [`%L.map; `%L.length; `%L.mem; `%L.op_At; `%L.append; `%L.splitAt; `%L.count; `%L.map2;
               `%Ll.initi; `%Ll.repeat;
+              `%M.Mkrepr?.repr_tree;
               `%Mktuple2?._1; `%Mktuple2?._2];
   delta_attr [`%__tac_helper__; `%__cond_solver__; `%__lin_cond__; `%__mask__];
   iota; zeta; primops
@@ -235,8 +236,8 @@ let __build_LCbind
             == { }
               filter_mask (mask_not (filter_mask g_csm1 L.(g_csm0a @ g_csm0b)))
                           (filter_mask g_csm1 L.(f_prd x @ filter_mask (mask_not f_csm) env));
-            == { filter_mask_split_l n0 n1 g_csm0a g_csm0b;
-                 filter_mask_split_l n0 n1 (f_prd x) (filter_mask (mask_not f_csm) env) }
+            == { filter_mask_split_l g_csm0a g_csm0b;
+                 filter_mask_split_l (f_prd x) (filter_mask (mask_not f_csm) env) }
               filter_mask (mask_not g_csm0a) (f_prd x);
             };
             pequiv_list_refl (g_prd y)))

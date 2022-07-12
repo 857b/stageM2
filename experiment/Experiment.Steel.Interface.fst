@@ -88,6 +88,7 @@ type failure_enum =
   | Fail_eq_injection
   | Fail_pequiv_len
   | Fail_dependency : (what : string) -> (on : binder) -> failure_enum
+  | Fail_csm_le
 
 noeq
 type info =

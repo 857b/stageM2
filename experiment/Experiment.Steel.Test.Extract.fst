@@ -48,3 +48,9 @@ let test_with_invariant_g (r0 : ghost_ref U32.t) (r1 : ref U32.t) (i : inv (ghos
       (vptr r1) (fun _ -> vptr r1)
       (requires fun _ -> True) (ensures fun h0 _ h1 -> frame_equalities (vptr r1) h0 h1)
   = Test.test_with_invariant_g r0 r1 i ()
+
+let test_for_loop_0 (r0 : ref U32.t)
+  : Steel unit (vptr r0) (fun _ -> vptr r0) (fun h0 -> True) (fun h0 _ h1 -> True)
+  =
+    let _ = Test.test_for_loop_0 r0 () in
+    ()

@@ -39,3 +39,11 @@ void Experiment_Steel_Test_Extract_test_with_invariant_g(uint32_t *r1)
 
 }
 
+void Experiment_Steel_Test_Extract_test_for_loop_0(uint32_t *r0)
+{
+  for (uint32_t i = (uint32_t)0U; i < (uint32_t)10U; i++)
+  {
+
+  }
+}
+

@@ -36,6 +36,12 @@ let _ : elem_index #int 4 L.(0 :: ([1;3] @ [4;2;7]))
 #pop-options
 
 
+let test_build_hpred_to_vpl (r r' : ref nat)
+    (_ : squash ((vptr r `star` vptr r') `equiv` vprop_of_list [vptr' r full_perm; vptr' r' full_perm]))
+  : hpred_to_vpl (vptr r `star` vptr r') [vptr' r full_perm; vptr' r' full_perm]
+                 (fun h -> sel r h + sel r' h < 10 <: Type0)
+  = _ by (build_hpred_to_vpl test_flags dummy_ctx)
+
 let test_build_to_repr_t_0 (r r' : ref nat)
   : M.to_repr_t int (vptr r) (fun x -> vptr r') (fun h0 -> sel r h0 < 10) (fun h0 x h1 -> sel r h0 + x < sel r' h1)
   = _ by (build_to_repr_t default_flags dummy_ctx)

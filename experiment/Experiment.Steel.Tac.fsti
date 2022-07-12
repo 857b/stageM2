@@ -54,6 +54,7 @@ let cs_raise (#a : Type)
 
 let __delta_list : list string =
   [`%L.length; `%L.index; `%L.op_At; `%L.append; `%L.map; `%L.hd; `%L.tl; `%L.tail; `%L.count; `%L.fold_left;
+   `%L.mem;
    `%Ll.initi; `%Ll.repeat; `%Ll.map_nth; `%Ll.set]
 
 
@@ -224,6 +225,45 @@ val __build_to_repr_t_lem
         sel r_p (SE.equiv_can_be_split p (vprop_of_list r_p);
                    SE.focus_rmem h (vprop_of_list r_p)) i)
 
+// p : SE.rmem v -> GTot t ?
+let hpred_to_vpl_p
+      (v : SE.vprop) (vs : vprop_list {v `SE.equiv` vprop_of_list vs})
+      (#t : Type) (p : SE.rmem v -> t) (p' : sl_f vs -> t)
+  : prop
+  = forall (h : SE.rmem v) .
+        p' (sel vs (SE.equiv_can_be_split v (vprop_of_list vs); SE.focus_rmem h (vprop_of_list vs)))
+          == p h
+
+type hpred_to_vpl
+      (v : SE.vprop) (vs : vprop_list {v `SE.equiv` vprop_of_list vs})
+      (#t : Type) (p : SE.rmem v -> t)
+  = p' : (sl_f vs -> t) { hpred_to_vpl_p v vs p p' }
+
+[@@ __tac_helper__]
+let __build_hpred_to_vpl
+      (v : SE.vprop) (vs : vprop_list {v `SE.equiv` vprop_of_list vs})
+      (#t : Type) (p : SE.rmem v -> t)
+      (p' : sl_f vs -> t)
+      (p'_eq : (h : SE.rmem v) -> (sl : sl_f vs) ->
+               (sl_eq : ((u : SE.vprop{SE.can_be_split v u}) -> squash (SE.VUnit? u) ->
+                        (i : elem_index (SE.VUnit?._0 u) vs) ->
+                        (i' : int) -> (_ : squash (i' == i)) ->
+                        squash (h u == sl i'))) ->
+               squash (p' sl == p h))
+  : hpred_to_vpl v vs p
+  =
+    let lem (h : SE.rmem v) : Lemma
+      (p' (sel vs (SE.equiv_can_be_split v (vprop_of_list vs);
+                   SE.focus_rmem h (vprop_of_list vs)))
+        == p h)
+      [SMTPat (p h)]
+      =
+        SE.equiv_can_be_split v (vprop_of_list vs);
+        let h_r = SE.focus_rmem h (vprop_of_list vs) in
+        p'_eq h (sel vs h_r) (__build_to_repr_t_lem v vs h)
+    in
+    p'
+
 [@@ __tac_helper__]
 let __build_to_repr_t
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
@@ -241,7 +281,7 @@ let __build_to_repr_t
                              // This indirection is needed so that [apply_raw] presents a goal for [i]
                              (i' : int) -> (_ : squash (i' == i)) ->
                              squash (h0 v == sl0 i'))) ->
-                    r_req sl0 == req h0)
+                    squash (r_req sl0 == req h0))
 
       (#r_ens  : M.ens_t r_pre a r_post)
       (r_ens_eq  : (h0 : SE.rmem pre) -> (sl0 : sl_f r_pre) ->
@@ -255,7 +295,7 @@ let __build_to_repr_t
                              (i : elem_index (SE.VUnit?._0 v) (r_post x)) ->
                              (i' : int) -> (_ : squash (i' == i)) ->
                              squash (h1 v == sl1 i'))) ->
-                   r_ens sl0 x sl1 == ens h0 x h1)
+                   squash (r_ens sl0 x sl1 == ens h0 x h1))
 
   : M.to_repr_t a pre post req ens
   = 
@@ -303,6 +343,41 @@ let ctrl_rmem_apply (hs : list bv) (t : term) : Tac (bool & ctrl_flag) =
 #push-options "--ifuel 2"
 (**) private val __begin_opt_1 : unit
 
+// apply the rewriting hypothesis [eq_lem] to solve a goal [squash (h v == sl ?i)]
+let apply_rew fr ctx (eq_lem : term)
+  =
+    let u_i' = fresh_uvar None in
+    apply_raw eq_lem;
+    // [VUnit?]
+    norm [delta_only [`%SE.VUnit?]; iota];
+    trivial ();
+    // [elem_index]
+    norm __normal_Steel_logical_spec;
+    build_elem_index fr ctx;
+    // [i']
+    exact u_i';
+    // [i' <- i]
+    norm [delta_attr [`%__cond_solver__; `%__tac_helper__]];
+    trefl ()
+
+/// Solves a goal [hpred_to_vpl v vs p]
+let build_hpred_to_vpl fr ctx : Tac unit
+  =
+    apply (`__build_hpred_to_vpl);
+    // p'_eq
+    let h  = intro () in let sl = intro () in
+    let eq = binder_to_term (intro ())     in
+    norm __normal_Steel_logical_spec;
+    let hs = [(inspect_binder h)._1] in
+    let ctrl = ctrl_rmem_apply hs in
+    ctrl_rewrite TopDown ctrl
+    begin fun () ->
+      try apply_rew fr ctx eq
+      with _ -> trefl () // if we reach this, there will be an error in the [trefl] after the [ctrl_rewrite],
+                        // but waiting to be there can give a better error dump
+    end;
+    cs_try trefl fr ctx (fun m -> fail (m Fail_to_repr_t []))
+
 /// Solves a goal [to_repr_t a pre post req ens]
 let build_to_repr_t fr ctx : Tac unit
   =
@@ -328,27 +403,11 @@ let build_to_repr_t fr ctx : Tac unit
       norm __normal_flatten_vprop;
       trefl ();
 
-    // apply the rewriting hypothesis [eq_lem] to solve a goal [squash (h v == sl ?i)]
-    let apply_rew ctx eq_lem =
-      let u_i' = fresh_uvar None in
-      apply_raw eq_lem;
-      // [VUnit?]
-      norm [delta_only [`%SE.VUnit?]; iota];
-      trivial ();
-      // [elem_index]
-      norm __normal_Steel_logical_spec;
-      build_elem_index fr ctx;
-      // [i']
-      exact u_i';
-      // [i' <- i]
-      norm [delta_attr [`%__cond_solver__; `%__tac_helper__]];
-      trefl ()
-    in
-
     (* [r_req] *)
     let ctx_req = ctx_app_loc ctx "in the requires" in
     exact u_r_req;
-    let h0 = intro () in let sl0 = intro () in let eq0 = intro () in
+    let h0  = intro () in let sl0 = intro () in
+    let eq0 = binder_to_term (intro ())      in
       // This normalisation has to be done after introducing [eq0], otherwise its application fails,
       // seemingly because of the normalisation of [t_of].
       norm __normal_Steel_logical_spec;
@@ -356,7 +415,7 @@ let build_to_repr_t fr ctx : Tac unit
       let ctrl = ctrl_rmem_apply hs in
       ctrl_rewrite TopDown ctrl
       begin fun () ->
-        try apply_rew ctx_req eq0
+        try apply_rew fr ctx_req eq0
         with _ -> trefl () // if we reach this, there will be an error in the [trefl] after the [ctrl_rewrite],
                           // but waiting to be there can give a better error dump
       end;
@@ -368,14 +427,15 @@ let build_to_repr_t fr ctx : Tac unit
     let h0  = intro () in let sl0 = intro () in
     let x   = intro () in
     let h1  = intro () in let sl1 = intro () in
-    let eq0 = intro () in let eq1 = intro () in
+    let eq0 = binder_to_term (intro ())      in
+    let eq1 = binder_to_term (intro ())      in
       norm __normal_Steel_logical_spec;
       let hs = [(inspect_binder h0)._1; (inspect_binder h1)._1] in
       let ctrl = ctrl_rmem_apply hs in
       ctrl_rewrite TopDown ctrl
       begin fun () ->
-        try apply_rew ctx_ens eq0 with | _ ->
-        try apply_rew ctx_ens eq1 with | _ ->
+        try apply_rew fr ctx_ens eq0 with | _ ->
+        try apply_rew fr ctx_ens eq1 with | _ ->
         trefl ()
       end;
       cs_try trefl fr ctx_ens (fun m -> fail (m Fail_to_repr_t []))

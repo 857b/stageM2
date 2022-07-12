@@ -11,6 +11,7 @@ type post_v (#a : Type) (post : post_t a) (x : a) = Fl.flist (post x)
 type req_t = Type0
 type ens_t (a : Type) (post : post_t a) = (x : a) -> post_v post x -> Type0
 
+// TODO? Twp with a WP on the returned values and selectors
 noeq
 type prog_tree : (a : Type u#a) -> (post : post_t u#a u#b a) -> Type u#(1 + max a b) =
   | Tspec : (a : Type u#a) -> (post : post_t a) ->

@@ -22,6 +22,8 @@ void Experiment_Steel_Test_Extract_test_slrewrite(uint32_t *r0, uint32_t *r1, ui
 
 void Experiment_Steel_Test_Extract_test_with_invariant_g(uint32_t *r1);
 
+void Experiment_Steel_Test_Extract_test_for_loop_0(uint32_t *r0);
+
 
 #define __experiment_H_DEFINED
 #endif

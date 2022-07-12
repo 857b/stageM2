@@ -22,10 +22,10 @@ let mask_len (mask : list bool) : nat =
 val mask_len_le (mask : list bool) : Lemma (mask_len mask <= length mask)
 
 [@@__mask__]
-let mask_not (#n : nat) ($mask : vec n bool) : vec n bool
+let mask_not (#n : nat) (mask : vec n bool) : vec n bool
   = map not mask
 
-val mask_not_len (#n : nat) ($mask : vec n bool)
+val mask_not_len (#n : nat) (mask : vec n bool)
   : Lemma (mask_len (mask_not mask) = n - mask_len mask)
           [SMTPat (mask_len (mask_not mask))]
 
@@ -36,6 +36,23 @@ let mask_or (#n : nat) (m0 m1 : vec n bool) : vec n bool
 let mask_le (#n : nat) (m0 m1 : vec n bool)
   : prop
   = forall (i : Fin.fin n) . {:pattern (index m0 i)} index m0 i ==> index m1 i
+
+let rec mask_le_eff (#n : nat) (m0 m1 : vec n bool)
+  : Tot (b : bool {b <==> mask_le m0 m1}) (decreases m0)
+  = match m0, m1 with
+  | [], [] -> true
+  | (b0 : bool) :: m0', (b1 : bool) :: m1' ->
+       let f (i : Fin.fin n) : prop = b2t (index (b0 :: m0') i) ==> b2t (index (b1 :: m1') i) in
+       calc (<==>) {
+         mask_le m0 m1;
+       <==> { }
+         forall (i : Fin.fin n) . f i;
+       <==> { assert (forall (i : Fin.fin n) . i = 0 \/ i = (i - 1 <: Fin.fin (n-1)) + 1) }
+         f 0 /\ (forall (i : Fin.fin (n-1)) . f (i+1));
+       <==> { }
+         (b2t b0 ==> b2t b1) /\ mask_le #(n-1) m0' m1';
+       };
+       (not b0 || b1) && mask_le_eff #(n-1) m0' m1'
 
 
 [@@__mask__]
@@ -86,7 +103,7 @@ let mask_diff (#n : nat) (m0 m1 : vec n bool)
   = filter_mask (mask_not m0) m1
 
 [@@ __mask__]
-let mask_split_l (n0 n1 : nat) : (m : vec (n0 + n1) bool { mask_len m == n0 })
+let mask_split_l (n0 n1 : nat) : m : vec (n0 + n1) bool { mask_len m == n0 }
   =
     (**) append_count (repeat n0 true) (repeat n1 false) true;
     (**) repeat_count n0 true true; repeat_count n1 false true;
@@ -195,8 +212,11 @@ val filter_mask_diff_comm (#a : Type) (#n : nat) (m0 m1 : vec n bool) (l : vec n
   : Lemma (filter_mask (mask_diff m0 m1) (filter_mask (mask_not m0) l)
         == filter_mask (filter_mask m1 (mask_not m0)) (filter_mask m1 l))
 
-val filter_mask_split_l (#a : Type) (n0 n1 : nat) (l0 : vec n0 a) (l1 : vec n1 a)
-  : Lemma (filter_mask (mask_split_l n0 n1) (l0 @ l1) == l0)
+val filter_mask_split_l (#a : Type) (l0 l1 : list a)
+  : Lemma (filter_mask (mask_split_l (length l0) (length l1)) (l0 @ l1) == l0)
+
+val filter_mask_split_r (#a : Type) (l0 l1 : list a)
+  : Lemma (filter_mask (mask_not (mask_split_l (length l0) (length l1))) (l0 @ l1)== l1)
 
 val mask_or_sym (#n : nat) (m0 m1 : vec n bool)
   : Lemma (mask_or m0 m1 == mask_or m1 m0)

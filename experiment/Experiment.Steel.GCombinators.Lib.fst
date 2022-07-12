@@ -3,21 +3,23 @@ module Experiment.Steel.GCombinators.Lib
 include Experiment.Steel.Tac
 include Experiment.Steel.Tac.LV
 
-module U     = Learn.Util
-module L     = FStar.List.Pure
-module M     = Experiment.Steel.Repr.M
-module Ll    = Learn.List
-module Fl    = Learn.FList
-module SH    = Experiment.Steel.Steel
-module LV    = Experiment.Steel.Repr.LV
-module SF    = Experiment.Steel.Repr.SF
-module SA    = Steel.Effect.Atomic
-module Veq   = Experiment.Steel.VEquiv
-module Mem   = Steel.Memory
-module Msk   = Learn.List.Mask
-module Perm  = Learn.Permutation
-module LV2M  = Experiment.Steel.Repr.LV_to_M
-module LV2SF = Experiment.Steel.Repr.LV_to_SF
+module U      = Learn.Util
+module L      = FStar.List.Pure
+module M      = Experiment.Steel.Repr.M
+module Ll     = Learn.List
+module Fl     = Learn.FList
+module SH     = Experiment.Steel.Steel
+module LV     = Experiment.Steel.Repr.LV
+module SF     = Experiment.Steel.Repr.SF
+module SA     = Steel.Effect.Atomic
+module Veq    = Experiment.Steel.VEquiv
+module Fun    = Experiment.Repr.Fun
+module Mem    = Steel.Memory
+module Msk    = Learn.List.Mask
+module Perm   = Learn.Permutation
+module LV2M   = Experiment.Steel.Repr.LV_to_M
+module LV2SF  = Experiment.Steel.Repr.LV_to_SF
+module SF2Fun = Experiment.Steel.Repr.SF_to_Fun
 
 open Steel.Effect
 open Steel.Effect.Atomic
@@ -27,6 +29,12 @@ open FStar.Tactics
 
 #set-options "--fuel 1 --ifuel 1"
 
+
+let __delta_perm : list string = [
+    `%Perm.perm_f_to_list; `%Perm.comp; `%Perm.perm_f_append; `%Perm.mk_perm_f; `%Perm.perm_f_of_pair;
+    `%Perm.pequiv_append_swap; `%Perm.pequiv_refl; `%Perm.id_n;
+    `%LV.eij_equiv; `%LV.eij_equiv_f
+  ]
 
 (*** [make_combinator] *)
 
@@ -128,10 +136,26 @@ let make_combinator
   }
 
 
+(*** [gen_sf_Tspec] *)
+
+/// A [LV.gen_sf] can always be built using a [SF.Tspec] with the expected specifications.
+
+#push-options "--fuel 1"
+[@@ __LV2SF__]
+let gen_sf_Tspec (#a : Type) (s : M.spec_r a)
+  : LV.gen_sf s
+  = fun (sl0 : sl_f s.spc_pre) (sl_ro : sl_f s.spc_ro) ->
+    SF.Tspec a (M.post_sl_t s.spc_post)
+             (requires s.spc_req sl0 sl_ro)
+             (ensures  fun x sl1 -> s.spc_ens sl0 x sl1 sl_ro)
+#pop-options
+
+
 (*** [lc_spec_r] *)
 
 /// [lc_spec_r lc] is the specification (given as a [M.spec_r]) resulting from the [LV.lin_cond] [lc].
 /// [lc_sf] provides a corresponding [gen_sf] (that is a [SF.prog_tree] with an equivalent specification).
+/// [lc_wp] provides a sound (but theoretically not complete) weakest-precondition.
 /// [lc_to_spc_steel_t] gives a Steel implementation.
 
 [@@ __cond_solver__; __LV2SF__]
@@ -175,6 +199,9 @@ let lc_spec_r
   : M.spec_r a
   = M.Mkspec_r (lc_pre lc) (lc_post lc) (lc_ro lc) (lc_req lc) (lc_ens lc)
 
+
+(***** [lc_sf] *)
+
 [@@ __LV2SF__]
 let lc_sf
       (#a : Type u#a) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
@@ -200,6 +227,47 @@ let rew_lc_sf_ens
   : squash (lc_ens lc sl0 x sl1 sl_ro <==> SF.tree_ens (lc_sf lc sl0 sl_ro) x sl1)
   = ()
 
+
+(***** [lc_wp] *)
+
+// We mark [lc_wp] as GTot to avoid a "Substitution must be fully applied" error from F* when
+// extracting the .krml of a module that depends on this one.
+[@@ __LV2SF__]
+let lc_wp
+      (#a : Type u#a) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
+      (lc : LV.lin_cond env t csm prd)
+      (sl0 : sl_f (lc_pre lc)) (sl_ro : sl_f (lc_ro lc))
+  : GTot (pure_wp SF2Fun.(sl_tys_v ({val_t = a; sel_t = M.post_sl_t prd})))
+  =
+    let sf : SF.prog_tree a (M.post_sl_t prd)
+           = lc_sf lc sl0 sl_ro       in
+    let fn : Fun.prog_tree SF2Fun.({val_t = a; sel_t = M.post_sl_t prd})
+           = SF2Fun.repr_Fun_of_SF sf in
+    Fun.tree_wp fn
+
+let lc_wp_sound
+      (#a : Type u#a) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
+      (lc : LV.lin_cond env t csm prd)
+      (sl0 : sl_f (lc_pre lc)) (sl_ro : sl_f (lc_ro lc))
+      (post : pure_post SF2Fun.(sl_tys_v ({val_t = a; sel_t = M.post_sl_t prd})))
+  : Lemma (requires lc_wp lc sl0 sl_ro post)
+          (ensures  lc_req lc sl0 sl_ro /\
+                   (forall (x : a) (sl1 : sl_f (prd x)) .
+                    lc_ens lc sl0 x sl1 sl_ro ==> post SF2Fun.({val_v = x; sel_v = sl1})))
+  =
+    let sl0' = LV2SF.append_vars_mask_l csm (Fl.dlist_of_f sl0) (Fl.dlist_of_f sl_ro) in
+    let sf = LV2SF.repr_SF_of_LV lc sl0' in
+    LV2SF.repr_SF_of_LV_sound lc sl0';
+    let fn = SF2Fun.repr_Fun_of_SF sf    in
+    SF2Fun.repr_Fun_of_SF_req sf;
+    Fun.tree_wp_sound fn post;
+    assert (lc_req lc sl0 sl_ro);
+    introduce forall (x : a) (sl1 : sl_f (prd x)) .
+              lc_ens lc sl0 x sl1 sl_ro ==> post SF2Fun.({val_v = x; sel_v = sl1})
+      with SF2Fun.repr_Fun_of_SF_ens sf x sl1
+
+
+(***** [lc_to_spc_steel_t] *)
 
 #push-options "--fuel 0 --ifuel 0 --z3rlimit 20"
 inline_for_extraction
@@ -298,7 +366,62 @@ let lc_to_spc_steel_t
     | SH.KGhost  o -> lc_to_spc_steel_t__ghost  o mr lc
 
 
-(*** [lin_cond_st] *)
+(*** Building [lin_cond] *)
+
+(**** Enforcing [lcsub_at_leaves] *)
+
+[@@ __cond_solver__]
+let build_lcsub_at_leaves_lc
+       (env : vprop_list) (#a : Type u#a) (t : M.prog_tree a)
+       (csm : LV.csm_t env) (prd : LV.prd_t a)
+       (lc0 : LV.lin_cond env #a t csm prd)
+  : lc : LV.lin_cond env #a t csm prd { LV.lcsub_at_leaves lc }
+  =
+    (**) LV.lc_sub_push_at_leaves env lc0;
+    LV.lc_sub_push lc0
+
+
+(**** With exact specifications *)
+
+[@@ __cond_solver__]
+let __build_lin_cond_exact
+      (env : vprop_list) (#a : Type) (t : M.prog_tree a)
+      (csm0 csm1 : LV.csm_t env) (prd0 prd1 : LV.prd_t a)
+      (lc : LV.lin_cond env t csm0 prd0)
+      (csm_le : b2t (Msk.mask_le_eff csm0 csm1))
+      (prd_f : (x : a) -> Perm.pequiv_list L.(prd0 x @ filter_diff csm0 csm1 env) (prd1 x))
+  : LV.lin_cond env t csm1 prd1
+  =
+    Ll.list_extensionality (Msk.mask_or csm0 csm1) csm1 (fun i -> ());
+    lcsub_add_csm env t csm0 prd0 lc csm1 prd1 prd_f
+
+/// Solves a goal [lin_cond env t prd csm] where [prd] and [csm] are concrete terms.
+let build_lin_cond_exact (fr : flags_record) (ctx : cs_context) : Tac unit
+  =
+    apply (`__build_lin_cond_exact);
+    // lc
+    build_lin_cond fr None;
+    // csm_le
+    norm_lc ();
+    cs_try (fun () ->
+        norm [delta_only [`%Msk.mask_le_eff]; iota; zeta; primops];
+        trefl ()
+      ) fr ctx (fun m -> fail (m Fail_csm_le []));
+    // prd_f
+    let x = intro () in
+    norm_lc ();
+    build_pequiv_list fr ctx
+
+#push-options "--fuel 5"
+let test_lin_cond_exact (v : int -> vprop')
+  : LV.lin_cond [v 0; v 1; v 2]
+      M.(Tspec unit (M.spec_r_exact (Mkspec_r [v 0] (fun _ -> [v 3]) [v 1] (fun _ _ -> True) (fun _ _ _ _ -> True))))
+      [true; false; true] (fun _ -> [v 2; v 3])
+  = _ by (build_lin_cond_exact default_flags dummy_ctx)
+#pop-options
+
+
+(**** [lin_cond_st] *)
 
 /// [lin_cond_st env t must_csm must_prd csm1 prd1] ("lin_cond such that") is used to build a [lin_cond] consuming at
 /// least [must_csm] and producing at least [must_prd]. It allows other variables to be consumed ([csm1]) or
@@ -525,11 +648,9 @@ let build_lin_cond_st (fr : flags_record) (ctx : cs_context) : Tac unit
     // lc1 <-
     dismiss ();
     norm [
-      delta_only (L.append __delta_list [
+      delta_only (L.append __delta_list (L.append __delta_perm [
         `%L.splitAt; `%L.mem; `%Mktuple2?._1; `%Mktuple2?._2; `%L.map2;
-        `%Perm.perm_f_to_list; `%Perm.comp; `%Perm.perm_f_append; `%Perm.mk_perm_f; `%Perm.perm_f_of_pair;
-        `%Perm.pequiv_append_swap; `%pequiv_append_02;
-        `%LV.eij_equiv; `%LV.eij_equiv_f]);
+        `%pequiv_append_02]));
       delta_attr [`%__cond_solver__; `%Learn.Tactics.Util.__tac_helper__; `%Msk.__mask__; `%LV.__lin_cond__];
       delta_qualifier ["unfold"];
       iota; zeta; primops];

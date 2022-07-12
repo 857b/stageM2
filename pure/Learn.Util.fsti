@@ -97,6 +97,8 @@ val arrow_ext
 
 
 /// [unit] for an arbitrary universe
+[@@ erasable]
+noeq
 type unit' : Type u#a = | Unit' : unit'
 
 /// Using [let () = block_red in t] will prevent the heuristic used for zeta-normalisation from unfolding
