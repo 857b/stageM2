@@ -6,13 +6,6 @@
 
 
 
-typedef struct ___Learn_Steel_DLList_Test_cell0___Learn_Steel_DLList_Test_cell0__s
-{
-  Learn_Steel_DLList_Test_cell0 *fst;
-  Learn_Steel_DLList_Test_cell0 *snd;
-}
-___Learn_Steel_DLList_Test_cell0___Learn_Steel_DLList_Test_cell0_;
-
 typedef Learn_Steel_DLList_Test_cell0 *___Learn_Steel_DLList_Test_cell0____;
 
 Learn_Steel_DLList_Test_cell0
@@ -22,13 +15,9 @@ Learn_Steel_DLList_Test_cell0
 )
 {
   Learn_Steel_DLList_Test_cell0 s0 = r[0U];
-  Learn_Steel_DLList_Test_cell0 *rs10 = s0.nxt;
+  Learn_Steel_DLList_Test_cell0 *rs0 = s0.prv;
   Learn_Steel_DLList_Test_cell0 s = r[0U];
-  Learn_Steel_DLList_Test_cell0 *rs00 = s.prv;
-  ___Learn_Steel_DLList_Test_cell0___Learn_Steel_DLList_Test_cell0_
-  rs = { .fst = rs00, .snd = rs10 };
-  Learn_Steel_DLList_Test_cell0 *rs0 = rs.fst;
-  Learn_Steel_DLList_Test_cell0 *rs1 = rs.snd;
+  Learn_Steel_DLList_Test_cell0 *rs1 = s.nxt;
   if (!(rs1 == NULL))
     rs1->prv = rs0;
   if (rs0 == NULL)

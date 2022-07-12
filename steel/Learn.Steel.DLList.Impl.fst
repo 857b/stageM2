@@ -38,16 +38,18 @@ let remove (p : list_param) (r0 : ref p.r) (len : erased nat) (r1 : erased (ref 
         sel_dllist p rs._1 (len-1) rs._2 h1 `dll_eq3` (dll_remove i sl0)._3)
   =
     (**) let sl0 : erased (dllist_sel_t p r0 len r1) = gget (dllist p r0 len r1) in
-    let rs = dllist_splitOn p r0 len r1 r i in
+    (**) let rs = dllist_splitOn p r0 len r1 r i in
     (**) // if we try to use [i] directly as a length, the VC seems to contains parts equivalent
     (**) // to [Fin.fin len == nat]:
     (**) //    forall (k: int) (x: unit). pair (0 <= k) (k < reveal len) <==> equals (k >= 0) true;
     (**) let len0 : erased nat = hide (reveal i)   in
     (**) let len1 : erased nat = hide (len-i-1)    in
-    (**) let rs0 = rs._1 in
-    (**) let rs1 = rs._2 in
-    (**) change_equal_slprop (dllist p r0 i rs._1) (dllist p r0 len0 rs0);
-    (**) change_equal_slprop (dllist p rs._2 (len-i-1) r1) (dllist p rs1 len1 r1);
+    let rs0 = (p.cell r).read_prv () in
+    let rs1 = (p.cell r).read_nxt () in
+    (**) change_equal_slprop (dllist p r0  i   (fst rs))
+    (**)                     (dllist p r0 len0    rs0);
+    (**) change_equal_slprop (dllist p (snd rs) (len-i-1) r1)
+    (**)                     (dllist p    rs1      len1   r1);
     let r1' = dllist_change_prv p rs1 len1 r1   rs0 in
     let r0' = dllist_change_nxt p r0  len0 rs0  rs1 in
     (**) intro_dllist_append p r0' len0 rs0 rs1 len1 r1';

@@ -1,6 +1,6 @@
 module Learn.Steel.DLList.Derived
 
-#set-options "--ifuel 1 --fuel 1"
+#set-options "--ifuel 1 --fuel 2"
 
 (*** Operations on [dllist_sel_t] *)
 
@@ -17,9 +17,42 @@ let dll_append_lem
            sg_exit  sl0.dll_prv (sl0.dll_sg @ sl1.dll_sg) == r3)
   = if Cons? (sl1.dll_sg) then lemma_append_last sl0.dll_sg sl1.dll_sg
 
-#push-options "--ifuel 1 --fuel 2"
 let dll_tail_append #p #r0 #len0 #r1 #r2 #len1 #r3 sl0 sl1 = ()
-#pop-options
+
+let dll_splitOn_eq
+      #p #r0 #len #r4 (sl : dllist_sel_t p r0 len r4) (i : Fin.fin len)
+  : Lemma (let sls = dll_splitAt i sl in
+           dll_next_at sl (i+1) == dll_nxt0 sls._2 /\
+           dll_splitOn sl i == (sls._1, dll_head sls._2, dll_tail sls._2))
+  =
+    let sl0, sl1' = dll_splitAt i sl in
+    Ll.splitAt_index   i   sl.dll_sg;
+    Ll.splitAt_index (i+1) sl.dll_sg;
+    dll_nxt0_eq sl1';
+    assert (dll_next_at sl (i+1) == dll_nxt0 sl1');
+    calc (==) {
+      (dll_cell_at sl i).cl_data;
+    == { }
+      (index sl.dll_sg i)._2;
+    == { }
+      (index sl1'.dll_sg 0)._2;
+    == { }
+      (dll_head sl1').cl_data;
+    };
+    let sl1_sg0 = (dll_splitAt (i+1) sl)._2.dll_sg in
+    Ll.list_extensionality sl1_sg0 (dll_tail sl1').dll_sg
+      (fun j ->
+        calc (==) {
+          index sl1_sg0 j;
+        == { }
+          index sl.dll_sg (i + 1 + j);
+        == { }
+          index sl1'.dll_sg (j + 1);
+        == { }
+          index (dll_tail sl1').dll_sg j;
+        }
+      )
+
 
 (*** Ghost lemmas *)
 
@@ -145,15 +178,43 @@ let intro_dllist_snoc (#opened : Mem.inames) (p : list_param) (r0 : ref p.r) (le
 let elim_dllist_snoc (#opened : Mem.inames) (p : list_param) (r0 : ref p.r) (len : nat) (r2 : ref p.r)
   =
     let sl1 : G.erased (dllist_sel_t p r0 (len+1) r2) = gget (dllist p r0 (len+1) r2) in
-    let (|r1, r2', sl0, slc|) = dll_splitAt len sl1 in
+    let sl0, slc = dll_splitAt len sl1 in
+    let r1       = dll_exit sl0        in
     dll_splitAt_append len sl1;
     dll_init_eq_splitAt sl1;
-    let slc : dllist_sel_t p r2' 1 r2 = U.cast _ slc in
-    elim_dllist_append p r0 len r1 r2' 1 r2 sl0 slc;
-    elim_dllist_sglt_2 p r2' r2;
-    change_equal_slprop (vcell p r2') (vcell p r2);
-    noop ();
+    let sl0 : dllist_sel_t p r0 len r1 = U.cast _ sl0 in
+    let slc : dllist_sel_t p r2 1 r2   = U.cast _ slc in
+    elim_dllist_append p r0 len r1 r2 1 r2 sl0 slc;
+    elim_dllist_sglt p r2;
     r1
+
+#push-options "--z3rlimit 30 --ifuel 0 --fuel 1"
+let dllist_splitOn
+      (#opened : Mem.inames) (p : list_param) (r0 : ref p.r) (len : nat) (r1 : ref p.r)
+      (r : ref p.r) (i : Fin.fin len)
+  =
+    let sl   : G.erased (dllist_sel_t p r0 len r1) = gget (dllist p r0 len r1)         in
+    let len1 = len - i - 1                                                             in
+    let _sl0, _sl1' = dll_splitAt i sl                                                 in
+    let rs0 = dll_exit _sl0                                                            in
+    let sl0  : dllist_sel_t p r0   i     rs0 = U.cast _ _sl0                           in
+    let sl1' : dllist_sel_t p r (len1+1) r1  = U.cast _ _sl1'                          in
+    dll_splitAt_append i sl;
+    change_equal_slprop (dllist p r0     len      r1)
+                        (dllist p r0 (i+(len1+1)) r1);
+    elim_dllist_append p r0 i rs0 r (len1+1) r1 sl0 sl1';
+    let rs1 = elim_dllist_cons p r len1 r1                                             in
+    (**) let c   = gget_cl p r                                                         in
+    (**) let sl1 : G.erased (dllist_sel_t p rs1 len1 r1) = gget (dllist p rs1 len1 r1) in
+    (**) assert (sl1' === dll_cons c sl1);
+    (**) assert (dll_tail sl1' === G.reveal sl1);
+    (**) dll_splitOn_eq sl i;
+    let rs = G.hide (rs0, G.reveal rs1) in
+    change_equal_slprop (dllist p r0 i   rs0    `star` dllist p    rs1   (len-i-1) r1)
+                        (dllist p r0 i (fst rs) `star` dllist p (snd rs) (len-i-1) r1);
+    rs
+#pop-options
+
 
 (***** Null *)
 
@@ -200,50 +261,6 @@ let dllist_read_next
     (**) change_equal_slprop (dllist p g_r1 len' r2)
     (**)                     (dllist p r1   len' r2);
     return r1
-
-
-#push-options "--z3rlimit 30 --ifuel 0"
-inline_for_extraction
-let dllist_splitOn
-      (p : list_param) (r0 : ref p.r) (len : G.erased nat) (r1 : G.erased (ref p.r))
-      (r : ref p.r) (i : G.erased (Fin.fin len))
-  =
-    (**) let sl    : G.erased (dllist_sel_t p r0 len r1) = gget (dllist p r0 len r1) in
-    (**) let len1  : G.erased nat = G.hide (len-i)        in
-    (**) let sls 
-    (**)   : G.erased (rs0 : ref p.r & rs1 : ref p.r & dllist_sel_t p r0 i rs0 & dllist_sel_t p rs1 len1 r1)
-    (**)   = G.hide (dll_splitAt i sl)                  in
-    (**) let g_rs0 : G.erased (ref p.r) = G.hide sls._1 in
-    (**) assert (sls._2 == r);
-    (**) let sl0   : G.erased (dllist_sel_t p r0 i g_rs0) = G.hide sls._3 in
-    (**) let sl1   : G.erased (dllist_sel_t p r len1 r1)  = G.hide sls._4 in
-    (**) dll_splitAt_append i sl;
-    (**) change_equal_slprop (dllist p r0   len    r1)
-    (**)                     (dllist p r0 (i+len1) r1);
-    (**) elim_dllist_append p r0 i g_rs0 r len1 r1 sl0 sl1;
-    (**) let len2 : G.erased nat = G.hide (len1-1)       in
-    let rs1 = dllist_read_next p r len1 len2 r1   in
-    let rs0 = (p.cell r).read_prv ()              in
-    (**) change_equal_slprop (dllist p r0 i g_rs0)
-    (**)                     (dllist p r0 i   rs0);
-    (**) let c    = gget_cl p r                        in
-    (**) let sl1' : G.erased (dllist_sel_t p rs1 len2 r1) = gget (dllist p rs1 len2 r1) in
-    (**) assert (G.reveal sl1 == dll_cons c sl1');
-    (**) assert (dll_tail sl1 == G.reveal sl1');
-    (**) U.assert_by (index sl.dll_sg i == (|r, c.cl_data|)) (fun () ->
-    (**)   calc (==) {
-    (**)     index sl.dll_sg i;
-    (**)   == { Ll.splitAt_index i sl.dll_sg }
-    (**)     index sl1.dll_sg 0;
-    (**)   == { }
-    (**)     index (dll_cons c sl1').dll_sg 0;
-    (**)   == { U.by_refl () }
-    (**)     (|r, c.cl_data|);
-    (**)   }
-    (**) );
-    return (rs0, rs1)
-#pop-options
-
 
 inline_for_extraction
 let dllist_change_prv_cons

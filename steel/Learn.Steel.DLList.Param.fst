@@ -19,22 +19,22 @@ type cell_r (r : Type) (d : Type) = {
 
 noeq inline_for_extraction
 type list_param_r (r : Type) = {
-  vp       : vprop;
+  vp       : vprop';
   cdata_t  : Type;
-  cl_f     : normal (t_of vp) -> GTot (cell_r r cdata_t);
+  cl_f     : normal vp.t -> GTot (cell_r r cdata_t);
 
   read_prv  : unit ->
-              Steel (ref r) vp (fun _ -> vp) (requires fun _ -> True)
-                (ensures fun h0 x h1 -> frame_equalities vp h0 h1 /\ x == (cl_f (h0 vp)).cl_prv);
+              Steel (ref r) (VUnit vp) (fun _ -> VUnit vp) (requires fun _ -> True)
+                (ensures fun h0 x h1 -> frame_equalities (VUnit vp) h0 h1 /\ x == (cl_f (h0 (VUnit vp))).cl_prv);
   read_nxt  : unit ->
-              Steel (ref r) vp (fun _ -> vp) (requires fun _ -> True)
-                (ensures fun h0 x h1 -> frame_equalities vp h0 h1 /\ x == (cl_f (h0 vp)).cl_nxt);
+              Steel (ref r) (VUnit vp) (fun _ -> VUnit vp) (requires fun _ -> True)
+                (ensures fun h0 x h1 -> frame_equalities (VUnit vp) h0 h1 /\ x == (cl_f (h0 (VUnit vp))).cl_nxt);
   write_prv : (cl_prv : ref r) ->
-              Steel unit vp (fun _ -> vp) (requires fun _ -> True)
-                (ensures fun h0 () h1 -> cl_f (h1 vp) == {cl_f (h0 vp) with cl_prv});
+              Steel unit (VUnit vp) (fun _ -> VUnit vp) (requires fun _ -> True)
+                (ensures fun h0 () h1 -> cl_f (h1 (VUnit vp)) == {cl_f (h0 (VUnit vp)) with cl_prv});
   write_nxt : (cl_nxt : ref r) ->
-              Steel unit vp (fun _ -> vp) (requires fun _ -> True)
-                (ensures fun h0 () h1 -> cl_f (h1 vp) == {cl_f (h0 vp) with cl_nxt});
+              Steel unit (VUnit vp) (fun _ -> VUnit vp) (requires fun _ -> True)
+                (ensures fun h0 () h1 -> cl_f (h1 (VUnit vp)) == {cl_f (h0 (VUnit vp)) with cl_nxt});
 }
 
 noeq inline_for_extraction
@@ -42,7 +42,7 @@ type list_param = {
   r      : Type;
   cell   : ref r -> list_param_r r;
   nnull  : (x : ref r) -> (m : Mem.mem) ->
-           Lemma (requires Mem.interp (hp_of (cell x).vp) m)
+           Lemma (requires Mem.interp (hp_of (VUnit (cell x).vp)) m)
                  (ensures  is_null x == false)
 }
 
@@ -53,9 +53,10 @@ let data_t  (p : list_param) (x : ref p.r) : Type = (p.cell x).cdata_t
 let cell_t  (p : list_param) (x : ref p.r) : Type = cell_r p.r (data_t p x)
 let rcell_t (p : list_param) : Type = dtuple2 (ref p.r) (data_t p)
 
+[@@__reduce__]
 unfold let vcell (p:list_param) (x:ref p.r)
   : vprop
-  = (p.cell x).vp
+  = VUnit (p.cell x).vp
 
 [@@ __steel_reduce__]
 let g_cl (#q:vprop) (p:list_param) (x:ref p.r)
@@ -97,7 +98,7 @@ let list_param_of_vptr
   = {
     r    = c;
     cell = (fun (r : ref c) -> {
-        vp = vptr r;
+        vp = vptr' r full_perm;
         cdata_t;
         cl_f;
         read_prv  = (fun () -> let s = read r in (cl_f s).cl_prv);
