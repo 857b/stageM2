@@ -171,8 +171,7 @@ let veqPt_intro
   : vequiv_pointwise L.(hds1 @ pre) (hd :: post)
   = VeqPt_Intro hds1 hd (Veq.vequiv_trans (vequiv_pointwise_M e1) e0) pre post e2
 
-
-// TODO: conversion vprop -> vprop_list, pointwise equality
+(*// TODO: conversion vprop -> vprop_list, pointwise equality
 [@@Veq.__vequiv__]
 let vequiv_elim_vprop_group (vs : Vpl.vprop_list)
   : Veq.vequiv [SU.vprop_group' (Vpl.vprop_of_list vs)] vs
@@ -199,7 +198,7 @@ let vequiv_intro_vprop_group (vs : Vpl.vprop_list)
                                      (Vpl.vprop_of_list ([SU.vprop_group' (Vpl.vprop_of_list vs)])))
   }
 #pop-options
-
+*)
 
 (**** Tac *)
 
@@ -207,8 +206,8 @@ let vequiv_intro_vprop_group (vs : Vpl.vprop_list)
 /// If [intro] is not set (elim), solves a goal [vequiv_pointwise pre ?post]
 /// Returns [true] if an intro/elim has been performed.
 #push-options "--ifuel 2"
-let rec build_vequiv_pointwise (intro : bool) : Tac bool =
-  try apply (`VeqPt_Nil); false with | _ ->
+let (*rec*) build_vequiv_pointwise (intro : bool) : Tac bool =
+  (*try apply (`VeqPt_Nil); false with | _ ->
   let b =
     match catch (fun () ->
       if intro
@@ -227,7 +226,8 @@ let rec build_vequiv_pointwise (intro : bool) : Tac bool =
     | Inl _  -> apply (`VeqPt_Cons); false
   in
   let b' = build_vequiv_pointwise intro in
-  b || b'
+  b || b'*)
+  false
 #pop-options
 
 let __normal_vequiv_pointwise : list norm_step = [
@@ -256,6 +256,7 @@ let rew_vequiv_sol_pointwise () : Tac unit
     with Cancel | _ -> ()
     end
 
+(*
 let test_vequiv_pointwise_elim (v : int -> SE.vprop')
   : Veq.vequiv [SU.vprop_group' (Vpl.vprop_of_list [v 0; v 1]); v 2] [v 0; v 1; v 2]
   = _ by (
@@ -282,6 +283,7 @@ let test_rew_vequiv_sol_pointwise (v : int -> SE.vprop')
   = _ by (
     rew_vequiv_sol_pointwise ();
     apply (`vequiv_sol_end))
+*)
 
 
 let normal_ij_mask : list norm_step = [

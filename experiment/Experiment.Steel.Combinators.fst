@@ -20,8 +20,7 @@ open Experiment.Steel.Repr.M
 
 (****** Call *)
 
-// TODO: one can probably detail more the proofs so that they pass with a lower rlimit
-#push-options "--z3rlimit 60"
+#push-options "--z3rlimit 30"
 inline_for_extraction noextract
 let repr_of_steel_steel
       (a : Type) (pre : pre_t) (post : post_t a) (ro : vprop_list)
@@ -32,11 +31,11 @@ let repr_of_steel_steel
      repr_steel_t SH.KSteel a tcs.tcs_pre tcs.tcs_post (tree_req _ c) (tree_ens _ c))
   = SH.steel_f (fun () ->
     (**) tcs.tcs_pre_eq.veq_g _;
-    (**) steel_elim_vprop_of_list_append_f L.(pre @ ro) tcs.tcs_frame;
-    (**) steel_elim_vprop_of_list_append_f pre ro;
+    (**) elim_vpl_append L.(pre @ ro) tcs.tcs_frame;
+    (**) elim_vpl_append pre ro;
     let (x : a) = SH.steel_u f () in
-    (**) steel_intro_vprop_of_list_append_f (post x) ro;
-    (**) steel_intro_vprop_of_list_append_f L.(post x @ ro) tcs.tcs_frame;
+    (**) intro_vpl_append (post x) ro;
+    (**) intro_vpl_append L.(post x @ ro) tcs.tcs_frame;
     (**) (tcs.tcs_post_eq x).veq_g _;
     Steel.Effect.Atomic.return x)
 
@@ -50,11 +49,11 @@ let repr_of_steel_ghost_steel
      repr_steel_t (SH.KGhost opened) a tcs.tcs_pre tcs.tcs_post (tree_req _ c) (tree_ens _ c))
   = SH.ghost_f #opened (fun () ->
     (**) tcs.tcs_pre_eq.veq_g _;
-    (**) steel_elim_vprop_of_list_append_f L.(pre @ ro) tcs.tcs_frame;
-    (**) steel_elim_vprop_of_list_append_f pre ro;
+    (**) elim_vpl_append L.(pre @ ro) tcs.tcs_frame;
+    (**) elim_vpl_append pre ro;
     let (x : a) = SH.ghost_u f () in
-    (**) steel_intro_vprop_of_list_append_f (post x) ro;
-    (**) steel_intro_vprop_of_list_append_f L.(post x @ ro) tcs.tcs_frame;
+    (**) intro_vpl_append (post x) ro;
+    (**) intro_vpl_append L.(post x @ ro) tcs.tcs_frame;
     (**) (tcs.tcs_post_eq x).veq_g _;
     (**) noop ();
     x)
@@ -211,33 +210,30 @@ let return_ghost (#a : Type) (#opened : Mem.inames) (x : a) : repr (SH.KGhost op
 let elim_tree_req_bind (#a #b : Type) (f : prog_tree a) (g : a -> prog_tree b)
       (#pre : pre_t) (#post : post_t b) (#itm : post_t a)
       (cf  : tree_cond f pre itm) (cg : (x:a) -> tree_cond (g x) (itm x) post)
-      (sl0 : t_of (vprop_of_list pre))
-  : Lemma (requires tree_req _ (TCbind #a #b #f #g pre itm post cf cg) (vpl_sels_f pre sl0))
-          (ensures  tree_req f cf (vpl_sels_f pre sl0) /\
-                    (forall (x : a) (sl1 : t_of (vprop_of_list (itm x))) .
-                      tree_ens f cf (vpl_sels_f pre sl0) x (vpl_sels_f (itm x) sl1) ==>
-                      tree_req (g x) (cg x) (vpl_sels_f (itm x) sl1)))
-  = assert_norm (tree_req _ (TCbind #a #b #f #g pre itm post cf cg) (vpl_sels_f pre sl0) == (
-      tree_req f cf (vpl_sels_f pre sl0) /\
+      (sl0 : sl_f pre)
+  : Lemma (requires tree_req _ (TCbind #a #b #f #g pre itm post cf cg) sl0)
+          (ensures  tree_req f cf sl0 /\
+                    (forall (x : a) (sl1 : sl_f (itm x)) .
+                      tree_ens f cf sl0 x sl1 ==> tree_req (g x) (cg x) sl1))
+  = assert_norm (tree_req _ (TCbind #a #b #f #g pre itm post cf cg) sl0 == (
+      tree_req f cf sl0 /\
       (forall (x : a) (sl1 : sl_f (itm x)) .
-         tree_ens f cf (vpl_sels_f pre sl0) x sl1 ==> tree_req (g x) (cg x) sl1)
+         tree_ens f cf sl0 x sl1 ==> tree_req (g x) (cg x) sl1)
     ))
 
 let intro_tree_ens_bind (#a #b : Type) (f : prog_tree a) (g : a -> prog_tree b)
       (#pre : pre_t) (#post : post_t b) (#itm : post_t a)
       (cf  : tree_cond f pre itm) (cg : (x:a) -> tree_cond (g x) (itm x) post)
-      (sl0 : t_of (vprop_of_list pre)) (x : a) (sl1 : t_of (vprop_of_list (itm x)))
+      (sl0 : sl_f pre) (x : a) (sl1 : sl_f (itm x))
       (y : b) (sl2 : t_of (vprop_of_list (post y)))
-  : Lemma (requires tree_req f cf (vpl_sels_f pre sl0) /\
-                    tree_ens f cf (vpl_sels_f pre sl0) x (vpl_sels_f (itm x) sl1) /\
-                    tree_ens (g x) (cg x) (vpl_sels_f (itm x) sl1) y (vpl_sels_f (post y) sl2))
-          (ensures  tree_ens _ (TCbind #a #b #f #g pre itm post cf cg)
-                             (vpl_sels_f pre sl0) y (vpl_sels_f (post y) sl2))
-  = assert_norm (tree_ens _ (TCbind #a #b #f #g pre itm post cf cg)
-                          (vpl_sels_f pre sl0) y (vpl_sels_f (post y) sl2) == (
+  : Lemma (requires tree_req f cf sl0 /\
+                    tree_ens f cf sl0 x sl1 /\
+                    tree_ens (g x) (cg x) sl1 y sl2)
+          (ensures  tree_ens _ (TCbind #a #b #f #g pre itm post cf cg) sl0 y sl2)
+  = assert_norm (tree_ens _ (TCbind #a #b #f #g pre itm post cf cg) sl0 y sl2 == (
         (exists (x : a) (sl1 : sl_f (itm x)) .
-          tree_ens f cf (vpl_sels_f pre sl0) x sl1 /\
-          tree_ens (g x) (cg x) sl1 y (vpl_sels_f (post y) sl2))
+          tree_ens f cf sl0 x sl1 /\
+          tree_ens (g x) (cg x) sl1 y sl2)
     ))
 
 [@@FStar.Tactics.(postprocess_with (fun () -> norm __postprocess_steps; trefl ()))]
@@ -446,8 +442,8 @@ let ghost_to_steel_steel_ct_aux (a : Type) (t : prog_tree a) (pre : pre_t) (post
       ($r : repr_steel_t (SH.KGhost Set.empty) a pre post (tree_req t c) (tree_ens t c))
   : SteelGhost (Ghost.erased a) Set.empty
              (vprop_of_list pre) (fun x -> vprop_of_list (post (Ghost.reveal x)))
-             (fun h0 -> tree_req t c (sel pre h0))
-             (fun h0 x h1 -> tree_ens t c (sel pre h0) (Ghost.reveal x) (sel (post (Ghost.reveal x)) h1))
+             (fun h0 -> tree_req t c (sel_f pre h0))
+             (fun h0 x h1 -> tree_ens t c (sel_f pre h0) (Ghost.reveal x) (sel_f (post (Ghost.reveal x)) h1))
   = let x = SH.ghost_u r () in Ghost.hide x
 
 inline_for_extraction noextract

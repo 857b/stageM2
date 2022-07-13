@@ -148,9 +148,9 @@ let steel_read #a (r : ref a) () :
                          let sl_ro1 = Vpl.sel_f [vptr' r full_perm] h1 in
                          sl_ro1 == sl_ro0 /\ x == sl_ro0 0)
   =
-    (**) change_equal_slprop (Vpl.vprop_of_list [vptr' r full_perm]) (vptr r `star` emp);
+    (**) Vpl.elim_vpl_cons (vptr' r full_perm) [];
     let x = read r in
-    (**) change_equal_slprop (vptr r `star` emp) (Vpl.vprop_of_list [vptr' r full_perm]);
+    (**) Vpl.intro_vpl_cons (vptr' r full_perm) [];
     Steel.Effect.Atomic.return x
 
 [@@ __test__; __reduce__]
@@ -162,12 +162,13 @@ let r_read (#a : Type0) (r : ref a) : M.repr SH.KSteel a =
 inline_for_extraction
 let steel_write #a (r : ref a) (x : a) ()
   : Steel unit (Vpl.vprop_of_list [vptr' r full_perm] `star` Vpl.vprop_of_list [])
-               (fun _ -> Vpl.vprop_of_list [vptr' r full_perm] `star` Vpl.vprop_of_list [])
-               (requires fun _ -> True) (ensures fun h0 () h1 -> x == Vpl.sel_f [vptr' r full_perm] h1 0)
+      (fun _ -> Vpl.vprop_of_list [vptr' r full_perm] `star` Vpl.vprop_of_list [])
+      (requires fun _ -> True)
+      (ensures fun h0 () h1 -> x == Vpl.sel_f [vptr' r full_perm] h1 0 /\ Vpl.sel_f [] h1 == Vpl.sel_f [] h0)
   =
-    (**) change_equal_slprop (Vpl.vprop_of_list [vptr' r full_perm]) (vptr r `star` emp);
+    (**) Vpl.elim_vpl_cons (vptr' r full_perm) [];
     write r x;
-    (**) change_equal_slprop (vptr r `star` emp) (Vpl.vprop_of_list [vptr' r full_perm])
+    (**) Vpl.intro_vpl_cons (vptr' r full_perm) []
 
 [@@ __test__; __reduce__]
 inline_for_extraction
@@ -313,20 +314,6 @@ let test3_steel (r0 r1 : ref U32.t)
   assert (U.print_util (test3_steel r0 r1))
     by T.(norm [delta_qualifier ["inline_for_extraction"]];
           fail "print")*)
-
-
-
-// The SMT query still contains some references to test3_mem, Vpl.vprop_list_sels_t...
-// and an application of Dl.initi_g that is not reduced
-#push-options "--ifuel 0"
-let test3_steel_caller (r0 r1 : ref U32.t)
-  : Steel U32.t (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
-      (requires fun h0 -> sel r0 h0 == 5ul)
-      (ensures fun h0 x h1 -> x == 6ul)
-  =
-    call_repr_steel (test3_steel r0 r1);
-    read r1
-#pop-options
 
 // This only generates 1 SMT query: the WP
 inline_for_extraction

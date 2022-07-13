@@ -33,7 +33,7 @@ type repr_steel_t (ek : SH.effect_kind) (a : Type)
        (req : req_t pre) (ens : ens_t pre a post)
   = SH.steel a
       (vprop_of_list pre) (fun x -> vprop_of_list (post x))
-      (requires fun h0 -> req (sel pre h0)) (ensures fun h0 x h1 -> ens (sel pre h0) x (sel_f (post x) h1))
+      (requires fun h0 -> req (sel_f pre h0)) (ensures fun h0 x h1 -> ens (sel_f pre h0) x (sel_f (post x) h1))
       ek
 
 // FIXME: this definition fails when loaded as a dependency but not when lax-checked
@@ -49,11 +49,11 @@ let repr_steel_subcomp
       (r : repr_steel_t SH.KSteel a pre post req_f ens_f)
   : repr_steel_t SH.KSteel a pre post req_g ens_g
   = SH.steel_f (fun () ->
-      (**) let sl0 : Ghost.erased (t_of (vprop_of_list pre)) = gget (vprop_of_list pre) in
-      (**) pf_req (vpl_sels_f pre sl0);
+      (**) let sl0 = gget_f pre in
+      (**) pf_req (sl0);
       let x = SH.steel_u r () in
-      (**) let sl1 : Ghost.erased (t_of (vprop_of_list (post x))) = gget (vprop_of_list (post x)) in
-      (**) pf_ens (vpl_sels_f pre sl0) x (vpl_sels_f (post x) sl1);
+      (**) let sl1 = gget_f (post x) in
+      (**) pf_ens sl0 x sl1;
       Steel.Effect.Atomic.return x)
 
 (*// This fail, seemingly because of the expansion of the memories when checking the post
@@ -75,21 +75,14 @@ type to_repr_t (a : Type) (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t 
   r_ens  : ens_t r_pre a r_post;
   r_pre_eq  : unit -> Lemma (pre `equiv` vprop_of_list r_pre);
   r_post_eq : (x : a) -> Lemma (post x `equiv` vprop_of_list (r_post x));
-  r_req_eq  : (h0 : rmem pre) -> Lemma (req h0 ==
-                  r_req (sel r_pre (
-                          r_pre_eq ();
-                          equiv_can_be_split pre (vprop_of_list r_pre);
-                          focus_rmem h0 (vprop_of_list r_pre))));
-  r_ens_eq  : (h0 : rmem pre) -> (x : a) -> (h1 : rmem (post x)) -> Lemma (ens h0 x h1 ==
-                  r_ens (sel r_pre (
-                          r_pre_eq ();
-                          equiv_can_be_split pre (vprop_of_list r_pre);
-                          focus_rmem h0 (vprop_of_list r_pre)))
-                        x
-                        (sel (r_post x) (
-                          r_post_eq x;
-                          equiv_can_be_split (post x) (vprop_of_list (r_post x));
-                          focus_rmem h1 (vprop_of_list (r_post x)))))
+  r_req_eq  : (h0 : hmem pre) -> Lemma (
+                  (**) r_pre_eq (); reveal_equiv pre (vprop_of_list r_pre);
+                  req (mk_rmem pre h0) == r_req (vprop_of_list_sel r_pre h0));
+  r_ens_eq  : (h0 : hmem pre) -> (x : a) -> (h1 : hmem (post x)) -> Lemma (
+                  (**) r_pre_eq (); reveal_equiv pre (vprop_of_list r_pre);
+                  (**) r_post_eq x; reveal_equiv (post x) (vprop_of_list (r_post x));
+                  ens (mk_rmem pre h0) x (mk_rmem (post x) h1)
+                  == r_ens (vprop_of_list_sel r_pre h0) x (vprop_of_list_sel (r_post x) h1))
 }
 
 inline_for_extraction noextract

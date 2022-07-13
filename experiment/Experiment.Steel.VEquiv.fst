@@ -117,17 +117,17 @@ let vequiv_cons_typ (hd : Type) (#pre #post : Fl.ty_list) (e : veq_eq_t_list (le
         assert (index post (i-1) == index pre j)
       end
 
-#push-options "--ifuel 0 --z3rlimit 10"
+#push-options "--ifuel 0 --z3rlimit 20"
 let vequiv_cons_g (hd : vprop') (#pre #post : vprop_list) (e : vequiv pre post) (opened : Mem.inames)
   =
-    steel_elim_vprop_of_list_cons_f hd pre;
+    elim_vpl_cons hd pre;
     let x = gget' hd in
     let sl_pre = gget_f pre in
     Fl.tail_cons (Ghost.reveal x) sl_pre;
     e.veq_g opened;
     let sl_post = gget_f post in
     Fl.tail_cons (Ghost.reveal x) sl_post;
-    steel_intro_vprop_of_list_cons_f hd post
+    intro_vpl_cons hd post
 #pop-options
 
 
@@ -195,7 +195,7 @@ let vequiv_app_g
       (#pre1 #post1 : vprop_list) (e1 : vequiv pre1 post1)
       (opened : Mem.inames)
   =
-    steel_elim_vprop_of_list_append_f pre0 pre1;
+    elim_vpl_append pre0 pre1;
     let sl0_0 = gget_f pre0  in
     let sl0_1 = gget_f pre1  in
     Fl.append_splitAt_ty (vprop_list_sels_t pre0) (vprop_list_sels_t pre1) sl0_0 sl0_1;
@@ -204,7 +204,7 @@ let vequiv_app_g
     let sl1_0 = gget_f post0 in
     let sl1_1 = gget_f post1 in
     Fl.append_splitAt_ty (vprop_list_sels_t post0) (vprop_list_sels_t post1) sl1_0 sl1_1;
-    steel_intro_vprop_of_list_append_f post0 post1;
+    intro_vpl_append post0 post1;
 
     vequiv_app_sl_eq
       #(vprop_list_sels_t pre0) #(vprop_list_sels_t post0) (U.cast _ e0.veq_eq)
@@ -232,7 +232,7 @@ let vequiv_of_perm_sel_eq
            Fl.flist_extensionality sl1 (extract_vars f sl0) (fun i -> ())
        and ()
 
-let vequiv_of_perm_g #pre #post f opened = steel_change_perm f
+let vequiv_of_perm_g #pre #post f opened = change_vpl_perm f
 #pop-options
 
 
@@ -349,60 +349,71 @@ let vequiv_inj_typ
       end
 #pop-options
 
-#push-options "--ifuel 1 --fuel 1 --z3rlimit 200"
+#push-options "--ifuel 0 --fuel 0 --z3rlimit 30"
 let vequiv_inj_g_lemma #src #trg ij e'
       (sl0 : sl_f trg) (sl1 : sl_f src)
-  : Lemma (requires filter_mask_fl (mask_not (ij_src_mask ij)) _ sl1
-                      == extract_vars (ij_matched_equiv ij) (filter_mask_fl (mask_not (ij_trg_mask ij)) _ sl0) /\
-                    veq_sel_eq (veq_eq_sl (veq_f e')) (filter_mask_fl (ij_trg_mask ij) _ sl0)
-                                                            (filter_mask_fl (ij_src_mask ij) _ sl1))
+  : Lemma (requires filter_sl (mask_not (ij_src_mask ij)) sl1
+                      == extract_vars (ij_matched_equiv ij) (filter_sl (mask_not (ij_trg_mask ij)) sl0) /\
+                    veq_sel_eq (veq_eq_sl (veq_f e')) (filter_sl (ij_trg_mask ij) sl0)
+                                                      (filter_sl (ij_src_mask ij) sl1))
           (ensures  veq_sel_eq (veq_eq_sl (veq_of_list (vequiv_inj_eq #src #trg ij e'))) sl0 sl1)
   =
-    let mask_src = ij_src_mask ij                  in
-    let mask_trg = ij_trg_mask ij                  in
-    let f_eq = veq_of_list (vequiv_inj_eq ij e') in
+    let mask_src = ij_src_mask ij                    in
+    let mask_trg = ij_trg_mask ij                    in
+    let f_eq     = veq_of_list (vequiv_inj_eq ij e') in
+    let sl0_nm   = filter_sl (mask_not mask_trg) sl0 in        
+    let sl1_m    = filter_sl           mask_src  sl1 in
+    let sl1_nm   = filter_sl (mask_not mask_src) sl1 in
     introduce forall (i0 : Fin.fin (length src) {Some? (f_eq i0)}) .
               sl1 i0 === sl0 (Some?.v (f_eq i0))
     with begin
       if index mask_src i0
       then begin
-        let i1 = mask_push mask_src i0  in
-        let j1 = Some?.v (veq_f e' i1) in
-        let j0 = mask_pull mask_trg j1  in
-        assert (f_eq i0 == Some (j0 <: Fin.fin (length trg)));
-        assert (sl1 i0 === filter_mask_fl (ij_src_mask ij) _ sl1 i1);
-        assert (filter_mask_fl (ij_src_mask ij) _ sl1 i1 === filter_mask_fl (ij_trg_mask ij) _ sl0 j1);
-        assert (filter_mask_fl (ij_trg_mask ij) _ sl0 j1 === sl0 j0)
+        let i1 = mask_push mask_src i0 in
+        let Some j1 = veq_f e' i1      in
+        let j0 = mask_pull mask_trg j1 in
+        calc (==) {
+          (|_, sl1 i0|) <: t:Type&t;
+        == { }
+          (|_, sl1_m i1|);
+        == { }
+          (|_, filter_sl (ij_trg_mask ij) sl0 j1|);
+        == { }
+          (|_, sl0 j0|);
+        }
       end else begin
         assert (f_eq i0 == index ij i0);
-        let sl0' = filter_mask_fl (mask_not mask_trg) _ sl0 in
-        let j0 = Some?.v (index ij i0) in
+        let Some j0 = index ij i0 in
         (**) lemma_index_memP ij i0;
         let i1 = mask_push (mask_not mask_src) i0 in
         let j1 = mask_push (mask_not mask_trg) j0 in
-        assert (sl1 i0 === filter_mask_fl (mask_not mask_src) _ sl1 i1);
-        assert (filter_mask_fl (mask_not mask_src) _ sl1 i1 == extract_vars (ij_matched_equiv ij) sl0' i1);
-        assert (extract_vars (ij_matched_equiv ij) sl0' i1 === sl0' (ij_matched_equiv ij i1));
-        assert (ij_matched_equiv ij i1 == j1);
-        assert (sl0' j1 === sl0 j0)
+        calc (==) {
+          (|_, sl1 i0|) <: t:Type&t;
+        == { }
+          (|_, sl1_nm i1|);
+        == { }
+          (|_, extract_vars (ij_matched_equiv ij) sl0_nm i1|);
+        == { }
+          (|_, sl0_nm (ij_matched_equiv ij i1)|);
+        == { assert (ij_matched_equiv ij i1 == j1) }
+          (|_, sl0_nm j1|);
+        == { }
+          (|_, sl0 j0|);
+        }
       end
     end
 #pop-options
 
-#push-options "--ifuel 0 --fuel 1"
+#push-options "--ifuel 0 --fuel 0 --z3rlimit 20"
 let vequiv_inj_g #src #trg ij e' opened
   =
-    (**) let sl0 = gget (vprop_of_list trg) in
-    intro_filter_mask trg (ij_trg_mask ij);
-    (**) filter_mask_f_dl_f (ij_trg_mask ij) _ (vpl_sels_f _ sl0);
-    (**) filter_mask_f_dl_f (mask_not (ij_trg_mask ij)) _ (vpl_sels_f _ sl0);
+    (**) let sl0 = gget_f trg     in
+    intro_vpl_filter_mask trg (ij_trg_mask ij);
     e'.veq_g opened;
-    steel_change_perm (ij_matched_equiv ij);
-    elim_filter_mask src (ij_src_mask ij);
-    (**) let sl1 = gget (vprop_of_list src) in
-    (**) filter_mask_f_dl_f (ij_src_mask ij) _ (vpl_sels_f _ sl1);
-    (**) filter_mask_f_dl_f (mask_not (ij_src_mask ij)) _ (vpl_sels_f _ sl1);
-    (**) vequiv_inj_g_lemma ij e' (vpl_sels_f trg sl0) (vpl_sels_f src sl1)
+    change_vpl_perm (ij_matched_equiv ij);
+    elim_vpl_filter_mask src (ij_src_mask ij);
+    (**) let sl1 = gget_f src     in
+    (**) vequiv_inj_g_lemma ij e' sl0 sl1
 #pop-options
 
 

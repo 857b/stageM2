@@ -11,6 +11,7 @@ module Msk  = Learn.List.Mask
 module Fin  = FStar.Fin
 module Opt  = Learn.Option
 module Veq  = Experiment.Steel.VEquiv
+module Mem  = Steel.Memory
 module Perm = Learn.Permutation
 
 open Experiment.Steel.VPropList
@@ -217,22 +218,20 @@ let __normal_Steel_logical_spec : list norm_step = [
 
 
 val __build_to_repr_t_lem
-      (p : SE.vprop) (r_p : vprop_list {p `SE.equiv` vprop_of_list r_p}) (h : SE.rmem p)
+      (p : SE.vprop) (r_p : vprop_list {p `SE.equiv` vprop_of_list r_p}) (h : SE.hmem p)
       (v : SE.vprop{SE.can_be_split p v}) (_ : squash (SE.VUnit? v))
       (i : elem_index (SE.VUnit?._0 v) r_p)
       (i' : int) (_ : squash (i' == i))
-  : squash (h v ==
-        sel r_p (SE.equiv_can_be_split p (vprop_of_list r_p);
-                   SE.focus_rmem h (vprop_of_list r_p)) i)
+  : squash (SE.reveal_equiv p (vprop_of_list r_p);
+           (SE.mk_rmem p h) v == vprop_of_list_sel r_p h i)
 
 // p : SE.rmem v -> GTot t ?
 let hpred_to_vpl_p
       (v : SE.vprop) (vs : vprop_list {v `SE.equiv` vprop_of_list vs})
       (#t : Type) (p : SE.rmem v -> t) (p' : sl_f vs -> t)
   : prop
-  = forall (h : SE.rmem v) .
-        p' (sel vs (SE.equiv_can_be_split v (vprop_of_list vs); SE.focus_rmem h (vprop_of_list vs)))
-          == p h
+  = forall (h : SE.hmem v) .
+        p' (vprop_of_list_sel vs (SE.reveal_equiv v (vprop_of_list vs); h)) == p (SE.mk_rmem v h)
 
 type hpred_to_vpl
       (v : SE.vprop) (vs : vprop_list {v `SE.equiv` vprop_of_list vs})
@@ -252,15 +251,11 @@ let __build_hpred_to_vpl
                squash (p' sl == p h))
   : hpred_to_vpl v vs p
   =
-    let lem (h : SE.rmem v) : Lemma
-      (p' (sel vs (SE.equiv_can_be_split v (vprop_of_list vs);
-                   SE.focus_rmem h (vprop_of_list vs)))
-        == p h)
-      [SMTPat (p h)]
-      =
-        SE.equiv_can_be_split v (vprop_of_list vs);
-        let h_r = SE.focus_rmem h (vprop_of_list vs) in
-        p'_eq h (sel vs h_r) (__build_to_repr_t_lem v vs h)
+    SE.reveal_equiv v (vprop_of_list vs);
+    let lem (h : SE.hmem v) : Lemma
+      (p' (vprop_of_list_sel vs h) == p (SE.mk_rmem v h))
+      [SMTPat (p (SE.mk_rmem v h))]
+      = p'_eq (SE.mk_rmem v h) (vprop_of_list_sel vs h) (__build_to_repr_t_lem v vs h)
     in
     p'
 
@@ -300,32 +295,37 @@ let __build_to_repr_t
   : M.to_repr_t a pre post req ens
   = 
     let r_pre_eq () : Lemma (pre `SE.equiv` vprop_of_list r_pre)
-      = pre_eq;
+      =
+        pre_eq;
+        vprop_of_list_equiv r_pre;
         vprop_equiv_flat pre e_pre;
-        SE.equiv_sym (vprop_of_list r_pre) pre in
+        SE.equiv_trans (vprop_of_list r_pre) (vprop_of_list' r_pre) pre;
+        SE.equiv_sym (vprop_of_list r_pre) pre
+    in
     let r_post_eq (x : a) : Lemma (post x `SE.equiv` vprop_of_list (r_post x))
-      = post_eq x;
+      =
+        post_eq x;
+        vprop_of_list_equiv (r_post x);
         vprop_equiv_flat (post x) (e_post x);
+        SE.equiv_trans (vprop_of_list (r_post x)) (vprop_of_list' (r_post x)) (post x);
         SE.equiv_sym (vprop_of_list (r_post x)) (post x)
     in
     {
     r_pre; r_post; r_req; r_ens;
     r_pre_eq  = (fun () -> r_pre_eq (); ());
     r_post_eq = (fun x -> r_post_eq x; ());
-    r_req_eq  = (fun (h0 : SE.rmem pre) ->
+    r_req_eq  = (fun (h0 : SE.hmem pre) ->
                    r_pre_eq ();
-                   SE.equiv_can_be_split pre (vprop_of_list r_pre);
-                   let h0_r = SE.focus_rmem h0 (vprop_of_list r_pre) in
-                   r_req_eq h0 (sel r_pre h0_r)
+                   SE.reveal_equiv pre (vprop_of_list r_pre);
+                   r_req_eq (SE.mk_rmem pre h0) (vprop_of_list_sel r_pre h0)
                             (__build_to_repr_t_lem pre r_pre h0));
-    r_ens_eq  = (fun (h0 : SE.rmem pre) (x : a) (h1 : SE.rmem (post x)) ->
+    r_ens_eq  = (fun (h0 : SE.hmem pre) (x : a) (h1 : SE.hmem (post x)) ->
                    r_pre_eq ();
-                   SE.equiv_can_be_split pre (vprop_of_list r_pre);
-                   let h0_r = SE.focus_rmem h0 (vprop_of_list r_pre) in
+                   SE.reveal_equiv pre (vprop_of_list r_pre);
                    r_post_eq x;
-                   SE.equiv_can_be_split (post x) (vprop_of_list (r_post x));
-                   let h1_r = SE.focus_rmem h1 (vprop_of_list (r_post x)) in
-                   r_ens_eq h0 (sel r_pre h0_r) x h1 (sel (r_post x) h1_r)
+                   SE.reveal_equiv (post x) (vprop_of_list (r_post x));
+                   r_ens_eq (SE.mk_rmem pre h0) (vprop_of_list_sel r_pre h0) x
+                            (SE.mk_rmem (post x) h1) (vprop_of_list_sel (r_post x) h1)
                             (__build_to_repr_t_lem pre r_pre h0)
                             (__build_to_repr_t_lem (post x) (r_post x) h1))
   }

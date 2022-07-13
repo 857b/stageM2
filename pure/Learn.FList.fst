@@ -89,6 +89,10 @@ let fdf_id (#ts : ty_list) (f : flist ts)
           [SMTPat (flist_of_d (dlist_of_f f))]
   = flist_extensionality (flist_of_d (dlist_of_f f)) f (fun i -> ())
 
+let dlist_of_f_cons (#t : Type) (x : t) (#ts : ty_list) (xs : flist ts)
+  : Lemma (dlist_of_f (cons x xs) == Dl.DCons t x ts (dlist_of_f xs))
+  = Dl.dlist_extensionality (dlist_of_f (cons x xs)) (Dl.DCons t x ts (dlist_of_f xs)) (fun i -> ())
+
 
 let flist_eq2 (#ts : ty_list) (f g : flist ts) : prop
   = Dl.dlist_eq2 (dlist_of_f f) (dlist_of_f g)

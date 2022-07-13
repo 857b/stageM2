@@ -295,15 +295,15 @@ let with_invariant_g_steel
       (fun x -> vprop_of_list (post x) `star` vprop_of_list ro)
       i (vprop_of_list p') ()
       (fun sl_p0 sl0 ->
-        req (append_vars (vpl_sels_f p' sl_p0) (vpl_sels_f pre sl0._1)) (vpl_sels_f ro sl0._2))
+        req (append_vars sl_p0 sl0._1) sl0._2)
       (fun sl_p0 sl0 x sl_p1 sl1 ->
-        ens (append_vars (vpl_sels_f p' sl_p0) (vpl_sels_f pre sl0._1)) x
-            (append_vars (vpl_sels_f p' sl_p1) (vpl_sels_f (post x) sl1._1)) (vpl_sels_f ro sl0._2) /\
-        vpl_sels_f ro sl1._2 == vpl_sels_f ro sl0._2)
+        ens (append_vars sl_p0 sl0._1) x
+            (append_vars sl_p1 sl1._1) sl0._2 /\
+        sl1._2 == sl0._2)
     begin fun () ->
-      (**) steel_intro_vprop_of_list_append_f p' pre;
+      (**) intro_vpl_append p' pre;
       let x = SH.ghost_u inner () in
-      (**) steel_elim_vprop_of_list_append_f p' (post x);
+      (**) elim_vpl_append p' (post x);
       x
     end
   )
@@ -795,7 +795,7 @@ let for_loop_steel
     assert (for_loop_preserve finish inv invp ro req ens ro0);
     for_loop_sl start finish
       (fun i -> vprop_of_list (inv i) `star` vprop_of_list ro)
-      (fun i sl -> invp i (vpl_sels_f (inv i) sl._1) /\ vpl_sels_f ro sl._2 == Ghost.reveal ro0)
+      (fun i sl -> invp i sl._1 /\ sl._2 == Ghost.reveal ro0)
     begin fun i ->
       (**) let sl_i  = gget_f (inv (U32.v i)) in
       (**) let ro1   = gget_f ro              in

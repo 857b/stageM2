@@ -9,10 +9,6 @@ open Steel.Effect
 open Steel.Effect.Atomic
 
 
-val rmem_star_eq (#p : vprop) (v0 v1 : vprop) (h : rmem p{can_be_split p (VStar v0 v1)})
-  : Lemma (can_be_split p v0 /\ can_be_split p v1 /\
-           h (VStar v0 v1) == (h v0, h v1))
-
 val focus_rmem_feq (p q r : vprop) (h : rmem p)
   : Lemma (requires can_be_split p q /\ can_be_split q r)
           (ensures  can_be_split p r /\ focus_rmem h q r == h r)
@@ -20,6 +16,10 @@ val focus_rmem_feq (p q r : vprop) (h : rmem p)
 val focus_rmem_trans (p q r : vprop) (h : rmem p)
   : Lemma (requires can_be_split p q /\ can_be_split q r)
           (ensures  can_be_split p r /\ focus_rmem (focus_rmem h q) r == focus_rmem h r)
+
+val focus_rmem_mkrmem (p q : vprop) (h : hmem p)
+  : Lemma (requires can_be_split p q)
+          (ensures  Mem.interp (hp_of q) h /\ focus_rmem (mk_rmem p h) q == mk_rmem q h)
 
 
 (* This does not seems provable from the interface of Steel.Effect
@@ -38,11 +38,11 @@ let subcomp_no_frame_pre
       (eq_post : (x : a) -> squash (equiv (post_g x) (post_f x)))
   : prop
   =
-    forall (h0 : rmem pre_g) . (
+    forall (h0 : hmem pre_g) . (let h0 = mk_rmem pre_g h0 in
      (**) equiv_can_be_split pre_g pre_f; (
      req_g h0 ==>
       (req_f (focus_rmem h0 pre_f) /\
-      (forall (x : a) (h1 : rmem (post_g x)) . (
+      (forall (x : a) (h1 : hmem (post_g x)) . (let h1 = mk_rmem (post_g x) h1 in
         (**) eq_post x; equiv_can_be_split (post_g x) (post_f x); (
         ens_f (focus_rmem h0 pre_f) x (focus_rmem h1 (post_f x)) ==>
         ens_g h0 x h1))))))
@@ -53,15 +53,17 @@ val intro_subcomp_no_frame_pre
       (#pre_g:pre_t) (#post_g:post_t a) (req_g:req_t pre_g) (ens_g:ens_t pre_g a post_g)
       (eq_pre  : squash (equiv pre_g pre_f))
       (eq_post : (x : a) -> squash (equiv (post_g x) (post_f x)))
-      (s_pre :  (h0 : rmem pre_g) -> Lemma
+      (s_pre :  (h0 : hmem pre_g) -> Lemma
          (requires can_be_split pre_g pre_f /\
-                   req_g h0)
-         (ensures  req_f (focus_rmem h0 pre_f)))
-      (s_post : (h0 : rmem pre_g) -> (x : a) -> (h1 : rmem (post_g x)) -> Lemma
+                   Mem.interp (hp_of pre_f) h0 /\
+                   req_g (mk_rmem pre_g h0))
+         (ensures  req_f (mk_rmem pre_f h0)))
+      (s_post : (h0 : hmem pre_g) -> (x : a) -> (h1 : hmem (post_g x)) -> Lemma
          (requires can_be_split pre_g pre_f /\ can_be_split (post_g x) (post_f x) /\
-                   req_g h0 /\ req_f (focus_rmem h0 pre_f) /\
-                   ens_f (focus_rmem h0 pre_f) x (focus_rmem h1 (post_f x)))
-         (ensures  ens_g h0 x h1))
+                   Mem.interp (hp_of pre_f) h0 /\ Mem.interp (hp_of (post_f x)) h1 /\
+                   req_g (mk_rmem pre_g h0) /\ req_f (mk_rmem pre_f h0) /\
+                   ens_f (mk_rmem pre_f h0) x (mk_rmem (post_f x) h1))
+         (ensures  ens_g (mk_rmem pre_g h0) x (mk_rmem (post_g x) h1)))
   : squash (subcomp_no_frame_pre req_f ens_f req_g ens_g eq_pre eq_post)
 
 inline_for_extraction noextract

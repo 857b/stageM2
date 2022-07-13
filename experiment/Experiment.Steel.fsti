@@ -200,14 +200,14 @@ let __normal_Fun_spec : list norm_step = [
               `%SF2Fun.Mksl_tys_t?.val_t; `%SF2Fun.Mksl_tys_t?.sel_t;
               `%SF2Fun.Mksl_tys_v?.val_v; `%SF2Fun.Mksl_tys_v?.sel_v;
               `%SF2Fun.Mksl_tys_r?.vl;    `%SF2Fun.Mksl_tys_r?.sl;
-              `%Vpl.vprop_of_list; `%Vpl.vprop_of_list'; `%Vpl.vpl_sels];
+              `%Vpl.vprop_of_list; `%Vpl.vprop_of_list'];
   delta_qualifier ["unfold"];
   delta_attr [`%SE.__steel_reduce__; `%Msk.__mask__];
   iota; zeta; primops
 ]
 
 let __normal_vprop_list : list norm_step = [
-  delta_only [`%Vpl.vprop_of_list; `%Vpl.vprop_list_sels_t; `%Vpl.sel_f'; `%Vpl.sel';
+  delta_only [`%Vpl.vprop_of_list; `%Vpl.vprop_list_sels_t;
               `%Fl.flist_of_g; `%Fl.dlist_of_f_g; `%Fl.flist_of_d;
               `%Dl.index; `%Dl.initi_g;
               `%L.length; `%L.index; `%L.map; `%L.hd; `%L.tl; `%L.tail];
@@ -219,21 +219,6 @@ let __normal_extract : list norm_step = [
   delta_qualifier ["inline_for_extraction"; "unfold"];
   iota; zeta; primops
 ]
-
-(***** Calling a [M.repr_steel_t] from a Steel program *)
-
-unfold
-let norm_vpl (#a : Type) (x : a) = Pervasives.norm __normal_vprop_list x
-
-inline_for_extraction
-val call_repr_steel
-      (#a : Type)
-      (#pre : M.pre_t)     (#post : M.post_t a)
-      (#req : M.req_t pre) (#ens  : M.ens_t pre a post)
-      (r : M.repr_steel_t SH.KSteel a pre post req ens)
-  : SE.Steel a (Vpl.vprop_of_list' pre) (fun x -> Vpl.vprop_of_list' (post x))
-      (requires fun h0      -> norm_vpl (req (Vpl.sel_f' pre h0)))
-      (ensures  fun h0 x h1 -> norm_vpl (ens (Vpl.sel_f' pre h0) x (Vpl.sel_f' (post x) h1)))
 
 
 (***** Extracting a [M.repr_steel_t] from a [M.repr] *)

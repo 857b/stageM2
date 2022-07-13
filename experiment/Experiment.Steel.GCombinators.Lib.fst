@@ -50,7 +50,7 @@ let make_combinator_steel
   =
     SH.steel_f (fun () ->
       pre_eq.veq_g _;
-      (**) steel_elim_vprop_of_list_append_f s.spc_pre s.spc_ro;
+      (**) elim_vpl_append s.spc_pre s.spc_ro;
       (**) let sl0'  = gget_f s.spc_pre in
       (**) let sl_ro = gget_f s.spc_ro in     
       (**) assert (s.spc_req sl0' sl_ro);
@@ -59,7 +59,7 @@ let make_combinator_steel
       (**) let sl_ro' = gget_f s.spc_ro       in
       (**) assert (sl_ro' == sl_ro);
       (**) assert (s.spc_ens sl0' x sl1' sl_ro);
-      (**) steel_intro_vprop_of_list_append_f (s.spc_post x) s.spc_ro;
+      (**) intro_vpl_append (s.spc_post x) s.spc_ro;
       (post_eq x).veq_g _;
       SA.return x
     )
@@ -73,7 +73,7 @@ let make_combinator_steel_atomic
   =
     SH.atomic_f #opened (fun () ->
       pre_eq.veq_g _;
-      (**) steel_elim_vprop_of_list_append_f s.spc_pre s.spc_ro;
+      (**) elim_vpl_append s.spc_pre s.spc_ro;
       (**) let sl0'  = gget_f s.spc_pre in
       (**) let sl_ro = gget_f s.spc_ro in     
       (**) assert (s.spc_req sl0' sl_ro);
@@ -82,7 +82,7 @@ let make_combinator_steel_atomic
       (**) let sl_ro' = gget_f s.spc_ro       in
       (**) assert (sl_ro' == sl_ro);
       (**) assert (s.spc_ens sl0' x sl1' sl_ro);
-      (**) steel_intro_vprop_of_list_append_f (s.spc_post x) s.spc_ro;
+      (**) intro_vpl_append (s.spc_post x) s.spc_ro;
       (post_eq x).veq_g _;
       SA.return x
     )
@@ -96,7 +96,7 @@ let make_combinator_steel_ghost
   =
     SH.ghost_f #opened (fun () ->
       pre_eq.veq_g _;
-      (**) steel_elim_vprop_of_list_append_f s.spc_pre s.spc_ro;
+      (**) elim_vpl_append s.spc_pre s.spc_ro;
       (**) let sl0'  = gget_f s.spc_pre in
       (**) let sl_ro = gget_f s.spc_ro in     
       (**) assert (s.spc_req sl0' sl_ro);
@@ -105,7 +105,7 @@ let make_combinator_steel_ghost
       (**) let sl_ro' = gget_f s.spc_ro       in
       (**) assert (sl_ro' == sl_ro);
       (**) assert (s.spc_ens sl0' x sl1' sl_ro);
-      (**) steel_intro_vprop_of_list_append_f (s.spc_post x) s.spc_ro;
+      (**) intro_vpl_append (s.spc_post x) s.spc_ro;
       (post_eq x).veq_g _;
       x
     )
@@ -283,11 +283,11 @@ let lc_to_spc_steel_t__steel
     SH.steel_f (fun () ->
       (**) let sl0    = gget_f (lc_pre lc)    in
       (**) let sl_ro0 = gget_f (lc_ro  lc)    in
-      elim_filter_mask_append env csm;
+      elim_vpl_filter_mask_append env csm;
       (**) let sl0'   = gget_f env            in
       let x = SH.steel_u sf () in
       (**) let sl1'   = gget_f L.(lc_post lc x @ lc_ro lc) in
-      steel_elim_vprop_of_list_append_f (lc_post lc x) (lc_ro lc);
+      elim_vpl_append (lc_post lc x) (lc_ro lc);
       (**) let sl1    = gget_f (lc_post lc x) in
       (**) let sl_ro1 = gget_f (lc_ro   lc)   in
       (**) assert (Ghost.reveal sl1' == LV2M.res_env_app sl1 sl_ro1);
@@ -310,11 +310,11 @@ let lc_to_spc_steel_t__atomic
     SH.atomic_f #opened (fun () ->
       (**) let sl0    = gget_f (lc_pre lc)    in
       (**) let sl_ro0 = gget_f (lc_ro  lc)    in
-      elim_filter_mask_append env csm;
+      elim_vpl_filter_mask_append env csm;
       (**) let sl0'   = gget_f env            in
       let x = SH.atomic_u sf () in
       (**) let sl1'   = gget_f L.(lc_post lc x @ lc_ro lc) in
-      steel_elim_vprop_of_list_append_f (lc_post lc x) (lc_ro lc);
+      elim_vpl_append (lc_post lc x) (lc_ro lc);
       (**) let sl1    = gget_f (lc_post lc x) in
       (**) let sl_ro1 = gget_f (lc_ro   lc)   in
       (**) assert (Ghost.reveal sl1' == LV2M.res_env_app sl1 sl_ro1);
@@ -337,11 +337,11 @@ let lc_to_spc_steel_t__ghost
     SH.ghost_f #opened (fun () ->
       (**) let sl0    = gget_f (lc_pre lc)    in
       (**) let sl_ro0 = gget_f (lc_ro  lc)    in
-      elim_filter_mask_append env csm;
+      elim_vpl_filter_mask_append env csm;
       (**) let sl0'   = gget_f env            in
       let x = SH.ghost_u sf () in
       (**) let sl1'   = gget_f L.(lc_post lc x @ lc_ro lc) in
-      steel_elim_vprop_of_list_append_f (lc_post lc x) (lc_ro lc);
+      elim_vpl_append (lc_post lc x) (lc_ro lc);
       (**) let sl1    = gget_f (lc_post lc x) in
       (**) let sl_ro1 = gget_f (lc_ro   lc)   in
       (**) assert (Ghost.reveal sl1' == LV2M.res_env_app sl1 sl_ro1);

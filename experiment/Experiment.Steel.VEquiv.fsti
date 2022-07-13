@@ -121,9 +121,9 @@ type vequiv (pre post : vprop_list) = {
   veq_g   : (opened : Mem.inames) ->
             SteelGhost unit opened
               (vprop_of_list pre) (fun () -> vprop_of_list post)
-              (requires fun h0 -> veq_req (sel pre h0))
-              (ensures  fun h0 () h1 -> veq_ens (sel pre h0) (sel post h1) /\
-                                     veq_sel_eq (veq_eq_sl (veq_of_list veq_eq)) (sel pre h0) (sel post h1))
+              (requires fun h0 -> veq_req (sel_f pre h0))
+              (ensures  fun h0 () h1 -> veq_ens (sel_f pre h0) (sel_f post h1) /\
+                                     veq_sel_eq (veq_eq_sl (veq_of_list veq_eq)) (sel_f pre h0) (sel_f post h1))
 }
 
 [@@__vequiv__]
@@ -244,9 +244,9 @@ val vequiv_cons_typ (hd : Type) (#pre #post : Fl.ty_list) (e : veq_eq_t_list (L.
 
 val vequiv_cons_g (hd : vprop') (#pre #post : vprop_list) (e : vequiv pre post) (opened : Mem.inames)
   : SteelGhost unit opened (vprop_of_list (hd :: pre)) (fun () -> vprop_of_list (hd :: post))
-      (requires fun h0       -> e.veq_req (Fl.tail #hd.t #(vprop_list_sels_t  pre) (sel (hd :: pre) h0)))
-      (ensures  fun h0 () h1 -> let sl0 = sel (hd :: pre) h0 in
-                             let sl1 = sel (hd :: post) h1 in
+      (requires fun h0       -> e.veq_req (Fl.tail #hd.t #(vprop_list_sels_t  pre) (sel_f (hd :: pre) h0)))
+      (ensures  fun h0 () h1 -> let sl0 = sel_f (hd :: pre) h0 in
+                             let sl1 = sel_f (hd :: post) h1 in
                              e.veq_ens (Fl.tail #hd.t #(vprop_list_sels_t  pre) sl0)
                                        (Fl.tail #hd.t #(vprop_list_sels_t post) sl1) /\
                              veq_sel_eq (U.cast _ (veq_of_list (vequiv_cons_eq e.veq_eq))) sl0 sl1)
@@ -298,10 +298,10 @@ val vequiv_app_g
       (#pre1 #post1 : vprop_list) (e1 : vequiv pre1 post1)
       (opened : Mem.inames)
   : SteelGhost unit opened (vprop_of_list L.(pre0 @ pre1)) (fun () -> vprop_of_list L.(post0 @ post1))
-      (requires fun h0       -> let sl0s = split_vars pre0 pre1 (sel L.(pre0 @ pre1) h0) in
+      (requires fun h0       -> let sl0s = split_vars pre0 pre1 (sel_f L.(pre0 @ pre1) h0) in
                              e0.veq_req sl0s._1 /\ e1.veq_req sl0s._2)
-      (ensures  fun h0 () h1 -> let sl0  = sel L.(pre0  @ pre1 ) h0   in
-                             let sl1  = sel L.(post0 @ post1) h1   in
+      (ensures  fun h0 () h1 -> let sl0  = sel_f L.(pre0  @ pre1 ) h0   in
+                             let sl1  = sel_f L.(post0 @ post1) h1   in
                              let sl0s = split_vars pre0  pre1  sl0 in
                              let sl1s = split_vars post0 post1 sl1 in
                              e0.veq_ens sl0s._1 sl1s._1 /\ e1.veq_ens sl0s._2 sl1s._2 /\
@@ -344,7 +344,7 @@ val vequiv_of_perm_sel_eq
 val vequiv_of_perm_g (#pre #post : vprop_list) (f : vequiv_perm pre post) (opened : Mem.inames)
   : SteelGhost unit opened (vprop_of_list pre) (fun () -> vprop_of_list post)
       (requires fun _ -> True)
-      (ensures  fun h0 () h1 -> veq_sel_eq (veq_eq_sl (vequiv_of_perm_eq f)) (sel pre h0) (sel post h1))
+      (ensures  fun h0 () h1 -> veq_sel_eq (veq_eq_sl (vequiv_of_perm_eq f)) (sel_f pre h0) (sel_f post h1))
 
 [@@__vequiv__]
 let vequiv_of_perm (#pre #post : vprop_list) (f : vequiv_perm pre post) : vequiv pre post = {
@@ -476,14 +476,13 @@ val vequiv_inj_g
       (opened : Steel.Memory.inames)
   : Steel.Effect.Atomic.SteelGhost unit opened (vprop_of_list trg) (fun () -> vprop_of_list src)
       (requires fun h0 ->
-                 e'.veq_req (Msk.filter_mask_fl (ij_trg_mask ij) _ (sel trg h0)))
+                 e'.veq_req (filter_sl (ij_trg_mask ij) (sel_f trg h0)))
       (ensures  fun h0 () h1 ->
-                 e'.veq_ens (Msk.filter_mask_fl (ij_trg_mask ij) _ (sel trg h0))
-                            (Msk.filter_mask_fl (ij_src_mask ij) _ (sel src h1)) /\
-                 veq_sel_eq (veq_eq_sl (veq_of_list (vequiv_inj_eq ij e')))
-                                (sel trg h0) (sel src h1))
+                 e'.veq_ens (filter_sl (ij_trg_mask ij) (sel_f trg h0))
+                            (filter_sl (ij_src_mask ij) (sel_f src h1)) /\
+                 veq_sel_eq (veq_eq_sl (veq_of_list (vequiv_inj_eq ij e'))) (sel_f trg h0) (sel_f src h1))
 
-//TODO? [filter_mask_dl] instead of [filter_mask_fl]
+//TODO? [filter_mask_dl] instead of [filter_sl]/[filter_mask_fl]
 [@@ __vequiv__]
 let vequiv_inj
       (src : vprop_list) (trg : vprop_list)
@@ -495,9 +494,9 @@ let vequiv_inj
     let mask_trg = ij_trg_mask ij in
   {
     veq_req = (fun (sl0 : sl_f trg) ->
-                 e'.veq_req (Msk.filter_mask_fl mask_trg _ sl0));
+                 e'.veq_req (filter_sl mask_trg sl0));
     veq_ens = (fun (sl0 : sl_f trg) (sl1 : sl_f src) ->
-                 e'.veq_ens (Msk.filter_mask_fl mask_trg _ sl0) (Msk.filter_mask_fl mask_src _ sl1));
+                 e'.veq_ens (filter_sl mask_trg sl0) (filter_sl mask_src sl1));
     veq_eq  = vequiv_inj_eq  ij e';
     veq_typ = (let _ = vequiv_inj_typ ij e' in ());
     veq_g   = vequiv_inj_g   ij e';

@@ -38,25 +38,24 @@ let rec truth_refl_list_index (#ps : list prop) (#bs : list bool) (rfl : truth_r
 (***** [build_to_repr_t] *)
 
 let __build_to_repr_t_lem
-      (p : SE.vprop) (r_p : vprop_list {p `SE.equiv` vprop_of_list r_p}) (h : SE.rmem p)
+      (p : SE.vprop) (r_p : vprop_list {p `SE.equiv` vprop_of_list r_p}) (h : SE.hmem p)
       (v : SE.vprop{SE.can_be_split p v}) (_ : squash (SE.VUnit? v))
       (i : elem_index (SE.VUnit?._0 v) r_p)
       (i' : int) (_ : squash (i' == i))
-  : squash (h v ==
-        sel r_p (SE.equiv_can_be_split p (vprop_of_list r_p);
-                     SE.focus_rmem h (vprop_of_list r_p)) i)
+  : squash (SE.reveal_equiv p (vprop_of_list r_p);
+           (SE.mk_rmem p h) v == vprop_of_list_sel r_p h i)
   =
-    SE.equiv_can_be_split p (vprop_of_list r_p);
-    let h_r = SE.focus_rmem h (vprop_of_list r_p) in
-    vprop_of_list_can_be_split r_p i;
+    SE.reveal_equiv p (vprop_of_list r_p);
+    can_be_split_interp p v h;
+    let VUnit v' = v in
     calc (==) {
-      sel r_p h_r i;
-    == { sel_eq' }
-      sel_f' r_p h_r i;
+      SE.mk_rmem p h v;
     == { }
-      h_r (SE.VUnit (L.index r_p i));
+      v'.sel h;
     == { }
-      h v;
+      (L.index r_p i).sel h;
+    == { vprop_of_list_sel_eq r_p i h }
+      vprop_of_list_sel r_p h i;
     }
 
 (**) #push-options "--ifuel 2"

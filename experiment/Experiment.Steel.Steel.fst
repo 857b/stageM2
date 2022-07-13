@@ -4,18 +4,6 @@ module T    = FStar.Tactics
 module Fext = FStar.FunctionalExtensionality
 
 
-let rmem_star_eq (#p : vprop) (v0 v1 : vprop) (h : rmem p{can_be_split p (VStar v0 v1)})
-  : Lemma (can_be_split p v0 /\ can_be_split p v1 /\
-           h (VStar v0 v1) == (h v0, h v1))
-  =
-    can_be_split_star_l v0 v1;
-    can_be_split_star_r v0 v1;
-    can_be_split_trans p (VStar v0 v1) v0;
-    can_be_split_trans p (VStar v0 v1) v1;
-    // TODO: this is implied by [valid_rmem] but not exposed by the interface of [Steel.Effect.Common]
-    //       maybe we can do the proofs in SteelGhost
-    admit ()
-
 (*** Steel *)
 
 let focus_rmem_feq (p q r : vprop) (h : rmem p)
@@ -32,22 +20,31 @@ let focus_rmem_trans (p q r : vprop) (h : rmem p)
       with _ by T.(trefl ());
     Fext.extensionality_g _ _ (focus_rmem (focus_rmem h q) r) (focus_rmem h r)
 
+let focus_rmem_mkrmem (p q : vprop) (h : hmem p)
+  : Lemma (requires can_be_split p q)
+          (ensures  Mem.interp (hp_of q) h /\ focus_rmem (mk_rmem p h) q == mk_rmem q h)
+  =
+    can_be_split_interp p q h;
+    introduce forall (r : vprop {can_be_split q r}) .
+        (focus_rmem (mk_rmem p h) q) r == (mk_rmem q h) r
+      with _ by T.(trefl ());
+    Fext.extensionality_g _ _ (focus_rmem (mk_rmem p h) q) (mk_rmem q h)
 
-let intro_subcomp_no_frame_pre
+let intro_subcomp_no_frame_pre0
       (#a:Type)
       (#pre_f:pre_t) (#post_f:post_t a) (req_f:req_t pre_f) (ens_f:ens_t pre_f a post_f)
       (#pre_g:pre_t) (#post_g:post_t a) (req_g:req_t pre_g) (ens_g:ens_t pre_g a post_g)
       (eq_pre  : squash (equiv pre_g pre_f))
       (eq_post : (x : a) -> squash (equiv (post_g x) (post_f x)))
-      (s_pre :  (h0 : rmem pre_g) -> Lemma
+      (s_pre :  (h0 : hmem pre_g) -> Lemma
          (requires can_be_split pre_g pre_f /\
-                   req_g h0)
-         (ensures  req_f (focus_rmem h0 pre_f)))
-      (s_post : (h0 : rmem pre_g) -> (x : a) -> (h1 : rmem (post_g x)) -> Lemma
+                   req_g (mk_rmem pre_g h0))
+         (ensures  req_f (focus_rmem (mk_rmem pre_g h0) pre_f)))
+      (s_post : (h0 : hmem pre_g) -> (x : a) -> (h1 : hmem (post_g x)) -> Lemma
          (requires can_be_split pre_g pre_f /\ can_be_split (post_g x) (post_f x) /\
-                   req_g h0 /\ req_f (focus_rmem h0 pre_f) /\
-                   ens_f (focus_rmem h0 pre_f) x (focus_rmem h1 (post_f x)))
-         (ensures  ens_g h0 x h1))
+                   req_g (mk_rmem pre_g h0) /\ req_f (focus_rmem (mk_rmem pre_g h0) pre_f) /\
+                   ens_f (focus_rmem (mk_rmem pre_g h0) pre_f) x (focus_rmem (mk_rmem (post_g x) h1) (post_f x)))
+         (ensures  ens_g (mk_rmem pre_g h0) x (mk_rmem (post_g x) h1))) 
   : squash (subcomp_no_frame_pre req_f ens_f req_g ens_g eq_pre eq_post)
   = _ by T.(
     set_guard_policy Force;
@@ -72,6 +69,18 @@ let intro_subcomp_no_frame_pre
         hyp rq_g;
       hyp en_f
   )
+
+let intro_subcomp_no_frame_pre
+      #a #pre_f #post_f req_f ens_f #pre_g #post_g req_g ens_g
+      eq_pre eq_post s_pre s_post
+  =
+    intro_subcomp_no_frame_pre0 req_f ens_f req_g ens_g eq_pre eq_post
+      (fun h0      -> focus_rmem_mkrmem pre_g pre_f h0;
+                   s_pre h0)
+      (fun h0 x h1 -> focus_rmem_mkrmem pre_g pre_f h0;
+                   focus_rmem_mkrmem (post_g x) (post_f x) h1;
+                   s_post h0 x h1)
+
 
 let subcomp_no_frame_lem
       (#a : Type)
