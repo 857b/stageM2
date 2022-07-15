@@ -26,14 +26,14 @@ let repr_of_steel_steel
       (a : Type) (pre : pre_t) (post : post_t a) (ro : vprop_list)
       (req : sl_f pre -> sl_f ro -> Type0) (ens : sl_f pre -> (x : a) -> sl_f (post x) -> sl_f ro -> Type0)
       (tcs : tree_cond_Spec a L.(pre @ ro) (spc_post1 (Mkspec_r pre post ro req ens)))
-      ($f : spc_steel_t SH.KSteel (Mkspec_r pre post ro req ens))
+      ($f : spc_steel_t_steel (Mkspec_r pre post ro req ens))
   : (let c = TCspec #a #(spec_r_exact (Mkspec_r pre post ro req ens)) _ SpecExact tcs in
      repr_steel_t SH.KSteel a tcs.tcs_pre tcs.tcs_post (tree_req _ c) (tree_ens _ c))
   = SH.steel_f (fun () ->
     (**) tcs.tcs_pre_eq.veq_g _;
     (**) elim_vpl_append L.(pre @ ro) tcs.tcs_frame;
     (**) elim_vpl_append pre ro;
-    let (x : a) = SH.steel_u f () in
+    let (x : a) = f () in
     (**) intro_vpl_append (post x) ro;
     (**) intro_vpl_append L.(post x @ ro) tcs.tcs_frame;
     (**) (tcs.tcs_post_eq x).veq_g _;
@@ -44,14 +44,14 @@ let repr_of_steel_ghost_steel
       (a : Type) (opened : Mem.inames) (pre : pre_t) (post : post_t a) (ro : vprop_list)
       (req : sl_f pre -> sl_f ro -> Type0) (ens : sl_f pre -> (x : a) -> sl_f (post x) -> sl_f ro -> Type0)
       (tcs : tree_cond_Spec a L.(pre @ ro) (spc_post1 (Mkspec_r pre post ro req ens)))
-      ($f : spc_steel_t (SH.KGhost opened) (Mkspec_r pre post ro req ens))
+      ($f : spc_steel_t_ghost opened (Mkspec_r pre post ro req ens))
   : (let c = TCspec #a #(spec_r_exact (Mkspec_r pre post ro req ens)) _ SpecExact tcs in
      repr_steel_t (SH.KGhost opened) a tcs.tcs_pre tcs.tcs_post (tree_req _ c) (tree_ens _ c))
   = SH.ghost_f #opened (fun () ->
     (**) tcs.tcs_pre_eq.veq_g _;
     (**) elim_vpl_append L.(pre @ ro) tcs.tcs_frame;
     (**) elim_vpl_append pre ro;
-    let (x : a) = SH.ghost_u f () in
+    let (x : a) = f () in
     (**) intro_vpl_append (post x) ro;
     (**) intro_vpl_append L.(post x @ ro) tcs.tcs_frame;
     (**) (tcs.tcs_post_eq x).veq_g _;
@@ -75,7 +75,7 @@ let repr_of_steel_r
     repr_steel = (fun pre'0 post'0 c ->
                     let TCspec _ _ tcs = c in
                     let Mkspec_r pre0 post0 ro0 req0 ens0 = s in
-                    repr_of_steel_steel a pre0 post0 ro0 req0 ens0 tcs f)
+                    repr_of_steel_steel a pre0 post0 ro0 req0 ens0 tcs (SH.steel_u f))
   }
 
 [@@ __repr_M__]
@@ -88,7 +88,7 @@ let repr_of_steel_ghost_r
     repr_steel = (fun pre'0 post'0 c ->
                     let TCspec _ _ tcs = c in
                     let Mkspec_r pre0 post0 ro0 req0 ens0 = s in
-                    repr_of_steel_ghost_steel a opened pre0 post0 ro0 req0 ens0 tcs f)
+                    repr_of_steel_ghost_steel a opened pre0 post0 ro0 req0 ens0 tcs (SH.ghost_u f))
   }
 
 
@@ -99,7 +99,7 @@ let tree_of_steel
   : prog_tree a
   = Tspec a (spec_r_steel pre post req ens)
 
-// FIXME? delta_only & delta_attr do not work in postprocess_with in some cases
+// FIXME? delta_only & delta_attr do not work under a match, but delta_qualifier does
 private
 let __postprocess_steps : list norm_step = [
   delta_qualifier ["inline_for_extraction"];

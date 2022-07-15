@@ -89,8 +89,7 @@ let spec_r_of_find_ro
       (#a : Type) (#pre : pre_t) (#post : post_t a) (#req : req_t pre) (#ens : ens_t pre a post)
       (sro : spec_find_ro a pre post req ens)
       (f : repr_steel_t SH.KSteel a pre post req ens)
-  : spc_steel_t SH.KSteel sro.sro_spc
-  = SH.steel_f (fun () ->
+  = fun () ->
       (**) let sl0    = gget_f sro.sro_spc.spc_pre in
       (**) let sl_fr0 = gget_f sro.sro_spc.spc_ro  in
       (**) intro_vpl_append sro.sro_spc.spc_pre sro.sro_spc.spc_ro;
@@ -105,15 +104,13 @@ let spec_r_of_find_ro
       (**) let sl_fr1 = gget_f sro.sro_spc.spc_ro       in
       (**) sro.sro_ens_eq sl0 sl_fr0 x sl1 sl_fr1;
       Steel.Effect.Atomic.return x
-    )
 
 inline_for_extraction noextract
 let spec_r_of_find_ro_ghost
       (#a : Type) (#pre : pre_t) (#post : post_t a) (#req : req_t pre) (#ens : ens_t pre a post)
       (sro : spec_find_ro a pre post req ens)
       (#opened : Mem.inames) (f : repr_steel_t (SH.KGhost opened) a pre post req ens)
-  : spc_steel_t (SH.KGhost opened) sro.sro_spc
-  = SH.ghost_f (fun () ->
+  = fun () ->
       (**) let sl0    = gget_f sro.sro_spc.spc_pre in
       (**) let sl_fr0 = gget_f sro.sro_spc.spc_ro  in
       (**) intro_vpl_append sro.sro_spc.spc_pre sro.sro_spc.spc_ro;
@@ -129,7 +126,6 @@ let spec_r_of_find_ro_ghost
       (**) sro.sro_ens_eq sl0 sl_fr0 x sl1 sl_fr1;
       noop ();
       x
-    )
 #pop-options
 
 (**) private let __end_spec_r_of_find_ro = ()

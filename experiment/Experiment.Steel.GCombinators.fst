@@ -26,7 +26,7 @@ open Experiment.Steel.Interface
 open FStar.Tactics
 open Experiment.Steel.GCombinators.Lib
 
-#set-options "--fuel 1 --ifuel 1"
+#set-options "--fuel 1 --ifuel 1 --ide_id_info_off"
 
 (**** slrewrite *)
 
@@ -773,8 +773,45 @@ let build_for_loop (fr : flags_record) : Tac unit
     build_lin_cond_exact fr (fun () -> [Info_location "in the for loop body"])
 
 
-// Quite long
-#push-options "--fuel 1 --z3rlimit 40"
+#push-options "--fuel 0 --ifuel 0"
+
+// Quite long but even worse if we inline the body in the loop
+#push-options  "--z3rlimit 40"
+inline_for_extraction
+let for_loop_steel_body
+      (finish : U32.t)
+      (inv  : (i : nat { i <= U32.v finish }) -> vprop_list)
+      (invp : (i : nat { i <= U32.v finish }) -> sl_f (inv i) -> Type0)
+      (ro   : vprop_list)
+      (req  : (i : U32.t { U32.v i < U32.v finish }) -> sl_f (inv (U32.v i)) -> sl_f ro -> Type0)
+      (ens  : ((i : U32.t { U32.v i < U32.v finish }) -> sl_f (inv (U32.v i)) -> sl_f (inv (U32.v i + 1)) ->
+               sl_f ro -> Type0))
+      (body : (i : U32.t { U32.v i < U32.v finish }) ->
+               M.spc_steel_t u#a SH.KSteel #U.unit'
+                 (M.Mkspec_r (inv (U32.v i)) (fun _ -> inv (U32.v i + 1)) ro
+                             (req i) (fun sl0 _ sl1 sl_ro -> ens i sl0 sl1 sl_ro)))
+      (ro0 : Ghost.erased (sl_f ro))
+      (_ : squash (for_loop_preserve finish inv invp ro req ens ro0))
+      (i : U32.t { U32.v i < U32.v finish })
+  : Steel unit
+      (vprop_of_list (inv (U32.v i)) `star` vprop_of_list ro)
+      (fun () -> vprop_of_list (inv (U32.v i + 1)) `star` vprop_of_list ro)
+      (requires fun h0      -> invp (U32.v i)     (sel_f (inv (U32.v i    )) h0) /\
+                            sel_f ro h0 == Ghost.reveal ro0)
+      (ensures  fun _ () h1 -> invp (U32.v i + 1) (sel_f (inv (U32.v i + 1)) h1) /\
+                            sel_f ro h1 == Ghost.reveal ro0)
+  =
+    (**) let sl_i  = gget_f (inv (U32.v i)) in
+    (**) let ro1   = gget_f ro              in
+    (**) assert (ro1 == ro0);
+    (**) elim_for_loop_preserve finish inv invp ro req ens ro0 i sl_i;
+    (**) assert (req i sl_i ro1);
+    let _ = SH.steel_u (body i) ()     in
+    (**) let sl_i' = gget_f (inv (U32.v i + 1)) in
+    (**) assert (ens i sl_i sl_i' ro0);
+    SA.return ()
+#pop-options
+
 inline_for_extraction
 let for_loop_steel
       (start : U32.t) (finish : U32.t { U32.v start <= U32.v finish })
@@ -782,9 +819,9 @@ let for_loop_steel
       (invp : (i : nat { i <= U32.v finish }) -> sl_f (inv i) -> Type0)
       (ro   : vprop_list)
       (req  : (i : U32.t { U32.v i < U32.v finish }) -> sl_f (inv (U32.v i)) -> sl_f ro -> Type0)
-      (ens   : ((i : U32.t { U32.v i < U32.v finish }) -> sl_f (inv (U32.v i)) -> sl_f (inv (U32.v i + 1)) ->
+      (ens  : ((i : U32.t { U32.v i < U32.v finish }) -> sl_f (inv (U32.v i)) -> sl_f (inv (U32.v i + 1)) ->
                sl_f ro -> Type0))
-      (lreq  : (sl_ro : sl_f ro -> (rq : Type0 { rq ==> for_loop_preserve finish inv invp ro req ens sl_ro })))
+      (lreq : (sl_ro : sl_f ro -> (rq : Type0 { rq ==> for_loop_preserve finish inv invp ro req ens sl_ro })))
       (body : (i : U32.t { U32.v i < U32.v finish }) ->
                M.spc_steel_t u#a SH.KSteel #U.unit'
                  (M.Mkspec_r (inv (U32.v i)) (fun _ -> inv (U32.v i + 1)) ro
@@ -796,17 +833,7 @@ let for_loop_steel
     for_loop_sl start finish
       (fun i -> vprop_of_list (inv i) `star` vprop_of_list ro)
       (fun i sl -> invp i sl._1 /\ sl._2 == Ghost.reveal ro0)
-    begin fun i ->
-      (**) let sl_i  = gget_f (inv (U32.v i)) in
-      (**) let ro1   = gget_f ro              in
-      (**) assert (ro1 == ro0);
-      (**) elim_for_loop_preserve finish inv invp ro req ens ro0 i sl_i;
-      (**) assert (req i sl_i ro1);
-      let _ = SH.steel_u (body i) ()     in
-      (**) let sl_i' = gget_f (inv (U32.v i + 1)) in
-      (**) assert (ens i sl_i sl_i' ro0);
-      SA.return ()
-    end;
+      (for_loop_steel_body finish inv invp ro req ens body ro0 ());
     U.Unit'
   )
 #pop-options
