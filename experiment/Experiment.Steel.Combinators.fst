@@ -379,6 +379,28 @@ let ite_steel
   = SH.steel_f (fun () ->
     if guard then SH.steel_u rthn () else SH.steel_u rels ())
 
+// Versions with the guard value as an hypothesis, used to define the if_then_else of an effect
+inline_for_extraction noextract
+let ite_steel_thn
+      (a : Type) (guard : bool) (thn : prog_tree a) (els : prog_tree a)
+      (pre : pre_t) (post : post_t a) (cthn : tree_cond thn pre post) (cels : tree_cond els pre post)
+      ($rthn : repr_steel_t SH.KSteel a pre post (tree_req thn cthn) (tree_ens thn cthn))
+      (_ : squash guard)
+  : (let c = TCif #a #guard #thn #els pre post cthn cels in
+     repr_steel_t SH.KSteel a pre post (tree_req _ c) (tree_ens _ c))
+  = SH.steel_f (fun () -> SH.steel_u rthn ())
+
+inline_for_extraction noextract
+let ite_steel_els
+      (a : Type) (guard : bool) (thn : prog_tree a) (els : prog_tree a)
+      (pre : pre_t) (post : post_t a) (cthn : tree_cond thn pre post) (cels : tree_cond els pre post)
+      ($rels : repr_steel_t SH.KSteel a pre post (tree_req els cels) (tree_ens els cels))
+      (_ : squash (~guard))
+  : (let c = TCif #a #guard #thn #els pre post cthn cels in
+     repr_steel_t SH.KSteel a pre post (tree_req _ c) (tree_ens _ c))
+  = SH.steel_f (fun () -> SH.steel_u rels ())
+
+
 inline_for_extraction noextract
 let ite_ghost_steel
       (a : Type) (opened : Mem.inames) (guard : bool) (thn : prog_tree a) (els : prog_tree a)
@@ -391,6 +413,7 @@ let ite_ghost_steel
   = SH.ghost_f #opened (fun () ->
     if guard then SH.ghost_u rthn () else SH.ghost_u rels ())
 
+
 [@@ __repr_M__]
 inline_for_extraction noextract
 let ite (#a : Type) (guard : bool) (thn els : repr SH.KSteel a)
@@ -398,7 +421,7 @@ let ite (#a : Type) (guard : bool) (thn els : repr SH.KSteel a)
   = {
     repr_tree  = Tif a guard thn.repr_tree els.repr_tree;
     repr_steel = (fun pre0 post0 c ->
-                    let (TCif pre post cthn cels) = c in
+                    let TCif pre post cthn cels = c in
                     ite_steel a guard _ _ pre post cthn cels
                        (thn.repr_steel _ _ cthn) (els.repr_steel _ _ cels))
   }

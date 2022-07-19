@@ -27,6 +27,8 @@ FSTAR_EXTRACT = #--extract 'OCaml:-* +Spec'
 # - 247: checked file not written because some of its dependencies...
 # - 285: missing or file not found, almost always something to act on
 # - 241: stale dependencies, almost always a sign that the build is incorrect
+# Turn off:
+# - 274: Implicitly opening ... namespace shadows ...
 #
 # But also:
 # - --cmi, for cross-module inlining, a must-have for anyone who relies on
@@ -35,7 +37,7 @@ FSTAR_EXTRACT = #--extract 'OCaml:-* +Spec'
 # - --cache_dir, to avoid polluting our generated build artifacts outside o
 FSTAR_NO_FLAGS = $(FSTAR_HOME)/bin/fstar.exe $(FSTAR_HINTS) \
   --odir obj --cache_checked_modules $(FSTAR_INCLUDES) --cmi \
-  --already_cached 'Prims FStar LowStar C Spec.Loops TestLib WasmSupport Steel' --warn_error '+241@247+285' \
+  --already_cached 'Prims FStar LowStar C Spec.Loops TestLib WasmSupport Steel' --warn_error '+241@247-274+285' \
   --cache_dir obj --hint_dir hints
 
 # Initial dependency analysis

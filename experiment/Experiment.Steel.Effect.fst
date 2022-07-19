@@ -1,0 +1,449 @@
+module Experiment.Steel.Effect
+
+module U  = Learn.Util
+module M  = Experiment.Steel.Repr.M
+module C  = Experiment.Steel.Combinators
+module T  = FStar.Tactics
+module L  = FStar.List.Pure
+module ES = Experiment.Steel
+module SE = Steel.Effect
+module SH = Experiment.Steel.Steel
+
+open Experiment.Steel.Interface
+
+#push-options "--ide_id_info_off"
+
+irreducible let __mrepr_implicit__ : unit = ()
+
+
+(**** MRepr effect *)
+
+type repr (a : Type u#a) (t : M.prog_tree a) : Type
+  = r : M.repr SH.KSteel a { r.repr_tree == t }
+
+let return_
+      (a : Type u#a) (x : a)
+  : repr a (M.Tret a x (fun _ -> []))
+  = C.return #a x
+
+(***** bind *)
+
+[@@ __repr_M__]
+noeq inline_for_extraction
+type combine_bind_t
+       (a : Type u#a) (b : Type u#b)
+       (f : M.prog_tree a) (g : a -> M.prog_tree b)
+= {
+  cb_bind_repr : M.prog_tree b;
+  cb_bind_impl : (rf : repr a f) -> (rg : ((x : a) -> repr b (g x))) ->
+                 repr b cb_bind_repr
+}
+
+[@@ __repr_M__]
+inline_for_extraction
+let combine_bind
+      (a : Type u#b) (b : Type u#b) 
+      (f : M.prog_tree a) (g : a -> M.prog_tree b)
+  : combine_bind_t a b f g
+  = {
+    cb_bind_repr = M.Tbind a b f (fun x -> g x); // We need the functional extensionality so we eta-expend g
+    cb_bind_impl = (fun rf rg ->
+                      U.funext_eta (fun x -> g x) (fun x -> (rg x).repr_tree)
+                        (U.by_refl ()) (U.by_refl ())
+                        (fun x -> ());
+                      C.bind #a #b rf rg);
+  }
+
+/// Since we want to represent the program as a tree, we need [u#a == u#b]. However when defining an effect,
+/// F* requires the bind combinator to be polymorphic in the two universes ([u#a -> u#b -> u#b]).
+/// To work around this restriction, we declare the bind combinator with the signature expected by F*,
+/// but the actual combination is made by an argument which is solved by tactic, by applying
+/// our restricted combinator [combine_bind].
+/// The tactic will fail if [u#a <> u#b].
+let bind_
+      (a : Type u#a) (b : Type u#b)
+      (#f : M.prog_tree a) (#g : a -> M.prog_tree b)
+      (#[@@@ __mrepr_implicit__] cb : combine_bind_t a b f g)
+      (rf : repr u#a a f) (rg : (x : a) -> repr u#b b (g x))
+  : repr u#b b cb.cb_bind_repr
+  = cb.cb_bind_impl rf rg
+
+
+(***** subcomp *)
+
+type combine_subcomp_t
+      (a : Type u#a) (f : M.prog_tree a) (g : M.prog_tree a)
+  = repr a f -> repr a g
+
+let combine_subcomp_refl
+      (a : Type u#a) (f : M.prog_tree a)
+  : combine_subcomp_t a f f
+  = fun rf -> rf
+
+let subcomp
+      (a : Type u#a)
+      (#f : M.prog_tree a) (#g : M.prog_tree a)
+      (#[@@@ __mrepr_implicit__] cb : combine_subcomp_t a f g)
+      (rf : repr a f)
+  : repr a g
+  = cb rf
+
+
+(***** if then else *)
+
+let if_then_else
+      (a : Type)
+      (#thn : M.prog_tree a) (#els : M.prog_tree a)
+      (rthn : repr a thn) (rels : repr a els)
+      (guard : bool)
+  : Type
+  = repr a (M.Tif a guard thn els)
+
+let ite_combine_thn
+      (a : Type) (guard : bool) (thn els : M.prog_tree a)
+      (_ : squash guard)
+  : combine_subcomp_t a thn (M.Tif a guard thn els)
+  = fun rthn -> {
+    repr_tree  = M.Tif a guard thn els;
+    repr_steel = (fun pre0 post0 c ->
+                    let M.TCif pre post cthn cels = c in
+                    C.ite_steel_thn a guard thn els pre post cthn cels (rthn.repr_steel _ _ cthn) ())
+  }
+
+let ite_combine_els
+      (a : Type) (guard : bool) (thn els : M.prog_tree a)
+      (_ : squash (~guard))
+  : combine_subcomp_t a els (M.Tif a guard thn els)
+  = fun rels -> {
+    repr_tree  = M.Tif a guard thn els;
+    repr_steel = (fun pre0 post0 c ->
+                    let M.TCif pre post cthn cels = c in
+                    C.ite_steel_els a guard thn els pre post cthn cels (rels.repr_steel _ _ cels) ())
+  }
+
+
+irreducible let __ite_soundness__ : unit = ()
+
+[@@ resolve_implicits; __ite_soundness__]
+let ite_soundness_tac () : T.Tac unit
+  = T.(
+    iterAll (fun () -> try trefl () with _ -> ());
+    norm [delta_only [`%pure_null_wp0]; simplify]; trivial ();
+    first [(fun () -> apply (`ite_combine_thn)); (fun () -> apply (`ite_combine_els))];
+    smt ()
+  )
+
+
+[@@ ite_soundness_by __ite_soundness__]
+total reflectable effect {
+  MRepr (a : Type) (r : M.prog_tree a)
+  with {
+    repr;
+    return = return_;
+    bind = bind_;
+    subcomp;
+    if_then_else
+  }
+}
+
+let return (#a : Type u#a) (x : a)
+  : MRepr a (M.Tret a x (fun _ -> []))
+  = MRepr?.reflect (return_ a x)
+
+
+(***** bind (PURE, MRepr) |> MRepr *)
+
+[@@ __repr_M__]
+noeq inline_for_extraction
+type combine_bind_pure_t
+       (a : Type u#a) (b : Type u#b)
+       (wp : pure_wp a) (g : a -> M.prog_tree b)
+= {
+  cb_bindP_repr : M.prog_tree b;
+  cb_bindP_impl : (rf : unit -> PURE a wp) -> (rg : ((x : a) -> repr b (g x))) ->
+                  repr b cb_bindP_repr
+}
+
+[@@ __repr_M__]
+inline_for_extraction
+let combine_bind_pure
+      (a : Type u#b) (b : Type u#b)
+      (wp : pure_wp a) (g : a -> M.prog_tree b)
+      
+  : combine_bind_pure_t a b wp g
+  = {
+    cb_bindP_repr = M.TbindP a b wp (fun x -> g x);
+    cb_bindP_impl = (fun rf rg ->
+                       U.funext_eta (fun x -> g x) (fun x -> (rg x).repr_tree)
+                         (U.by_refl ()) (U.by_refl ())
+                         (fun x -> ());
+                       C.bindP #a #b wp rf rg);
+  }
+
+// TODO Avoid [cb] by allowing the bound variable to be of a type in a different universe in [M.TbindP].
+let bind_pure_mrepr
+      (a : Type u#a) (b : Type u#b)
+      (#wp : pure_wp a)
+      (#g : a -> M.prog_tree b)
+      (#[@@@ __mrepr_implicit__] cb : combine_bind_pure_t a b wp g)
+      (rf : eqtype_as_type unit -> PURE a wp)
+      (rg : (x : a) -> repr b (g x))
+  : repr b cb.cb_bindP_repr
+  = cb.cb_bindP_impl rf rg
+
+#push-options "--warn_error -330"
+polymonadic_bind (PURE, MRepr) |> MRepr = bind_pure_mrepr
+#pop-options
+
+
+(***** lifting Steel.Effect.SteelBase ~> MRepr *)
+
+let lift_steel_mrepr
+      (a : Type) (pre : SE.pre_t) (post : SE.post_t a)
+      (req : SE.req_t pre) (ens : SE.ens_t pre a post)
+      (f : Steel.Effect.repr a false pre post req ens)
+  : repr a M.(Tspec a (spec_r_steel pre post req ens))
+  = C.repr_of_steel #a pre post req ens
+      (fun () -> SE.SteelBase?.reflect f)
+  
+sub_effect Steel.Effect.SteelBase ~> MRepr = lift_steel_mrepr
+
+unfold
+let call (#b : Type)
+      (#a : b -> Type) (#pre : b -> SE.pre_t) (#post : (x : b) -> SE.post_t (a x))
+      (#req : (x : b) -> SE.req_t (pre x)) (#ens : (x : b) -> SE.ens_t (pre x) (a x) (post x))
+      ($f : (x : b) -> SE.Steel (a x) (pre x) (post x) (req x) (ens x)) (x : b)
+  : MRepr (a x) (M.Tspec (a x) (M.spec_r_steel (pre x) (post x) (req x) (ens x)))
+  = MRepr?.reflect (C.repr_of_steel #(a x) (pre x) (post x) (req x) (ens x) (fun () -> f x))
+
+(**** Conversion to Steel *)
+
+type cv_repr (a : Type u#a) (pre : SE.pre_t) (post : SE.post_t a)
+             (req : SE.req_t pre) (ens : SE.ens_t pre a post)
+             (flags : list flag)
+  : Type
+  = SH.unit_steel a pre post req ens
+
+/// [ConvEffect] is only used to convert a [MRepr] into a [SH.unit_steel]. Its combinators (return, bind,
+/// lifting of pure) should never be used.
+
+irreducible let __cv_unused__ : unit = ()
+
+[@@ resolve_implicits; __cv_unused__]
+let cv_unused_tac () : T.Tac unit
+  = T.fail "cv_unused"
+
+[@@ erasable]
+noeq type cv_unused =
+
+let elim_cv_unused (#a : Type) (u : cv_unused) : a
+  = match u with
+
+unfold let dummy_cv (a : Type u#a) = cv_repr a SE.emp (fun _ -> SE.emp) (fun _ -> True) (fun _ _ _ -> True) []
+
+let cv_return
+      (a : Type u#a) (x : a) (#[@@@ __cv_unused__] u : cv_unused)
+  : dummy_cv a
+  = elim_cv_unused u
+
+let cv_bind
+      (a : Type u#a) (b : Type u#b)
+      (#pre_f : SE.pre_t) (#post_f : SE.post_t a)
+      (#req_f : SE.req_t pre_f) (#ens_f : SE.ens_t pre_f a post_f)
+      (#fsf : list flag)
+      (#pre_g : a -> SE.pre_t) (#post_g : a -> SE.post_t b)
+      (#req_g : (x : a) -> SE.req_t (pre_g x)) (#ens_g : (x : a) -> SE.ens_t (pre_g x) b (post_g x))
+      (#fsg : (x : a) -> list flag)
+      (#[@@@ __cv_unused__] u : cv_unused)
+      (f : cv_repr a pre_f post_f req_f ens_f fsf)
+      (g : (x : a) -> cv_repr b (pre_g x) (post_g x) (req_g x) (ens_g x) (fsg x))
+  : dummy_cv b
+  = elim_cv_unused u
+
+/// We need the reification for extracting the Steel representation and [lift_mrepr_cv] has [t : M.prog_tree a]
+/// as an informative binder. (ALT? make [M.prog_tree] erasable)
+[@@ allow_informative_binders]
+total reifiable effect {
+  ConvEffect
+    (a : Type) (pre : SE.pre_t) (post : SE.post_t a)
+    (req : SE.req_t pre) (ens : SE.ens_t pre a post)
+    (flags : list flag)
+  with {
+    repr   = cv_repr;
+    return = cv_return;
+    bind   = cv_bind;
+  }
+}
+
+
+let lift_pure_cv
+      (a : Type) (wp : pure_wp a)
+      (#[@@@ __cv_unused__] u : cv_unused)
+      (f : (eqtype_as_type unit) -> PURE a wp)
+  : Pure (dummy_cv a) (requires as_requires wp) (ensures fun _ -> True)
+  = elim_cv_unused u
+
+sub_effect PURE ~> ConvEffect = lift_pure_cv
+
+
+
+noeq
+type mrepr_to_steel_t
+       (flags : list flag)
+       (a : Type) (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t pre) (ens : SE.ens_t pre a post)
+       (t : M.prog_tree a)
+  = | MReprToSteel of (repr a t -> SH.unit_steel a pre post req ens)
+
+let lift_mrepr_cv
+      (a : Type) (t : M.prog_tree a)
+      (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t pre) (ens : SE.ens_t pre a post) (flags : list flag)
+      ([@@@ __mrepr_implicit__] cv : mrepr_to_steel_t flags a pre post req ens t)
+      (r : repr a t)
+  : cv_repr a pre post req ens flags
+  = let MReprToSteel cv = cv in
+    cv r
+
+sub_effect MRepr ~> ConvEffect = lift_mrepr_cv
+
+
+(**** Implicits resolution *)
+
+let __build_mrepr_to_steel
+      (flags : list flag)
+      (a : Type) (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t pre) (ens : SE.ens_t pre a post)
+      (t : M.prog_tree a)
+      (goal : (impl : ((pre : M.pre_t) -> (post : M.post_t a) -> (c : M.tree_cond t pre post) ->
+                          M.repr_steel_t SH.KSteel a pre post (M.tree_req t c) (M.tree_ens t c))) ->
+              ES.__to_steel_goal a pre post req ens M.({repr_tree = t; repr_steel = impl}))
+  : mrepr_to_steel_t flags a pre post req ens t
+  = MReprToSteel (fun r -> goal r.repr_steel)
+
+/// Solves a goal [mrepr_to_steel_t flags a pre post req ens t].
+let build_mrepr_to_steel () : T.Tac unit
+  = T.(with_policy Force (fun () ->
+    let args = (collect_app (cur_goal ()))._2 in
+    guard (L.length args = 7);
+    let flags = (L.hd args)._1                in
+
+    apply (`__build_mrepr_to_steel);
+    let impl = intro () in
+    //exact (`((_ by (ES.build_to_steel (make_flags_record (`#flags)))) <: (`#(cur_goal ()))))
+    let fr = make_flags_record (unquote #(list flag) flags) in
+    ES.build_to_steel fr
+  ))
+
+/// The only source of "mrepr_implicits" failure should be a (possibly polymonadic) bind where the two types
+/// involved belong to different universes.
+
+[@@ resolve_implicits; __mrepr_implicit__]
+let mrepr_implicits_tac () : T.Tac unit
+  = T.(
+    iterAll (fun () ->
+      intros' ();
+      try first [
+        trefl;
+        (fun () -> apply (`combine_bind));
+        (fun () -> apply (`combine_subcomp_refl));
+        (fun () -> apply (`combine_bind_pure));
+        (fun () -> // if it is an [mrepr_to_steel_t] goal, skip
+                let hd = (collect_app (cur_goal ()))._1 in
+                match T.inspect hd with
+                | Tv_FVar fv | Tv_UInst fv _ ->
+                  let fv = inspect_fv fv in
+                  guard (implode_qn fv = (`%mrepr_to_steel_t))
+                | _ -> fail "")
+      ] with _ ->
+        fail "mrepr_implicits");
+    // At this point there should only remains a [mrepr_to_steel_t] goal
+    iterAll build_mrepr_to_steel
+  )
+
+
+(**** Test *)
+
+open Steel.Effect.Common
+open Steel.Reference
+
+let display_term (#a : Type) (x : a) : Type = unit
+
+/// This retypecheck [r]. It fails if r contains a bind_pure since it will need to prove the monotonicity of the
+/// weakest precondition ([pure_wp_monotonic]).
+let dump_repr (#a : Type) (#r : M.prog_tree a)
+      ($re : unit -> MRepr a r)
+      (#[T.(norm [delta_attr [`%__repr_M__]; iota]; dump "dump_repr"; exact (`()))] d : display_term r)
+      ()
+  : unit
+  = ()
+
+
+let to_steel
+      (#[T.apply (`[])] flags : list flag)
+      (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
+      (r : unit -> ConvEffect a pre post req ens flags)
+  : SH.unit_steel a pre post req ens
+  = reify (r ())
+
+
+let test0 =
+  dump_repr (fun () -> let x = return 5 in return (x + 1)) ()
+
+//[@@ handle_smt_goals ] let tac () = Tactics.dump "SMT query"
+//let test1 = dump_repr (fun () -> assert (5 >= 0); return 5) ()
+
+let test1' (x : int)
+  : SH.unit_steel int emp (fun _ -> emp) (requires fun _ -> x >= 1) (ensures fun _ y _ -> y >= 5)
+  = to_steel #[Dump Stage_M] begin fun () ->
+    assert (x >= 0);
+    return (5 + x)
+  end
+  
+
+let test2 (r : ref int) =
+  dump_repr (fun () -> let x = read r in return x) ()
+
+// Stack overflow
+//   the return are needed to force the conversion from Steel to MRepr
+//let test3 (b : bool) (r0 r1 : ref int) =
+//  dump_repr (fun () -> if b then let x = read r0 in return x
+//                         else let x = read r1 in return x)
+
+// "mrepr_implicits" fails, WHY ?
+//#push-options "--print_universes --print_implicits"
+//let test3' (b : bool) (r0 r1 : ref int)
+//  : SH.unit_steel int (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
+//                    (requires fun _ -> True) (ensures fun _ _ _ -> True)
+//  = to_steel begin fun () ->
+//    if b then call read r0 else call read r1
+//  end
+
+let test4 (r0 r1 : ref int) =
+  dump_repr (fun () ->
+    let x = read r0 in
+    write r1 (x + 1);
+    return ())
+  ()
+
+// Fails because the M.prog_tree contains some uvar (because the Steel's tactic is called after our tactic ?)
+//let test5 (r : ref nat)
+//  : SH.unit_steel unit
+//      (vptr r) (fun _ -> vptr r)
+//      (requires fun h0 -> sel r h0 > 10) (ensures fun _ _ h1 -> sel r h1 >= 10)
+//  = to_steel #[Dump Stage_M] begin fun () ->
+//    let x = read r in
+//    let _ = return () in
+//    write r (x - 1);
+//    return ()
+//  end
+
+// Fails because of a bind pure with different universes
+(*
+#push-options "--print_implicits --print_universes"
+let test5' (r : ref nat)
+  : SH.unit_steel unit
+      (vptr r) (fun _ -> vptr r)
+      (requires fun h0 -> sel r h0 > 10) (ensures fun _ _ h1 -> sel r h1 >= 10)
+  = to_steel #[Dump Stage_M] begin fun () ->
+    let x = call read r in
+    call (write r) (x - 1)
+  end
+*)
