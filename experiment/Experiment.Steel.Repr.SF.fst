@@ -123,5 +123,3 @@ let mk_prog_shape (#a : Type) (#post : post_t a) (t : prog_tree a post)
                   (#post_len : nat) (shp : shape_tree post_len {prog_has_shape t shp})
   : prog_shape t =
   { post_len; shp}
-
-

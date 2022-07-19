@@ -136,16 +136,9 @@ let sl_tys_lam : Fun.tys_lam sl_tys =
 
 (*** Translation of the representation *)
 
-unfold
-let add_sl_to_wp (#a : Type u#a) (wp : pure_wp a) : pure_wp ((sl_tys u#a u#b).v ({val_t = a; sel_t = (fun _ -> [])}))
-  =
-    (**) FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp;
-    FStar.Monotonic.Pure.as_pure_wp (fun pt ->
-      wp (fun (x : a) -> pt ({val_v = x; sel_v = Fl.nil})))
-
 [@@ strict_on_arguments [2]] (* strict on t *)
 let rec repr_Fun_of_SF (#val_t : Type u#a) (#sel_t : post_t u#a u#b val_t) (t : prog_tree val_t sel_t)
-  : Tot (Fun.prog_tree u#(max a b + 1) u#(max a (b + 1)) u#(max a (b + 1))
+  : Tot (Fun.prog_tree u#(max a b + 1) u#(max a (b + 1)) u#(max a (b + 1)) u#a
                        #(sl_tys u#a u#b) ({val_t; sel_t}))
         (decreases t)
   = match t with
@@ -156,9 +149,7 @@ let rec repr_Fun_of_SF (#val_t : Type u#a) (#sel_t : post_t u#a u#b val_t) (t : 
   | Tbind a b itm post f g ->
           Fun.Tbind _ _ (repr_Fun_of_SF f) (sl_uncurrify (fun x sls -> repr_Fun_of_SF (g x sls)))
   | TbindP a b post wp g ->
-          Fun.TbindP ({val_t = a; sel_t = (fun _ -> [])}) ({val_t = b; sel_t = post})
-                     (add_sl_to_wp wp)
-                     (sl_uncurrify #a #(fun _ -> []) (fun (x : a) _ -> repr_Fun_of_SF (g x)))
+          Fun.TbindP a ({val_t = b; sel_t = post}) wp (fun (x : a) -> repr_Fun_of_SF (g x))
   | Tif a guard post thn els ->
           Fun.Tif ({val_t = a; sel_t = post}) guard (repr_Fun_of_SF thn) (repr_Fun_of_SF els)
 

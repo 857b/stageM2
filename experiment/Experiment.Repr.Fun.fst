@@ -20,9 +20,9 @@ let equiv_Tbind
             smt ())
 
 let equiv_TbindP
-      (#s : tys) (#a #b : s.t) (wp : pure_wp (s.v a))
-      (g g' : (x : s.v a) -> prog_tree b)
-      (eq_g : (x : s.v a) -> squash (equiv (g x) (g' x)))
+      (#s : tys) (#a : Type) (#b : s.t) (wp : pure_wp a)
+      (g g' : (x : a) -> prog_tree b)
+      (eq_g : (x : a) -> squash (equiv (g x) (g' x)))
   : Lemma (equiv (TbindP a b wp g) (TbindP a b wp g'))
   =
     FStar.Classical.forall_intro_squash_gtot eq_g;
@@ -69,11 +69,11 @@ let rec tree_wp_sound (#s : tys) (#a : s.t) (t : prog_tree #s a) (post : pure_po
       introduce forall (x : s.v a) . tree_wp (g x) post ==> (tree_req (g x) /\ (forall (y : s.v b) . tree_ens (g x) y ==> post y))
         with introduce _ ==> _ with _ . tree_wp_sound (g x) post
   | TbindP a b wp g ->
-      let post1 (x : s.v a) = tree_wp (g x) post in
-      let req1  (x : s.v a) = tree_req (g x)     in
+      let post1 (x : a) = tree_wp (g x) post in
+      let req1  (x : a) = tree_req (g x)     in
       assert (tree_wp (TbindP a b wp g) post == wp post1) by T.(trefl ());
       MP.elim_pure_wp_monotonicity wp;
-      introduce forall (x : s.v a) . post1 x ==> (req1 x /\ (forall (y : s.v b) . tree_ens (g x) y ==> post y))
+      introduce forall (x : a) . post1 x ==> (req1 x /\ (forall (y : s.v b) . tree_ens (g x) y ==> post y))
         with introduce _ ==> _ with _ . tree_wp_sound (g x) post;
       assert (tree_req (TbindP a b wp g) == wp req1) by T.(trefl ());
       U.prop_equal (fun p -> p) (wp req1) (tree_req (TbindP a b wp g))
@@ -200,17 +200,15 @@ and elim_returns_equiv_aux
            let s = SbindP s_g      in
            begin match k with
            | ERetKfun kf ->
-              let g1 (x : st.v a) = elim_returns_aux lm (g x) s_g (ERetKfun #st #b kf) in
-              let g1 = lm.lam_tree g1 in
+              let g1 (x : a) = elim_returns_aux lm (g x) s_g (ERetKfun #st #b kf) in
               assert (elim_returns_aux lm t s (ERetKfun kf) == TbindP _ _ wp g1)
                 by T.(trefl ());
-              introduce forall (x : st.v a) . equiv_with_fun (g x) (g1 x) kf
+              introduce forall (x : a) . equiv_with_fun (g x) (g1 x) kf
                 with (elim_returns_equiv_aux lm (g x) s_g (ERetKfun #st #b kf);
                       equiv_bind_ret (g x) kf (g1 x));
               MP.elim_pure_wp_monotonicity wp
            | ERetKtrm kt ->
-               let g1 (x : st.v a) = elim_returns lm (g x) s_g in
-               let g1 = lm.lam_tree g1 in
+               let g1 (x : a) = elim_returns lm (g x) s_g in
                assert (elim_returns_aux lm t s (ERetKtrm kt) == bind (TbindP _ _ wp g1) kt)
                  by T.(trefl ());
                equiv_TbindP wp g1 g (fun x -> elim_returns_equiv lm (g x) s_g);
