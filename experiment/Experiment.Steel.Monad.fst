@@ -1,4 +1,4 @@
-module Experiment.Steel.Notations
+module Experiment.Steel.Monad
 
 include Experiment.Steel.Interface
 

@@ -1,9 +1,7 @@
 module Experiment.Steel.Test.Extract
 
-module F    = Experiment.Steel.Notations
-module M    = Experiment.Steel.Repr.M
 module U32  = FStar.UInt32
-module Test = Experiment.Steel.Test
+module Test = Experiment.Steel.Monad.Test
 
 open Steel.Effect
 open Steel.Reference
@@ -54,3 +52,9 @@ let test_for_loop_0 (r0 : ref U32.t)
   =
     let _ = Test.test_for_loop_0 r0 () in
     ()
+
+// rejected by KRML
+//let test_effect (r : ref nat)
+//  : Steel unit (vptr r) (fun _ -> vptr r) (requires fun h0 -> sel r h0 > 10) (ensures fun _ _ _ -> True)
+//  =
+//    Experiment.Steel.Effect.Test.test5' r ()

@@ -5,7 +5,7 @@ module LList0 = Learn.Steel.List.Data
 module LList1 = Learn.Steel.ListP
 module DLList = Learn.Steel.DLList
 
-module F = Experiment.Steel.Notations
+module F = Experiment.Steel.Monad
 
 open Steel.Effect
 open Steel.FractionalPermission

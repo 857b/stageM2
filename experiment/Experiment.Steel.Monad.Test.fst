@@ -1,4 +1,4 @@
-module Experiment.Steel.Test
+module Experiment.Steel.Monad.Test
 
 module U    = Learn.Util
 module T    = FStar.Tactics
@@ -10,7 +10,7 @@ module SU   = Learn.Steel.Util
 module U32  = FStar.UInt32
 module Perm = Learn.Permutation
 
-module F      = Experiment.Steel.Notations
+module F      = Experiment.Steel.Monad
 module M      = Experiment.Steel.Repr.M
 module MC     = Experiment.Steel.Combinators
 module ST     = Experiment.Steel.Repr.ST
