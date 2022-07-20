@@ -5,6 +5,7 @@ module M  = Experiment.Steel.Repr.M
 module C  = Experiment.Steel.Combinators
 module T  = FStar.Tactics
 module L  = FStar.List.Pure
+module UV = Learn.Universe
 module ES = Experiment.Steel
 module SE = Steel.Effect
 module SH = Experiment.Steel.Steel
@@ -18,14 +19,19 @@ irreducible let __mrepr_implicit__ : unit = ()
 
 (**** MRepr effect *)
 
-/// We fix the universe [u#p] of the types in bind_pure to [u#0]
-/// TODO highest universe
+/// We fix the universe [u#p] of the types in bind_pure to [u#8].
+/// Values in lower universes are raised.
+/// We observe some bind pure with universes 2 because of Steel' req_t, ens_t...
+/// ALT? take the maximum of the universes that appear in the goals.
 
 unfold
-type prog_tree = M.prog_tree u#a u#0
+type prog_tree = M.prog_tree u#a u#8
+
+type repr' (a : Type) (t : M.prog_tree u#a u#p a) : Type
+  = r : M.repr u#a u#p SH.KSteel a { r.repr_tree == t }
 
 type repr (a : Type) (t : prog_tree u#a a) : Type
-  = r : M.repr u#a u#0 SH.KSteel a { r.repr_tree == t }
+  = r : M.repr u#a u#8 SH.KSteel a { r.repr_tree == t }
 
 let return_
       (a : Type) (x : a)
@@ -69,10 +75,11 @@ let combine_bind
 let bind_
       (a : Type u#a) (b : Type u#b)
       (#f : prog_tree a) (#g : a -> prog_tree b)
-      (#[@@@ __mrepr_implicit__] cb : combine_bind_t a b f g)
+      (#[@@@ __mrepr_implicit__] cb
+        : (f : prog_tree a) -> (g : (a -> prog_tree b)) -> combine_bind_t a b f g)
       (rf : repr u#a a f) (rg : (x : a) -> repr u#b b (g x))
-  : repr u#b b cb.cb_bind_repr
-  = cb.cb_bind_impl rf rg
+  : repr u#b b (cb f g).cb_bind_repr
+  = (cb f g).cb_bind_impl rf rg
 
 
 (***** subcomp *)
@@ -162,40 +169,52 @@ let return (#a : Type u#a) (x : a)
 [@@ __repr_M__]
 noeq inline_for_extraction
 type combine_bind_pure_t
-       (a : Type u#p) (b : Type u#a)
-       (wp : pure_wp a) (g : a -> prog_tree b)
+       (a : Type u#r) (b : Type u#a)
+       (wp : pure_wp a) (g : a -> M.prog_tree u#a u#p b)
 = {
-  cb_bindP_repr : prog_tree b;
-  cb_bindP_impl : (rf : unit -> PURE a wp) -> (rg : ((x : a) -> repr b (g x))) ->
-                  repr b cb_bindP_repr
+  cb_bindP_repr : M.prog_tree u#a u#p b;
+  cb_bindP_impl : (rf : unit -> PURE a wp) -> (rg : ((x : a) -> repr' b (g x))) ->
+                  repr' u#a u#p b cb_bindP_repr
 }
 
+/// This should be applied with [u#r <= u#8] so [u#(max r 8) = u#8]
 [@@ __repr_M__]
 inline_for_extraction
 let combine_bind_pure
-      (a : Type u#0) (b : Type u#a)
-      (wp : pure_wp a) (g : a -> prog_tree b)
+      (a : Type u#r) (b : Type u#a)
+      (wp : pure_wp a) (g : a -> M.prog_tree u#a u#(max r 8) b)
       
-  : combine_bind_pure_t a b wp g
-  = {
-    cb_bindP_repr = M.TbindP a b wp (fun x -> g x);
+  : combine_bind_pure_t u#r u#a u#(max r 8) a b wp g
+  = 
+    let t = M.TbindP (UV.raise_t u#r u#8 a) b
+                     (UV.raise_pure_wp u#r u#8 wp) (UV.lift_dom g) in
+  {
+    cb_bindP_repr = t;
     cb_bindP_impl = (fun rf rg ->
-                       U.funext_eta (fun x -> g x) (fun x -> (rg x).repr_tree)
+                       let rg' = UV.lift_dom rg in
+                       let r = C.bindP #(UV.raise_t u#r u#8 a) #b (UV.raise_pure_wp u#r u#8 wp)
+                                       (UV.raise_pure_val wp rf) rg'
+                       in
+                       U.funext_eta (UV.lift_dom g) (fun x -> (rg' x).repr_tree)
                          (U.by_refl ()) (U.by_refl ())
                          (fun x -> ());
-                       C.bindP #a #b wp rf rg);
+                       assert (r.repr_tree == t)
+                         by T.(norm [delta_only [`%M.Mkrepr?.repr_tree]];
+                               norm [delta_only [`%C.bindP]; iota];
+                               smt ());
+                       r)
   }
 
-// TODO raise the universe of [a]
 let bind_pure_mrepr
-      (a : Type u#p) (b : Type u#a)
+      (a : Type u#r) (b : Type u#a)
       (#wp : pure_wp a)
       (#g : a -> prog_tree b)
-      (#[@@@ __mrepr_implicit__] cb : combine_bind_pure_t a b wp g)
+      (#[@@@ __mrepr_implicit__] cb
+        : (wp : pure_wp a) -> (g : (a -> prog_tree b)) -> combine_bind_pure_t u#r u#a u#8 a b wp g)
       (rf : eqtype_as_type unit -> PURE a wp)
       (rg : (x : a) -> repr b (g x))
-  : repr b cb.cb_bindP_repr
-  = cb.cb_bindP_impl rf rg
+  : repr b (cb wp g).cb_bindP_repr
+  = (cb wp g).cb_bindP_impl rf rg
 
 #push-options "--warn_error -330"
 polymonadic_bind (PURE, MRepr) |> MRepr = bind_pure_mrepr
@@ -208,7 +227,7 @@ let lift_steel_mrepr
       (a : Type) (pre : SE.pre_t) (post : SE.post_t a)
       (req : SE.req_t pre) (ens : SE.ens_t pre a post)
       (f : Steel.Effect.repr a false pre post req ens)
-  : repr a M.(Tspec a (spec_r_steel u#a u#0 pre post req ens))
+  : repr a M.(Tspec a (spec_r_steel u#a u#8 pre post req ens))
   = C.repr_of_steel #a pre post req ens
       (fun () -> SE.SteelBase?.reflect f)
   
@@ -219,7 +238,7 @@ let call (#b : Type u#b)
       (#a : b -> Type) (#pre : b -> SE.pre_t) (#post : (x : b) -> SE.post_t (a x))
       (#req : (x : b) -> SE.req_t (pre x)) (#ens : (x : b) -> SE.ens_t (pre x) (a x) (post x))
       ($f : (x : b) -> SE.Steel (a x) (pre x) (post x) (req x) (ens x)) (x : b)
-  : MRepr (a x) (M.Tspec (a x) (M.spec_r_steel u#a u#0 (pre x) (post x) (req x) (ens x)))
+  : MRepr (a x) (M.Tspec (a x) (M.spec_r_steel u#a u#8 (pre x) (post x) (req x) (ens x)))
   = MRepr?.reflect (C.repr_of_steel #(a x) (pre x) (post x) (req x) (ens x) (fun () -> f x))
 
 (**** Conversion to Steel *)
@@ -398,7 +417,7 @@ let test0 =
 
 let test1' (x : int)
   : SH.unit_steel int emp (fun _ -> emp) (requires fun _ -> x >= 1) (ensures fun _ y _ -> y >= 5)
-  = to_steel #[Dump Stage_M] begin fun () ->
+  = to_steel #[Dump Stage_WP] begin fun () ->
     assert (x >= 0);
     return (5 + x)
   end
@@ -408,19 +427,17 @@ let test2 (r : ref int) =
   dump_repr (fun () -> let x = read r in return x) ()
 
 // Stack overflow
-//   the return are needed to force the conversion from Steel to MRepr
 //let test3 (b : bool) (r0 r1 : ref int) =
 //  dump_repr (fun () -> if b then let x = read r0 in return x
 //                         else let x = read r1 in return x)
 
-// "mrepr_implicits" fails, WHY ?
-//#push-options "--print_universes --print_implicits"
-//let test3' (b : bool) (r0 r1 : ref int)
-//  : SH.unit_steel int (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
-//                    (requires fun _ -> True) (ensures fun _ _ _ -> True)
-//  = to_steel begin fun () ->
-//    if b then call read r0 else call read r1
-//  end
+let test3' (b : bool) (r0 r1 : ref int)
+  : SH.unit_steel int (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
+         (requires fun h0 -> sel r0 h0 >= 0 /\ sel r1 h0 >= 0)
+         (ensures  fun h0 x h1 -> frame_equalities (vptr r0 `star` vptr r1) h0 h1 /\ x >= 0)
+  = to_steel begin fun () ->
+    if b then call read r0 else call read r1
+  end
 
 let test4 (r0 r1 : ref int) =
   dump_repr (fun () ->
@@ -441,9 +458,6 @@ let test4 (r0 r1 : ref int) =
 //    return ()
 //  end
 
-// Fails because of a bind pure with different universes
-(*
-#push-options "--print_implicits --print_universes"
 let test5' (r : ref nat)
   : SH.unit_steel unit
       (vptr r) (fun _ -> vptr r)
@@ -452,4 +466,3 @@ let test5' (r : ref nat)
     let x = call read r in
     call (write r) (x - 1)
   end
-*)

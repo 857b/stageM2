@@ -9,6 +9,7 @@ module SH   = Experiment.Steel.Steel
 module Ll   = Learn.List
 module Dl   = Learn.DList
 module Fl   = Learn.FList
+module UV   = Learn.Universe
 module Msk  = Learn.List.Mask
 module Perm = Learn.Permutation
 
@@ -130,9 +131,8 @@ let prog_LV_to_Fun_extract_wp
 
 let __normal_M : list norm_step = [
   delta_only [`%Vpl.vprop_list_sels_t;   `%M.Mkrepr?.repr_tree;
-              `%L.map; `%SE.Mkvprop'?.t];
-  delta_attr [`%__tac_helper__; `%__repr_M__;
-              `%SE.__reduce__];
+              `%L.map; `%SE.Mkvprop'?.t; `%UV.lift_dom];
+  delta_attr [`%__tac_helper__; `%__repr_M__; `%SE.__reduce__];
   delta_qualifier ["unfold"];
   iota; zeta
 ]
@@ -202,7 +202,7 @@ let __normal_Fun_spec : list norm_step = [
               `%SF2Fun.Mksl_tys_r?.vl;    `%SF2Fun.Mksl_tys_r?.sl;
               `%Vpl.vprop_of_list; `%Vpl.vprop_of_list'];
   delta_qualifier ["unfold"];
-  delta_attr [`%SE.__steel_reduce__; `%Msk.__mask__];
+  delta_attr [`%SE.__steel_reduce__; `%Msk.__mask__; `%UV.__universe__];
   iota; zeta; primops
 ]
 
