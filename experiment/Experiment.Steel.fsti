@@ -39,9 +39,9 @@ open Experiment.Steel.Interface
 
 /// Here, [lc] should be the [lin_cond] obtained from [LV.lc_sub_push]
 let prog_LV_to_Fun
-      (#ek : SH.effect_kind) (#a : Type) (t : M.repr ek a)
+      (#a : Type) (t : M.prog_tree a)
       (#pre : M.pre_t) (#post : M.post_t a)
-      (lc : LV.top_lin_cond t.repr_tree pre post)
+      (lc : LV.top_lin_cond t pre post)
       (sl0 : Vpl.sl_f pre)
   : Fun.prog_tree #SF2Fun.sl_tys SF.({val_t = a; sel_t = M.post_sl_t post})
   =
@@ -64,11 +64,11 @@ let prog_M_equiv_Fun
         M.tree_ens t c sl0 x sl1 <==> Fun.tree_ens f ({val_v = x; sel_v = sl1})))
 
 val prog_LV_to_Fun_equiv_M
-      (#ek : SH.effect_kind) (#a : Type) (t : M.repr ek a)
+      (#a : Type) (t : M.prog_tree a)
       (#pre : M.pre_t) (#post : M.post_t a)
-      (lc : LV.top_lin_cond t.repr_tree pre post {LV.lcsub_at_leaves lc})
+      (lc : LV.top_lin_cond t pre post {LV.lcsub_at_leaves lc})
       (sl0 : Vpl.sl_f pre)
-  : Lemma (prog_M_equiv_Fun t.repr_tree (LV2M.repr_M_of_LV_top lc) sl0 (prog_LV_to_Fun t lc sl0))
+  : Lemma (prog_M_equiv_Fun t (LV2M.repr_M_of_LV_top lc) sl0 (prog_LV_to_Fun t lc sl0))
 
 inline_for_extraction
 let prog_LV_to_Fun_extract
@@ -77,9 +77,9 @@ let prog_LV_to_Fun_extract
       (lc : LV.top_lin_cond t.repr_tree pre post {LV.lcsub_at_leaves lc})
       (req : M.req_t pre) (ens : M.ens_t pre a post)
       (sub : (sl0 : Vpl.sl_f pre) -> Lemma (requires req sl0)
-               (ensures Fun.tree_req (prog_LV_to_Fun t lc sl0) /\
+               (ensures Fun.tree_req (prog_LV_to_Fun t.repr_tree lc sl0) /\
                   (forall (x : a) (sl1 : Vpl.sl_f (post x)) .
-                    Fun.tree_ens (prog_LV_to_Fun t lc sl0) SF.({val_v = x; sel_v = sl1}) ==>
+                    Fun.tree_ens (prog_LV_to_Fun t.repr_tree lc sl0) SF.({val_v = x; sel_v = sl1}) ==>
                     ens sl0 x sl1)))
   : M.repr_steel_t SH.KSteel a pre post req ens
   =
@@ -87,16 +87,16 @@ let prog_LV_to_Fun_extract
     let mc = LV2M.repr_M_of_LV_top lc in
     U.cast _ (M.repr_steel_subcomp _ _ req ens
       (fun sl0       -> let _ =
-        let f = prog_LV_to_Fun t lc sl0 in
+        let f = prog_LV_to_Fun t.repr_tree lc sl0 in
         sub sl0;
-        prog_LV_to_Fun_equiv_M t lc sl0;
+        prog_LV_to_Fun_equiv_M t.repr_tree lc sl0;
         // Probably because of [U.eta], the SMT fails to solve this. We rely on tactics instead.
         assert (prog_M_equiv_Fun tr mc sl0 f ==> (M.tree_req tr mc sl0 <==> Fun.tree_req f))
           by (hyp (destruct_and (implies_intro ()))._1)
         in ())
       (fun sl0 x sl1 -> let _ =
-        let f = prog_LV_to_Fun t lc sl0 in
-        prog_LV_to_Fun_equiv_M t lc sl0;
+        let f = prog_LV_to_Fun t.repr_tree lc sl0 in
+        prog_LV_to_Fun_equiv_M t.repr_tree lc sl0;
         assert (prog_M_equiv_Fun tr mc sl0 f ==> M.tree_req tr mc sl0 ==>
           (M.tree_ens tr mc sl0 x sl1 <==> Fun.tree_ens f ({val_v = x; sel_v = sl1})))
           by (let eqv = (destruct_and (implies_intro ()))._2 in
@@ -118,13 +118,13 @@ let prog_LV_to_Fun_extract_wp
       (req : M.req_t pre) (ens : M.ens_t pre a post)
       (wp : (sl0 : Vpl.sl_f pre) -> Lemma
               (requires req sl0)
-              (ensures Fun.tree_wp (prog_LV_to_Fun t lc1 sl0) (fun res -> ens sl0 res.val_v res.sel_v)))
+              (ensures Fun.tree_wp (prog_LV_to_Fun t.repr_tree lc1 sl0) (fun res -> ens sl0 res.val_v res.sel_v)))
   : M.repr_steel_t SH.KSteel a pre post req ens
   =
     (**) LV.lc_sub_push_at_leaves _ lc0;
     prog_LV_to_Fun_extract t lc1 req ens
       (fun sl0 -> wp sl0;
-               Fun.tree_wp_sound (prog_LV_to_Fun t lc1 sl0) (fun res -> ens sl0 res.val_v res.sel_v))
+               Fun.tree_wp_sound (prog_LV_to_Fun t.repr_tree lc1 sl0) (fun res -> ens sl0 res.val_v res.sel_v))
 
 
 (**** normalisation steps *)
@@ -239,7 +239,7 @@ let __solve_by_wp_LV
       (lc1 : LV.top_lin_cond t.repr_tree pre post) (lc1_eq : squash (lc1 == LV.lc_sub_push lc0))
       (t_Fun : (sl0 : Vpl.sl_f pre) ->
                GTot (Fun.prog_tree #SF2Fun.sl_tys ({val_t = a; sel_t = M.post_sl_t post})))
-      (t_Fun_eq : squash (t_Fun == (fun sl0 -> prog_LV_to_Fun t lc1 sl0)))
+      (t_Fun_eq : squash (t_Fun == (fun sl0 -> prog_LV_to_Fun t.repr_tree lc1 sl0)))
       (wp : squash (Fl.forall_flist (Vpl.vprop_list_sels_t pre) (fun sl0 ->
                req sl0 ==>
                Fun.tree_wp (t_Fun sl0) (fun res -> ens sl0 res.val_v res.sel_v))))
@@ -346,3 +346,95 @@ let to_steel
       (g : __to_steel_goal a pre post req ens t)
   : SH.unit_steel a pre post req ens
   = g
+
+
+(***** Using a [rewrite_with_tactic] *)
+
+noeq
+type to_steel_goal_spec
+      (a : Type) (pre : M.pre_t) (post : M.post_t a) (req : M.req_t pre) (ens : M.ens_t pre a post)
+      (t : M.prog_tree a)
+  = {
+    goal_spec_LV : LV.top_lin_cond t pre post;
+    goal_spec_WP : squash (
+      let lc1 = LV.lc_sub_push goal_spec_LV in
+      let t_Fun sl0 = prog_LV_to_Fun t lc1 sl0 in
+     (forall (sl0 : Vpl.sl_f pre) .
+       req sl0 ==>
+       Fun.tree_wp (t_Fun sl0) (fun res -> ens sl0 res.val_v res.sel_v))
+    )
+  }
+
+let to_steel_goal_spec_WP
+      (a : Type) (pre : M.pre_t) (post : M.post_t a) (req : M.req_t pre) (ens : M.ens_t pre a post)
+      (t : M.prog_tree a)
+      (lc0 : LV.top_lin_cond t pre post)
+  : Type0
+  =
+    let lc1 = LV.lc_sub_push lc0 in
+    let t_Fun sl0 = prog_LV_to_Fun t lc1 sl0 in
+    Fl.forall_flist (Vpl.vprop_list_sels_t pre) (fun (sl0 : Vpl.sl_f pre) ->
+       req sl0 ==>
+       Fun.tree_wp (t_Fun sl0) (fun res -> ens sl0 res.val_v res.sel_v))
+
+private
+let rewrite_to_steel_goal_spec (flags : list flag) () : Tac unit
+  =
+    let fr = make_flags_record flags in
+    norm [delta_only [`%to_steel_goal_spec_WP]];
+    
+    let t = timer_start "sub_push  " fr.f_timer in
+    TcLV.norm_lc ();
+    if fr.f_dump (Stage_LV false) then dump1 "at stage LV (before sub_push)";
+    norm __normal_lc_sub_push;
+    if fr.f_dump (Stage_LV  true) then dump1 "at stage LV (after sub_push)";
+    
+    let t = timer_enter t "LV2SF     " in
+    norm __normal_LV2SF;
+    if fr.f_dump Stage_SF then dump1 "at stage SF";
+    
+    let t = timer_enter t "SF2Fun    " in
+    norm __normal_Fun;
+    if fr.f_dump Stage_Fun then dump1 "at stage Fun";
+    
+    let t = timer_enter t "Fun_wp    " in
+    norm __normal_M;
+    norm __normal_Fun_spec;
+    if fr.f_dump Stage_WP then dump1 "at stage WP";
+
+    trefl ();
+    timer_stop t
+
+#push-options "--no_tactics"
+(**) private val __begin_build_to_steel_wrew : unit
+private
+let __build_to_steel_wrew
+      (flags : list flag)
+      (a : Type) (pre : M.pre_t) (post : M.post_t a) (req : M.req_t pre) (ens : M.ens_t pre a post)
+      (t : M.prog_tree a)
+      (goal_LV : LV.top_lin_cond t pre post)
+      (goal_WP : squash (rewrite_with_tactic (rewrite_to_steel_goal_spec flags)
+                         (to_steel_goal_spec_WP a pre post req ens t goal_LV)))
+  : to_steel_goal_spec a pre post req ens t
+  =
+    unfold_rewrite_with_tactic
+        (rewrite_to_steel_goal_spec flags)
+        (to_steel_goal_spec_WP a pre post req ens t goal_LV);
+    Mkto_steel_goal_spec goal_LV goal_WP
+#pop-options
+(**) private val __end_build_to_steel_wrew : unit
+
+let build_to_steel_wrew (fr : flags_record) (flags : list flag) (t : timer) : Tac timer
+  =
+    apply_raw (`__build_to_steel_wrew (`#(quote flags)));
+    
+    // goal_LV
+    let t = timer_enter t "lin_cond  " in
+    norm __normal_M;
+    if fr.f_dump Stage_M then dump1 "at stage M";
+    TcLV.build_top_lin_cond fr;
+
+    // goal_WP
+    smt ();
+
+    t

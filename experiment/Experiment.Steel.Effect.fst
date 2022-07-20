@@ -6,7 +6,6 @@ module C  = Experiment.Steel.Combinators
 module T  = FStar.Tactics
 module L  = FStar.List.Pure
 module UV = Learn.Universe
-module ES = Experiment.Steel
 module SE = Steel.Effect
 module SH = Experiment.Steel.Steel
 
@@ -305,7 +304,7 @@ let lift_pure_cv
       (a : Type) (wp : pure_wp a)
       (#[@@@ __cv_unused__] u : cv_unused)
       (f : (eqtype_as_type unit) -> PURE a wp)
-  : Pure (dummy_cv a) (requires as_requires wp) (ensures fun _ -> True)
+  : Tot (dummy_cv a)
   = elim_cv_unused u
 
 sub_effect PURE ~> ConvEffect = lift_pure_cv
@@ -333,7 +332,16 @@ sub_effect MRepr ~> ConvEffect = lift_mrepr_cv
 
 (**** Implicits resolution *)
 
-let __build_mrepr_to_steel
+module ES   = Experiment.Steel
+module LV   = Experiment.Steel.Repr.LV
+module TcS  = Experiment.Steel.Tac
+
+open FStar.Tactics
+open Learn.Tactics.Util
+
+
+private
+let __build_mrepr_to_steel_norew
       (flags : list flag)
       (a : Type) (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t pre) (ens : SE.ens_t pre a post)
       (t : prog_tree a)
@@ -343,26 +351,68 @@ let __build_mrepr_to_steel
   : mrepr_to_steel_t flags a pre post req ens t
   = MReprToSteel (fun r -> goal r.repr_steel)
 
-/// Solves a goal [mrepr_to_steel_t flags a pre post req ens t].
-let build_mrepr_to_steel () : T.Tac unit
-  = T.(with_policy Force (fun () ->
-    let args = (collect_app (cur_goal ()))._2 in
-    guard (L.length args = 7);
-    let flags = (L.hd args)._1                in
-
-    apply (`__build_mrepr_to_steel);
+/// Solves a goal [mrepr_to_steel_t flags a pre post req ens t] using [ES.build_to_steel].
+let build_mrepr_to_steel_norew (fr : flags_record) : Tac unit
+  =
+    apply (`__build_mrepr_to_steel_norew);
     let impl = intro () in
     //exact (`((_ by (ES.build_to_steel (make_flags_record (`#flags)))) <: (`#(cur_goal ()))))
-    let fr = make_flags_record (unquote #(list flag) flags) in
     ES.build_to_steel fr
-  ))
 
-/// The only source of "mrepr_implicits" failure should be a (possibly polymonadic) bind where the two types
-/// involved belong to different universes.
+
+private
+let __build_mrepr_to_steel_wrew
+      (flags : list flag)
+      (a : Type) (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t pre) (ens : SE.ens_t pre a post)
+      (t : prog_tree a)
+      (goal_tr : M.to_repr_t a pre post req ens)
+      (goal_sp : ES.to_steel_goal_spec a goal_tr.r_pre goal_tr.r_post goal_tr.r_req goal_tr.r_ens t)
+  : mrepr_to_steel_t flags a pre post req ens t
+  = MReprToSteel (fun r ->
+      M.steel_of_repr goal_tr
+        (let lc1 = LV.lc_sub_push goal_sp.goal_spec_LV in
+         ES.prog_LV_to_Fun_extract_wp r goal_sp.goal_spec_LV lc1 ()
+            goal_tr.r_req goal_tr.r_ens (fun sl0 -> goal_sp.goal_spec_WP)))
+
+/// Solves a goal [mrepr_to_steel_t flags a pre post req ens t] using a [rewrite_with_tactic] to avoid
+/// normalizing the WP twice.
+let build_mrepr_to_steel_wrew (fr : flags_record) (flags : list flag) : Tac unit
+  =
+    let fr    = make_flags_record flags in
+    apply_raw (`__build_mrepr_to_steel_wrew);
+
+    // goal_tr
+    let t = timer_start "specs     " fr.f_timer in
+    TcS.build_to_repr_t fr (fun () -> [Info_location "in the specification"]);
+
+    // goal_sp
+    norm [delta_attr [`%__tac_helper__]; iota];
+    let t = ES.build_to_steel_wrew fr flags t in
+
+    timer_stop t
+
+
+/// On a goal [mrepr_to_steel_t flags a pre post req ens t] returns [flags].
+let collect_flags () : Tac (list flag)
+  =
+    let args = (collect_app (cur_goal ()))._2      in
+    guard (L.length args = 7);
+    unquote (L.hd args)._1
+
+/// Solves a goal [mrepr_to_steel_t flags a pre post req ens t]
+let build_mrepr_to_steel () : Tac unit
+  =
+    let flags = collect_flags ()        in
+    let fr    = make_flags_record flags in
+    if fr.f_wrew
+    then build_mrepr_to_steel_wrew  fr flags
+    else build_mrepr_to_steel_norew fr
+
 
 [@@ resolve_implicits; __mrepr_implicit__]
-let mrepr_implicits_tac () : T.Tac unit
-  = T.(
+let mrepr_implicits_tac () : Tac unit
+  = with_policy Force (fun () ->
+    
     iterAll (fun () ->
       intros' ();
       try first [
@@ -372,13 +422,16 @@ let mrepr_implicits_tac () : T.Tac unit
         (fun () -> apply (`combine_bind_pure));
         (fun () -> // if it is an [mrepr_to_steel_t] goal, skip
                 let hd = (collect_app (cur_goal ()))._1 in
-                match T.inspect hd with
+                match inspect hd with
                 | Tv_FVar fv | Tv_UInst fv _ ->
                   let fv = inspect_fv fv in
                   guard (implode_qn fv = (`%mrepr_to_steel_t))
                 | _ -> fail "")
       ] with _ ->
-        fail "mrepr_implicits");
+        // The only sources of Fail_MRepr_implicit should be a bind where the two types involved belong to
+        // different universes. Or a polymonadic bind with an universe greater than [u#8].
+        TcS.cs_raise default_flags TcS.dummy_ctx (fun m -> fail (m Fail_MRepr_implicit [])));
+
     // At this point there should only remains a [mrepr_to_steel_t] goal
     iterAll build_mrepr_to_steel
   )
@@ -395,14 +448,14 @@ let display_term (#a : Type) (x : a) : Type = unit
 /// weakest precondition ([pure_wp_monotonic]).
 let dump_repr (#a : Type) (#r : prog_tree a)
       ($re : unit -> MRepr a r)
-      (#[T.(norm [delta_attr [`%__repr_M__]; iota]; dump "dump_repr"; exact (`()))] d : display_term r)
+      (#[(norm [delta_attr [`%__repr_M__]; iota]; dump "dump_repr"; exact (`()))] d : display_term r)
       ()
   : unit
   = ()
 
 
 let to_steel
-      (#[T.apply (`[])] flags : list flag)
+      (#[apply (`[])] flags : list flag)
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
       (r : unit -> ConvEffect a pre post req ens flags)
   : SH.unit_steel a pre post req ens
@@ -413,7 +466,8 @@ let test0 =
   dump_repr (fun () -> let x = return 5 in return (x + 1)) ()
 
 //[@@ handle_smt_goals ] let tac () = Tactics.dump "SMT query"
-//let test1 = dump_repr (fun () -> assert (5 >= 0); return 5) ()
+[@@ expect_failure [19]]
+let test1 = dump_repr (fun () -> assert (5 >= 0); return 5) ()
 
 let test1' (x : int)
   : SH.unit_steel int emp (fun _ -> emp) (requires fun _ -> x >= 1) (ensures fun _ y _ -> y >= 5)
@@ -435,7 +489,7 @@ let test3' (b : bool) (r0 r1 : ref int)
   : SH.unit_steel int (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
          (requires fun h0 -> sel r0 h0 >= 0 /\ sel r1 h0 >= 0)
          (ensures  fun h0 x h1 -> frame_equalities (vptr r0 `star` vptr r1) h0 h1 /\ x >= 0)
-  = to_steel begin fun () ->
+  = to_steel #[Timer] begin fun () ->
     if b then call read r0 else call read r1
   end
 
@@ -447,22 +501,23 @@ let test4 (r0 r1 : ref int) =
   ()
 
 // Fails because the prog_tree contains some uvar (because the Steel's tactic is called after our tactic ?)
-//let test5 (r : ref nat)
-//  : SH.unit_steel unit
-//      (vptr r) (fun _ -> vptr r)
-//      (requires fun h0 -> sel r h0 > 10) (ensures fun _ _ h1 -> sel r h1 >= 10)
-//  = to_steel #[Dump Stage_M] begin fun () ->
-//    let x = read r in
-//    let _ = return () in
-//    write r (x - 1);
-//    return ()
-//  end
+[@@ expect_failure [228]]
+let test5 (r : ref nat)
+  : SH.unit_steel unit
+      (vptr r) (fun _ -> vptr r)
+      (requires fun h0 -> sel r h0 > 10) (ensures fun _ _ h1 -> sel r h1 >= 10)
+  = to_steel #[Dump Stage_M] begin fun () ->
+    let x = read r in
+    let _ = return () in
+    write r (x - 1);
+    return ()
+  end
 
 let test5' (r : ref nat)
   : SH.unit_steel unit
       (vptr r) (fun _ -> vptr r)
       (requires fun h0 -> sel r h0 > 10) (ensures fun _ _ h1 -> sel r h1 >= 10)
-  = to_steel #[Dump Stage_M] begin fun () ->
+  = to_steel begin fun () ->
     let x = call read r in
     call (write r) (x - 1)
   end

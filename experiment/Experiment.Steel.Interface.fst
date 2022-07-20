@@ -35,6 +35,7 @@ type flag =
   | Full_Msg
   | Extract
   | InferRO
+  | WRew
 
 noeq
 type flags_record = {
@@ -43,6 +44,7 @@ type flags_record = {
   f_flmsg : bool;
   f_extr  : bool;
   f_infRO : bool;
+  f_wrew  : bool;
 }
 
 let default_flags : flags_record = {
@@ -51,6 +53,7 @@ let default_flags : flags_record = {
   f_flmsg = false;
   f_extr  = false;
   f_infRO = true;
+  f_wrew  = true;
 }
 
 let rec record_flag (pos : bool) (r : flags_record) (f : flag)
@@ -62,6 +65,7 @@ let rec record_flag (pos : bool) (r : flags_record) (f : flag)
   | Full_Msg -> {r with f_flmsg = pos}
   | Extract  -> {r with f_extr  = pos}
   | InferRO  -> {r with f_infRO = pos}
+  | WRew     -> {r with f_wrew  = pos}
 
 let make_flags_record : list flag -> flags_record =
   L.fold_left (record_flag true) default_flags
@@ -89,6 +93,7 @@ type failure_enum =
   | Fail_pequiv_len
   | Fail_dependency : (what : string) -> (on : binder) -> failure_enum
   | Fail_csm_le
+  | Fail_MRepr_implicit
 
 noeq
 type info =
