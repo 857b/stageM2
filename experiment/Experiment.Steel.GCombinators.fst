@@ -43,7 +43,7 @@ let slrewrite_spec_r (#t : Type u#t) (x0 x1 : t) (v0 v1 frame : vprop_list) (veq
 
 noeq
 type slrewrite_gen_c (#t : Type u#t) (x0 x1 : t)
-  : M.spec_r (U.unit' u#a) -> Type u#(max a 2) =
+  : M.spec_r (U.unit' u#a) -> Type u#(max a p 2) =
   | SlRewrite : (v0 : vprop_list) -> (v1 : vprop_list) -> (frame : vprop_list) ->
                 (veq : squash (x0 == x1 ==> v0 == v1)) ->
                 slrewrite_gen_c x0 x1 (slrewrite_spec_r x0 x1 v0 v1 frame veq)
@@ -65,7 +65,7 @@ let __build_slrewrite
       (#t : Type u#t) (x0 x1 : t) (#gen_tac : M.gen_tac_t)
       (env' : vprop_list)
       (rew : (rew_x : unit -> Lemma (x0 == x1)) -> squash (env == env'))
-  : LV.lin_cond env (M.Tgen (U.unit' u#a) gen_tac (slrewrite_gen_c #t x0 x1)) (LV.csm_all env) (fun _ -> env')
+  : LV.lin_cond u#a u#p env (M.Tgen U.unit' gen_tac (slrewrite_gen_c #t x0 x1)) (LV.csm_all env) (fun _ -> env')
   =
     introduce x0 == x1 ==> env == env'
       with _ . rew (fun () -> ());
@@ -98,9 +98,9 @@ let build_slrewrite (fr : flags_record) : Tac unit
 [@@ __repr_M__]
 inline_for_extraction
 let slrewrite (#t : Type u#t) (#opened : Mem.inames) (x0 x1 : t)
-  : M.repr (SH.KGhost opened) (U.unit' u#a)
+  : M.repr u#a u#p (SH.KGhost opened) U.unit'
   =
-    make_combinator (U.unit' u#a) (SH.KGhost opened) build_slrewrite (slrewrite_gen_c #t x0 x1)
+    make_combinator U.unit' (SH.KGhost opened) build_slrewrite (slrewrite_gen_c #t x0 x1)
       (fun _ (SlRewrite v0 v1 frame veq) -> slrewrite_steel opened x0 x1 v0 v1 frame veq)
 
 
@@ -266,8 +266,8 @@ type with_invariant_gen_c
 /// [f] is mentioned only to be recovered by [__build_with_invariant]. Since it is a parameter, it does not
 /// affect the universe of the datatype.
 noeq
-type with_invariant_gen_c (a : Type u#a) (ek : SH.effect_kind) (f : M.repr ek a) (p : vprop)
-  : M.spec_r a -> Type u#(max a 2) =
+type with_invariant_gen_c (a : Type u#a) (ek : SH.effect_kind) (f : M.repr u#a u#p ek a) (p : vprop)
+  : M.spec_r a -> Type u#(max a p 2) =
   | WithInvariant :
       (p' : vprop_list) -> (tp : vprop_to_list p p') ->
       (pre : M.pre_t) -> (post : M.post_t a) -> (ro : vprop_list) ->
@@ -311,9 +311,9 @@ let with_invariant_g_steel
 
 [@@ __cond_solver__]
 let with_invariant_spec_r_lc
-     (#a : Type u#a) (p : vprop_list) (#f : M.prog_tree a)
+     (#a : Type) (p : vprop_list) (#f : M.prog_tree a)
      (#env : vprop_list) (csm : LV.csm_t env) (#prd : LV.prd_t a)
-     (cf : LV.lin_cond L.(p @ env) f (LV.bind_g_csm' p csm) L.(fun x -> p @ prd x))
+     (cf : LV.lin_cond u#a u#p L.(p @ env) f (LV.bind_g_csm' p csm) L.(fun x -> p @ prd x))
   : M.spec_r a
   =
     (**) LV.filter_csm_bind_g_csm' p csm;
@@ -324,9 +324,9 @@ let with_invariant_spec_r_lc
 // TODO? use __LV2SF__ operations instead of append_vars & split_vars
 [@@ __LV2SF__]
 let with_invariant_sf'
-      (#a : Type u#a) (p : vprop_list) (#f : M.prog_tree a)
+      (#a : Type) (p : vprop_list) (#f : M.prog_tree a)
       (#env : vprop_list) (csm : LV.csm_t env) (#prd : LV.prd_t a)
-      (cf : LV.lin_cond L.(p @ env) f (LV.bind_g_csm' p csm) L.(fun x -> p @ prd x))
+      (cf : LV.lin_cond u#a u#p L.(p @ env) f (LV.bind_g_csm' p csm) L.(fun x -> p @ prd x))
       (sl0 : sl_f Msk.(filter_mask csm env)) (sl_ro : sl_f Msk.(filter_mask (mask_not csm) env))
   : SF.prog_tree a (M.post_sl_t prd)
   =
@@ -359,9 +359,9 @@ let __normal_with_invariant_sf : list norm_step = [
 
 [@@ __LV2SF__]
 let with_invariant_sf
-      (#a : Type u#a) (p : vprop_list) (#f : M.prog_tree a)
+      (#a : Type) (p : vprop_list) (#f : M.prog_tree a)
       (#env : vprop_list) (csm : LV.csm_t env) (#prd : LV.prd_t a)
-      (cf : LV.lin_cond L.(p @ env) f (LV.bind_g_csm' p csm) L.(fun x -> p @ prd x))
+      (cf : LV.lin_cond u#a u#p L.(p @ env) f (LV.bind_g_csm' p csm) L.(fun x -> p @ prd x))
   : LV.gen_sf (with_invariant_spec_r_lc p csm cf)
   =
     fun sl0 sl_ro ->
@@ -412,14 +412,14 @@ let with_invariant_sf
 [@@ __cond_solver__]
 let __build_with_invariant
       (env : vprop_list)
-      (#a : Type u#a) (#ek : SH.effect_kind) (f : M.repr ek a) (#p : vprop) (#gen_tac : M.gen_tac_t)
+      (#a : Type) (#ek : SH.effect_kind) (f : M.repr ek a) (#p : vprop) (#gen_tac : M.gen_tac_t)
       (p' : vprop_list) (tp : vprop_to_list p p')
       (csm : LV.csm_t env) (prd : LV.prd_t a)
       (cf : (Msk.filter_mask_split_l p' env;
-             lin_cond_st L.(p' @ env) f.repr_tree
+             lin_cond_st u#a u#p L.(p' @ env) f.repr_tree
                (Msk.mask_split_l (L.length p') (L.length env)) (fun _ -> p')
                csm prd))
-  : LV.lin_cond env (M.Tgen a gen_tac (with_invariant_gen_c a ek f p)) csm prd
+  : LV.lin_cond u#a u#p env (M.Tgen a gen_tac (with_invariant_gen_c a ek f p)) csm prd
   =
     let n_p'  = L.length p'                 in
     let n_env = L.length env                in
@@ -456,10 +456,10 @@ let build_with_invariant_g (fr : flags_record) : Tac unit
 [@@ __repr_M__]
 inline_for_extraction
 let with_invariant_g
-      (#a : Type u#a) (#opened : Mem.inames)
+      (#a : Type) (#opened : Mem.inames)
       (#p : vprop) (i : inv p{not (mem_inv opened i)})
       (f : M.repr (SH.KGhost (add_inv opened i)) a)
-  : M.repr (SH.KGhost opened) a
+  : M.repr u#a u#p (SH.KGhost opened) a
   =
     make_combinator a (SH.KGhost opened)
       build_with_invariant_g (with_invariant_gen_c a (SH.KGhost (add_inv opened i)) f p)
@@ -555,8 +555,8 @@ type for_loop_gen_c
       (start : U32.t) (finish : U32.t { U32.v start <= U32.v finish })
       (inv  : (i : nat { i <= U32.v finish }) -> vprop_list)
       (invp : (i : nat { i <= U32.v finish }) -> sl_f (inv i) -> Type0)
-      (body : (i : U32.t { U32.v i < U32.v finish }) -> M.repr u#a SH.KSteel U.unit')
-  : M.spec_r (U.unit' u#a) -> Type u#(max a 2) =
+      (body : (i : U32.t { U32.v i < U32.v finish }) -> M.repr u#a u#p SH.KSteel U.unit')
+  : M.spec_r u#a U.unit' -> Type u#(max a p 2) =
   | ForLoop :
       (ro    : vprop_list) ->
       (req   : ((i : U32.t { U32.v i < U32.v finish }) -> sl_f (inv (U32.v i)) -> sl_f ro -> Type0)) ->
@@ -718,7 +718,7 @@ let __build_for_loop
       (start : U32.t) (finish : U32.t { U32.v start <= U32.v finish })
       (inv  : (i : nat { i <= U32.v finish }) -> vprop_list)
       (invp : (i : nat { i <= U32.v finish }) -> sl_f (inv i) -> Type0)
-      (body : (i : U32.t { U32.v i < U32.v finish }) -> M.repr u#a SH.KSteel U.unit')
+      (body : (i : U32.t { U32.v i < U32.v finish }) -> M.repr u#a u#p SH.KSteel U.unit')
       (gen_tac : M.gen_tac_t)
       (pre_f : LV.eq_injection_l (inv (U32.v start)) env)
       (ro : vprop_list)
@@ -728,7 +728,7 @@ let __build_for_loop
       (lc_body : (i : U32.t { U32.v i < U32.v finish }) ->
                  (lc : for_loop_body_lc finish inv ro i (body i).repr_tree
                   { LV.lcsub_at_leaves lc}))
-  : LV.lin_cond env (M.Tgen (U.unit' u#a) gen_tac (for_loop_gen_c start finish inv invp body))
+  : LV.lin_cond u#a u#p env (M.Tgen U.unit' gen_tac (for_loop_gen_c start finish inv invp body))
                 (LV.eij_trg_mask pre_f) (fun _ -> inv (U32.v finish))
   =
     let req  = for_loop_body_req lc_body                   in
@@ -848,10 +848,10 @@ let for_loop
       (start : U32.t) (finish : U32.t { U32.v start <= U32.v finish })
       (inv  : (i : nat { i <= U32.v finish }) -> vprop_list)
       (invp : (i : nat { i <= U32.v finish }) -> sl_f (inv i) -> Type0)
-      (body : (i : U32.t { U32.v i < U32.v finish }) -> M.repr u#a SH.KSteel U.unit')
-  : M.repr SH.KSteel (U.unit' u#a)
+      (body : (i : U32.t { U32.v i < U32.v finish }) -> M.repr u#a u#p SH.KSteel U.unit')
+  : M.repr u#a u#p SH.KSteel U.unit'
   =
-    make_combinator (U.unit' u#a) SH.KSteel build_for_loop (for_loop_gen_c start finish inv invp body)
+    make_combinator U.unit' SH.KSteel build_for_loop (for_loop_gen_c start finish inv invp body)
       (fun _ (ForLoop ro req ens lreq body') -> for_loop_steel start finish inv invp ro req ens lreq body')
 
 #pop-options

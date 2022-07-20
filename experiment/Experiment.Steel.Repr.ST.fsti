@@ -33,7 +33,7 @@ let seq_ens1 (#pre #post : Fl.ty_list) (eqv : sequiv pre post) (sl0 : Fl.flist p
 
 
 noeq
-type prog_tree : (a : Type u#a) -> (pre : pre_t u#b) -> (post : post_t u#a u#b a) -> Type u#(1 + max a b) =
+type prog_tree : (a : Type u#a) -> (pre : pre_t u#b) -> (post : post_t u#a u#b a) -> Type u#(1 + max a b p) =
   | Tequiv : (pre : Fl.ty_list) -> (post : Fl.ty_list) ->
              (e : sequiv pre post) ->
              prog_tree U.unit' pre (const_post post)
@@ -49,7 +49,7 @@ type prog_tree : (a : Type u#a) -> (pre : pre_t u#b) -> (post : post_t u#a u#b a
              (pre : pre_t) -> (itm : post_t a) -> (post : post_t b) ->
              (f : prog_tree a pre itm) -> (g : ((x : a) -> prog_tree b (itm x) post)) ->
              prog_tree b pre post
-  | TbindP : (a : Type u#a) -> (b : Type u#a) ->
+  | TbindP : (a : Type u#p) -> (b : Type u#a) ->
              (pre : pre_t) -> (post : post_t b) ->
              (wp : pure_wp a) -> (g : a -> prog_tree b pre post) ->
              prog_tree b pre post
@@ -63,7 +63,7 @@ type prog_tree : (a : Type u#a) -> (pre : pre_t u#b) -> (post : post_t u#a u#b a
 unfold
 let match_prog_tree
       (#a0 : Type u#a) (#pre0 : pre_t u#b) (#post0 : post_t u#a u#b a0)
-      (t0 : prog_tree a0 pre0 post0)
+      (t0 : prog_tree u#a u#b u#p a0 pre0 post0)
       (r : (a : Type u#a) -> (pre : pre_t u#b) -> (post : post_t u#a u#b a) ->
            (t : prog_tree a pre post) -> Type u#c)
       (c_Tequiv : (pre : Fl.ty_list) -> (post : Fl.ty_list) ->
@@ -254,8 +254,8 @@ type shape_tree : (pre_n : nat) -> (post_n : nat) -> Type =
 let post_has_len (#a : Type) (post : post_t a) (len : nat) : prop = forall (x : a) . L.length (post x) = len
 
 [@@ strict_on_arguments [3]] (* strict on t *)
-let rec prog_has_shape (#a : Type u#a) (#pre : pre_t u#b) (#post : post_t u#a u#b a)
-                       (t : prog_tree a pre post)
+let rec prog_has_shape (#a : Type) (#pre : pre_t) (#post : post_t a)
+                       (t : prog_tree u#a u#b u#p a pre post)
                        (#post_n : nat) (s : shape_tree (L.length pre) post_n)
   : Pure prop (requires True)
               (ensures fun p -> p ==> post_has_len post post_n)
@@ -289,8 +289,8 @@ let rec prog_has_shape (#a : Type u#a) (#pre : pre_t u#b) (#post : post_t u#a u#
                                     prog_has_shape els s_els
     )
 
-let rec prog_has_shape' (#a : Type u#a) (#pre : pre_t u#b) (#post : post_t u#a u#b a)
-                        (t : prog_tree a pre post)
+let rec prog_has_shape' (#a : Type) (#pre : pre_t) (#post : post_t a)
+                        (t : prog_tree u#a u#b u#p a pre post)
                         (#post_n : nat) (s : shape_tree (L.length pre) post_n)
   : Pure prop (requires True) (ensures fun p -> p <==> prog_has_shape t s) (decreases t)
   = match t returns prop with
@@ -351,12 +351,12 @@ let flatten_prog_k_id #a #post #pre' (t' : prog_tree a pre' post) : prog_tree a 
   = t'
 
 let rec flatten_prog
-      #a #pre #post (t : prog_tree a pre post)
+      #a #pre #post (t : prog_tree u#a u#b u#p a pre post)
   : Tot (prog_tree a pre post) (decreases %[t; 1])
   = flatten_prog_aux t flatten_prog_k_id
 
 and flatten_prog_aux
-      #a  #pre #post (t : prog_tree a pre post)
+      #a  #pre #post (t : prog_tree u#a u#b u#p a pre post)
       #a1 #post1 (k : ((#pre' : pre_t) -> (t' : prog_tree a pre' post) -> prog_tree a1 pre' post1))
   : Tot (prog_tree a1 pre post1) (decreases %[t; 0])
   = match t with
@@ -401,11 +401,11 @@ and flatten_shape_aux
 
 
 val flatten_equiv
-      (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree u#a u#b a pre post)
+      (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree u#a u#b u#p a pre post)
   : Lemma (equiv (flatten_prog t) t)
 
 val flatten_equiv_aux
-      (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree u#a u#b a pre post)
+      (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree u#a u#b u#p a pre post)
       (#a1 : Type) (#post1 : post_t a1)
       (k : ((#pre' : pre_t) -> (t' : prog_tree a pre' post) -> prog_tree a1 pre' post1))
       (k_equiv : (pre' : pre_t) -> (t'0 : prog_tree a pre' post) -> (t'1 : prog_tree a pre' post) ->
@@ -417,16 +417,16 @@ val flatten_equiv_aux
   : Lemma (equiv (flatten_prog_aux t k) (k t))
 
 val flatten_prog_shape
-      (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree u#a u#b a pre post)
+      (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree u#a u#b u#p a pre post)
       (#post_n : nat) (s : shape_tree (L.length pre) post_n)
    : Lemma (requires prog_has_shape t s)
            (ensures  prog_has_shape (flatten_prog t) (flatten_shape s))
 
 val flatten_prog_shape_aux
-      (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree u#a u#b a pre post)
+      (#a : Type) (#pre : pre_t) (#post : post_t a) (t : prog_tree u#a u#b u#p a pre post)
       (#post_n : nat) (s : shape_tree (L.length pre) post_n)
       (#a1 : Type) (#post1 : post_t a1)
-      (k_t : ((#pre' : pre_t) -> (t' : prog_tree a pre' post) -> prog_tree u#a u#b a1 pre' post1))
+      (k_t : ((#pre' : pre_t) -> (t' : prog_tree a pre' post) -> prog_tree u#a u#b u#p a1 pre' post1))
       (post1_n : nat {post_has_len post1 post1_n})
       (k_s : ((#pre'_n : nat) -> (s' : shape_tree pre'_n post_n) -> shape_tree pre'_n post1_n))
       (k_hyp : (pre' : pre_t) -> (t' : prog_tree a pre' post) -> (s' : shape_tree (L.length pre') post_n) ->

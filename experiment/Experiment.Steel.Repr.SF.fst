@@ -6,14 +6,14 @@ module ST  = Experiment.Steel.Repr.ST
 module Fin = FStar.Fin
 
 
-type post_t (a : Type) = a -> Fl.ty_list
+type post_t (a : Type u#a) = a -> Fl.ty_list u#b
 type post_v (#a : Type) (post : post_t a) (x : a) = Fl.flist (post x)
 type req_t = Type0
 type ens_t (a : Type) (post : post_t a) = (x : a) -> post_v post x -> Type0
 
 // TODO? Twp with a WP on the returned values and selectors
 noeq
-type prog_tree : (a : Type u#a) -> (post : post_t u#a u#b a) -> Type u#(1 + max a b) =
+type prog_tree : (a : Type u#a) -> (post : post_t u#a u#b a) -> Type u#(1 + max a b p) =
   | Tspec : (a : Type u#a) -> (post : post_t a) ->
             (req : req_t) -> (ens : ens_t a post) ->
             prog_tree a post
@@ -23,7 +23,7 @@ type prog_tree : (a : Type u#a) -> (post : post_t u#a u#b a) -> Type u#(1 + max 
              (itm : post_t a) -> (post : post_t b) ->
              (f : prog_tree a itm) -> (g : ((x : a) -> (sl : post_v itm x) -> prog_tree b post)) ->
              prog_tree b post
-  | TbindP : (a : Type u#a) -> (b : Type u#a) ->
+  | TbindP : (a : Type u#p) -> (b : Type u#a) ->
              (post : post_t b) ->
              (wp : pure_wp a) -> (g : a -> prog_tree b post) ->
              prog_tree b post
@@ -85,7 +85,7 @@ type shape_tree : (post_n : nat) -> Type =
 
 [@@ strict_on_arguments [2]] (* strict on t *)
 let rec prog_has_shape (#a : Type u#a) (#post : post_t u#a u#b a)
-                       (t : prog_tree a post)
+                       (t : prog_tree u#a u#b u#p a post)
                        (#post_n : nat) (s : shape_tree post_n)
   : Pure prop (requires True)
               (ensures fun p -> p ==> ST.post_has_len post post_n)

@@ -137,8 +137,9 @@ let sl_tys_lam : Fun.tys_lam sl_tys =
 (*** Translation of the representation *)
 
 [@@ strict_on_arguments [2]] (* strict on t *)
-let rec repr_Fun_of_SF (#val_t : Type u#a) (#sel_t : post_t u#a u#b val_t) (t : prog_tree val_t sel_t)
-  : Tot (Fun.prog_tree u#(max a b + 1) u#(max a (b + 1)) u#(max a (b + 1)) u#a
+let rec repr_Fun_of_SF
+          (#val_t : Type u#a) (#sel_t : post_t u#a u#b val_t) (t : prog_tree u#a u#b u#p val_t sel_t)
+  : Tot (Fun.prog_tree u#(max a b + 1) u#(max a (b + 1)) u#(max a (b + 1)) u#p
                        #(sl_tys u#a u#b) ({val_t; sel_t}))
         (decreases t)
   = match t with
@@ -166,14 +167,14 @@ let rec shape_Fun_of_SF (#post_n : nat) (s : shape_tree post_n)
 
 (*** Soundness *)
 
-val repr_Fun_of_SF_req (#val_t : Type) (#sel_t : post_t val_t) (t : prog_tree u#a u#b val_t sel_t)
+val repr_Fun_of_SF_req (#val_t : Type) (#sel_t : post_t val_t) (t : prog_tree u#a u#b u#p val_t sel_t)
   : Lemma (tree_req t <==> Fun.tree_req (repr_Fun_of_SF t))
 
-val repr_Fun_of_SF_ens (#val_t : Type) (#sel_t : post_t val_t) (t : prog_tree u#a u#b val_t sel_t)
+val repr_Fun_of_SF_ens (#val_t : Type) (#sel_t : post_t val_t) (t : prog_tree u#a u#b u#p val_t sel_t)
                        (val_v : val_t) (sel_v : Fl.flist (sel_t val_v))
   : Lemma (tree_ens t val_v sel_v <==> Fun.tree_ens (repr_Fun_of_SF t) ({val_v; sel_v}))
 
 val repr_Fun_of_SF_shape
-      (#val_t : Type) (#sel_t : post_t val_t) (t : prog_tree u#a u#b val_t sel_t)
+      (#val_t : Type) (#sel_t : post_t val_t) (t : prog_tree u#a u#b u#p val_t sel_t)
       (s : prog_shape t)
   : Lemma (Fun.prog_has_shape (repr_Fun_of_SF t) (shape_Fun_of_SF s.shp))

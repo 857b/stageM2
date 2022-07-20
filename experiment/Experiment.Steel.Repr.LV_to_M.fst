@@ -310,14 +310,14 @@ let inv_lcsub_at_leaves__LCsub
 #push-options "--ifuel 0 --fuel 0"
 
 let sound_repr_M_of_LV
-      (#env : vprop_list) (#a : Type u#a) (#t : M.prog_tree a)
+      (#env : vprop_list) (#a : Type) (#t : M.prog_tree a)
       (#csm : csm_t env) (#prd : prd_t a)
       (lc : lin_cond env t csm prd {lcsub_at_leaves lc})
   : prop
   = sound_M_of_LV lc (repr_M_of_LV lc)
 
 let intro_sound_M_of_LV
-      (#env : vprop_list) (#a : Type u#a) (#t : M.prog_tree a)
+      (#env : vprop_list) (#a : Type) (#t : M.prog_tree a)
       (#csm : csm_t env) (#prd : prd_t a)
       (lc : lin_cond env t csm prd) (mc : lc_to_M lc)
       (pf_req : (sl0 : sl_f env) ->
@@ -408,7 +408,7 @@ let tac_sound_LV2M () : Tac unit =
 
 let sound_repr_M_of_LV__LCspec
       (env : vprop_list)
-      (a : Type u#a) (sp : M.spec_r a -> Type u#(max a 2))
+      (a : Type) (sp : M.spec_r a -> Type)
       (pre : M.pre_t) (post : M.post_t a) (ro : vprop_list)
       (req : sl_f pre -> sl_f ro -> Type0) (ens : sl_f pre -> (x : a) -> sl_f (post x) -> sl_f ro -> Type0)
       (sh : sp (M.Mkspec_r pre post ro req ens))
@@ -469,7 +469,7 @@ let sound_repr_M_of_LV__LCspec
 
 let sound_repr_M_of_LV__LCret
       (env : vprop_list)
-      (a : Type u#a) (x : a) (sl_hint : M.post_t a)
+      (a : Type) (x : a) (sl_hint : M.post_t a)
       (prd : prd_t a) (csm_f : eq_injection_l (prd x) env)
   : squash (sound_repr_M_of_LV (LCret env #a #x #sl_hint prd csm_f))
   =
@@ -483,7 +483,7 @@ let sound_repr_M_of_LV__LCret
 
 let sound_repr_M_of_LV__LCbind
       (env : vprop_list)
-      (a : Type u#a) (b : Type u#a) (f : M.prog_tree a) (g : (a -> M.prog_tree b))
+      (a : Type) (b : Type) (f : M.prog_tree a) (g : (a -> M.prog_tree b))
       (f_csm : csm_t env) (f_prd : prd_t a)
       (cf : lin_cond env f f_csm f_prd)
       (g_csm : csm_t (filter_mask (mask_not f_csm) env)) (g_prd : prd_t b)
@@ -538,7 +538,7 @@ let sound_repr_M_of_LV__LCbind
 
 let sound_repr_M_of_LV__LCbindP
       (env : vprop_list)
-      (a : Type u#a) (b : Type u#a) (wp : pure_wp a) (g : a -> M.prog_tree b)
+      (a : Type) (b : Type) (wp : pure_wp a) (g : a -> M.prog_tree b)
       (csm : csm_t env) (prd : prd_t b)
       (cg : (x : a) -> lin_cond env (g x) csm prd)
 
@@ -553,7 +553,7 @@ let sound_repr_M_of_LV__LCbindP
 
 let sound_repr_M_of_LV__LCif
       (env : vprop_list)
-      (a : Type u#a) (guard : bool) (thn els : M.prog_tree a)
+      (a : Type) (guard : bool) (thn els : M.prog_tree a)
       (csm : csm_t env) (prd : prd_t a)
       (cthn : lin_cond env thn csm prd)
       (cels : lin_cond env els csm prd)
@@ -568,8 +568,8 @@ let sound_repr_M_of_LV__LCif
 
 let sound_repr_M_of_LV__LCgen
       (env : vprop_list)
-      (a : Type u#a) (gen_tac : M.gen_tac_t)
-      (gen_c : M.spec_r a -> Type u#(max a 2))
+      (a : Type) (gen_tac : M.gen_tac_t)
+      (gen_c : M.spec_r a -> Type)
       (pre : M.pre_t) (post : M.post_t a) (ro : vprop_list)
       (req : sl_f pre -> sl_f ro -> Type0) (ens : sl_f pre -> (x : a) -> sl_f (post x) -> sl_f ro -> Type0)
       (sh : gen_c (M.Mkspec_r pre post ro req ens))
@@ -634,7 +634,7 @@ let force_M_tree_ens #a #t #pre #post (c : M.tree_cond #a t pre post) sl0 x sl1
 // TODO?: factorize with LCspec
 let sound_repr_M_of_LV__LCsub_LCspec
       (env : vprop_list)
-      (a : Type u#a) (sp : M.spec_r a -> Type u#(max a 2))
+      (a : Type) (sp : M.spec_r a -> Type)
       (pre : M.pre_t) (post : M.post_t a) (ro : vprop_list)
       (req : sl_f pre -> sl_f ro -> Type0) (ens : sl_f pre -> (x : a) -> sl_f (post x) -> sl_f ro -> Type0)
       (sh : sp (M.Mkspec_r pre post ro req ens))
@@ -722,8 +722,8 @@ let sound_repr_M_of_LV__LCsub_LCspec
 
 let sound_repr_M_of_LV__LCsub_LCgen
       (env : vprop_list)
-      (a : Type u#a) (gen_tac : M.gen_tac_t)
-      (gen_c : M.spec_r a -> Type u#(max a 2))
+      (a : Type) (gen_tac : M.gen_tac_t)
+      (gen_c : M.spec_r a -> Type)
       (pre : M.pre_t) (post : M.post_t a) (ro : vprop_list)
       (req : sl_f pre -> sl_f ro -> Type0) (ens : sl_f pre -> (x : a) -> sl_f (post x) -> sl_f ro -> Type0)
       (sh : gen_c (M.Mkspec_r pre post ro req ens))
@@ -796,7 +796,7 @@ let sound_repr_M_of_LV__LCsub_LCgen
 
 #push-options "--ifuel 0 --fuel 1"
 let rec repr_M_of_LV_sound
-      (#env : vprop_list) (#a : Type u#a) (#t : M.prog_tree a)
+      (#env : vprop_list) (#a : Type) (#t : M.prog_tree a)
       (#csm : csm_t env) (#prd : prd_t a)
       (lc : lin_cond env t csm prd {lcsub_at_leaves lc})
   : Lemma (ensures sound_M_of_LV lc (repr_M_of_LV lc)) (decreases lc)
@@ -856,7 +856,7 @@ let rec repr_M_of_LV_sound
 
 #push-options "--ifuel 0 --fuel 1"
 let repr_M_of_LV_top_sound
-      (#a : Type u#a) (#t : M.prog_tree a) (#pre : M.pre_t) (#post : M.post_t a)
+      (#a : Type) (#t : M.prog_tree a) (#pre : M.pre_t) (#post : M.post_t a)
       (lc : top_lin_cond t pre post {lcsub_at_leaves lc})
   =
     let mc  = repr_M_of_LV_top lc in

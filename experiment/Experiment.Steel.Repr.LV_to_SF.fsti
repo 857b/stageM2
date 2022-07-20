@@ -128,11 +128,11 @@ let append_vars_mask_l
 
 [@@ __LV2SF__; strict_on_arguments [5]] (* strict on [lc] *)
 let rec repr_SF_of_LV
-      (#env : vprop_list) (#a : Type u#a) (#t : M.prog_tree a)
+      (#env : vprop_list) (#a : Type) (#t : M.prog_tree a)
       (#csm : csm_t env) (#prd : prd_t a)
-      (lc : lin_cond env t csm prd)
+      (lc : lin_cond u#a u#p env t csm prd)
       (sl0 : sl_list env)
-  : Tot (SF.prog_tree a (M.post_sl_t prd)) (decreases lc)
+  : Tot (SF.prog_tree u#a u#0 u#p a (M.post_sl_t prd)) (decreases lc)
   = match lc with
   | LCspec env #a #sp s sh pre_f ->
       let sl0s = split_vars_l s.spc_pre s.spc_ro (eij_sl_l pre_f sl0) in
@@ -165,11 +165,11 @@ let rec repr_SF_of_LV
 (*** Soundness *)
 
 let sound_SF_of_LV
-      (#env : vprop_list) (#a : Type u#a) (#t : M.prog_tree a)
+      (#env : vprop_list) (#a : Type) (#t : M.prog_tree a)
       (#csm : csm_t env) (#prd : prd_t a)
-      (lc : lin_cond env t csm prd)
+      (lc : lin_cond u#a u#p env t csm prd)
       (sl0 : sl_list env)
-      (sf : SF.prog_tree a (M.post_sl_t prd))
+      (sf : SF.prog_tree u#a u#0 u#p a (M.post_sl_t prd))
   : prop
   =
     (tree_req lc (Fl.flist_of_d sl0) <==> SF.tree_req sf) /\
@@ -177,8 +177,8 @@ let sound_SF_of_LV
        tree_ens lc (Fl.flist_of_d sl0) res sl1 <==> SF.tree_ens sf res sl1)
 
 val repr_SF_of_LV_sound
-      (#env : vprop_list) (#a : Type u#a) (#t : M.prog_tree a)
+      (#env : vprop_list) (#a : Type) (#t : M.prog_tree a)
       (#csm : csm_t env) (#prd : prd_t a)
-      (lc : lin_cond env t csm prd)
+      (lc : lin_cond u#a u#p env t csm prd)
       (sl0 : sl_list env)
   : Lemma (sound_SF_of_LV lc sl0 (repr_SF_of_LV lc sl0))

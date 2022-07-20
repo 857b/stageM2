@@ -125,7 +125,7 @@ and repr_Fun_of_SF_ens #val_t #sel_t (t : prog_tree val_t sel_t)
 
 #push-options "--fuel 1 --ifuel 1"
 let rec repr_Fun_of_SF_shape
-      (#val_t : Type) (#sel_t : post_t val_t) (t : prog_tree u#a u#b val_t sel_t)
+      (#val_t : Type) (#sel_t : post_t val_t) (t : prog_tree val_t sel_t)
       (s : prog_shape t)
   : Lemma (ensures Fun.prog_has_shape (repr_Fun_of_SF t) (shape_Fun_of_SF s.shp))
           (decreases t)

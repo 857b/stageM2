@@ -22,7 +22,7 @@ open Experiment.Steel.VPropList
 type pre_t = vprop_list
 type post_t (a : Type) = a -> vprop_list
 
-let post_sl_t (#a : Type) (pt : post_t a) : a -> Fl.ty_list
+let post_sl_t (#a : Type u#a) (pt : post_t a) : a -> Fl.ty_list u#0
   = fun (x : a) -> vprop_list_sels_t (pt x)
 
 type req_t (pre : pre_t) = sl_f pre -> Type0
@@ -167,7 +167,7 @@ type spc_steel_t_ghost (#a : Type) (opened : Mem.inames) (s : spec_r a)
                             sel_f s.spc_ro h1 == sel_f s.spc_ro h0)
 
 
-type spec_r_exact (#a : Type u#a) (s0 : spec_r a) : (s : spec_r a) -> Type u#(max a 2) =
+type spec_r_exact (#a : Type u#a) (s0 : spec_r a) : (s : spec_r a) -> Type u#(max a p 2) =
   | SpecExact : spec_r_exact s0 s0
 
 
@@ -216,7 +216,7 @@ val spec_r_of_find_ro_ghost
 noeq
 type spec_r_steel (#a : Type u#a) (pre : SE.pre_t) (post : SE.post_t a)
                   (req : SE.req_t pre) (ens : SE.ens_t pre a post)
-  : (s : spec_r a) -> Type u#(max a 2) =
+  : (s : spec_r a) -> Type u#(max a p 2) =
   | SpecSteel : (tr : to_repr_t a pre post req ens) ->
                 (sr : spec_find_ro a tr.r_pre tr.r_post tr.r_req tr.r_ens) ->
                 spec_r_steel pre post req ens sr.sro_spc
@@ -231,9 +231,9 @@ type spec_r_steel (#a : Type u#a) (pre : SE.pre_t) (post : SE.post_t a)
 type gen_tac_t = Itf.flags_record -> Tactics.Tac unit
 
 noeq
-type prog_tree : (a : Type u#a) -> Type u#(max (a+1) 3) =
+type prog_tree : (a : Type u#a) -> Type u#(max (1 + max a p) 3) =
   // A specification of the subprogram, used to represent function calls
-  | Tspec  : (a : Type u#a) -> (sp : (spec_r a -> Type u#(max a 2))) ->
+  | Tspec  : (a : Type u#a) -> (sp : (spec_r a -> Type u#(max a p 2))) ->
              prog_tree a
   // return, with a hint for introducing dependencies on the returned value
   | Tret   : (a : Type u#a) -> (x : a) -> (sl_hint : post_t a) ->
@@ -243,7 +243,7 @@ type prog_tree : (a : Type u#a) -> Type u#(max (a+1) 3) =
              (f : prog_tree a) -> (g : (a -> prog_tree b)) ->
              prog_tree b
   // bind pure, models a polymonadic bind between PURE and our monad
-  | TbindP : (a : Type u#a) -> (b : Type u#a) ->
+  | TbindP : (a : Type u#p) -> (b : Type u#a) ->
              (wp : pure_wp a) -> (g : (a -> prog_tree b)) ->
              prog_tree b
   // if-then-else
@@ -252,7 +252,7 @@ type prog_tree : (a : Type u#a) -> Type u#(max (a+1) 3) =
              prog_tree a
   // generic combinator
   | Tgen   : (a : Type u#a) -> (gen_tac : gen_tac_t) ->
-             (gen_c : (spec_r a -> Type u#(max a 2))) ->
+             (gen_c : (spec_r a -> Type u#(max a p 2))) ->
              prog_tree a
 
 
@@ -275,8 +275,9 @@ type tree_cond_Spec (a : Type) (pre : pre_t) (post : post_t a) = {
 }
 
 noeq
-type tree_cond : (#a : Type u#a) -> (t : prog_tree a) -> (pre : pre_t) -> (post : post_t a) -> Type u#(max (a+1) 3) =
-  | TCspec  : (#a : Type u#a) -> (#sp : (spec_r a -> Type u#(max a 2))) ->
+type tree_cond
+  : (#a : Type u#a) -> (t : prog_tree a) -> (pre : pre_t) -> (post : post_t a) -> Type u#(max (1 + max a p) 3) =
+  | TCspec  : (#a : Type u#a) -> (#sp : (spec_r a -> Type u#(max a p 2))) ->
               (s : spec_r a) -> (sh : sp s) ->
               (tcs : tree_cond_Spec a (spc_pre1 s) (spc_post1 s)) ->
               tree_cond (Tspec a sp) tcs.tcs_pre tcs.tcs_post
@@ -288,7 +289,7 @@ type tree_cond : (#a : Type u#a) -> (t : prog_tree a) -> (pre : pre_t) -> (post 
               (pre : pre_t) -> (itm : post_t a) -> (post : post_t b) ->
               (cf : tree_cond f pre itm) -> (cg : ((x : a) -> tree_cond (g x) (itm x) post)) ->
               tree_cond (Tbind a b f g) pre post
-  | TCbindP : (#a : Type u#a) -> (#b : Type u#a) ->
+  | TCbindP : (#a : Type u#p) -> (#b : Type u#a) ->
               (#wp : pure_wp a) -> (#g : (a -> prog_tree b)) ->
               (pre : pre_t) -> (post : post_t b) ->
               (cg : ((x : a) -> tree_cond (g x) pre post)) ->
@@ -300,7 +301,7 @@ type tree_cond : (#a : Type u#a) -> (t : prog_tree a) -> (pre : pre_t) -> (post 
   // We expect the combinator to have a splited read-only frame
   // ALT: only expect a classical {pre,post,req,ens} and use a wrapper to handle the ro frame
   | TCgen   : (#a : Type u#a) -> (#gen_tac : gen_tac_t) ->
-              (#gen_c : (spec_r a -> Type u#(max a 2))) ->
+              (#gen_c : (spec_r a -> Type u#(max a p 2))) ->
               (s : spec_r a) -> (sh : gen_c s) ->
               (pre : pre_t) -> (pre_eq : Veq.vequiv pre (spc_pre1 s)) ->
               (post : post_t a) -> (post_eq : ((x : a) -> Veq.vequiv (spc_post1 s x) (post x))) ->
@@ -422,7 +423,7 @@ let gen_ens (#a : Type) (s : spec_r a)
 (** prog_tree *)
 
 [@@ strict_on_arguments [4]] (* strict on c *)
-let rec tree_req (#a : Type u#a) (t : prog_tree a)
+let rec tree_req (#a : Type u#a) (t : prog_tree u#a u#p a)
                  (#pre : pre_t) (#post : post_t a) (c : tree_cond t pre post)
                  (sl0 : sl_f pre)
   : Tot Type0 (decreases t) =
@@ -440,7 +441,7 @@ let rec tree_req (#a : Type u#a) (t : prog_tree a)
   | TCgen s _  _ pre_eq  _ post_eq ->
               gen_req s pre_eq post_eq sl0
 
-and tree_ens (#a : Type u#a) (t : prog_tree a)
+and tree_ens (#a : Type u#a) (t : prog_tree u#a u#p a)
              (#pre : pre_t) (#post : post_t a) (c : tree_cond t pre post)
              (sl0 : sl_f pre) (res : a) (sl1 : sl_f (post res))
   : Tot Type0 (decreases t) =
@@ -465,7 +466,7 @@ and tree_ens (#a : Type u#a) (t : prog_tree a)
 
 noeq inline_for_extraction noextract
 type repr (ek : SH.effect_kind) (a : Type) = {
-  repr_tree  : prog_tree a;
+  repr_tree  : prog_tree u#a u#p a;
   repr_steel : (pre : pre_t) -> (post : post_t a) -> (c : tree_cond repr_tree pre post) ->
                repr_steel_t ek a pre post (tree_req repr_tree c) (tree_ens repr_tree c)
 }

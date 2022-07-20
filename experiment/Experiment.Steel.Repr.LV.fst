@@ -370,10 +370,10 @@ let norm_lcsbl (norm_atlv : bool) : Tac unit =
       if norm_atlv then (norm [delta_only [`%lcsub_at_leaves]; zeta]; norm [iota])
 
 let rew_lcsub_at_leaves_csm
-      (#env : vprop_list) (#a : Type u#a) (#t : M.prog_tree a) (#csm : csm_t env) (#prd : prd_t a)
+      (#env : vprop_list) (#a : Type) (#t : M.prog_tree a) (#csm : csm_t env) (#prd : prd_t a)
       (ct : lin_cond env t csm prd)
       (csm' : csm_t env)
-      (pf : squash (lcsub_at_leaves #env #a #t #csm #prd ct))
+      (pf : squash (lcsub_at_leaves u#a u#p #env #a #t #csm #prd ct))
       (_ : squash (csm == csm'))
   : squash (lcsub_at_leaves #env #a #t #csm' #prd ct)
   = pf
@@ -382,8 +382,8 @@ let rew_lcsub_at_leaves_csm
 
 #push-options "--ifuel 1 --fuel 1"
 let rec lc_sub_push_at_leaves
-      (env : vprop_list) (#a : Type u#a) (#t : M.prog_tree a) (#csm : csm_t env) (#prd : prd_t a)
-      (ct : lin_cond env t csm prd)
+      (env : vprop_list) (#a : Type) (#t : M.prog_tree a) (#csm : csm_t env) (#prd : prd_t a)
+      (ct : lin_cond u#a u#p env t csm prd)
   : Lemma (ensures lcsub_at_leaves (lc_sub_push ct)) (decreases %[ct; 1])
   = match ct with
   | LCspec _ _ _ _ | LCret  _ _ _ | LCgen _ _ _ _ _ -> ()
@@ -407,8 +407,8 @@ let rec lc_sub_push_at_leaves
       lc_sub_push_aux_at_leaves _ cf csm' prd' prd_f
 
 and lc_sub_push_aux_at_leaves
-      (env : vprop_list) (#a0 : Type u#a) (#t0 : M.prog_tree a0) (#csm0 : csm_t env) (#prd0 : prd_t a0)
-      (ct0 : lin_cond env t0 csm0 prd0)
+      (env : vprop_list) (#a0 : Type) (#t0 : M.prog_tree a0) (#csm0 : csm_t env) (#prd0 : prd_t a0)
+      (ct0 : lin_cond u#a u#p env t0 csm0 prd0)
       (csm'0 : csm_t (filter_mask (mask_not csm0) env)) (prd'0 : prd_t a0)
       (prd_f0 : ((x : a0) -> Perm.pequiv_list (sub_prd env csm0 (prd0 x) csm'0) (prd'0 x)))
   : Lemma (ensures lcsub_at_leaves (lc_sub_push_aux ct0 csm'0 prd'0 prd_f0)) (decreases %[ct0; 0])

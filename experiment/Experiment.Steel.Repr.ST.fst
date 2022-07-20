@@ -56,17 +56,17 @@ let equiv_Tbind_assoc_Tbind #a #b #c #pre #itm0 #itm1 #post f g h
 
 #push-options "--fuel 2 --ifuel 1"
 let rec flatten_equiv
-      #a #pre #post (t : prog_tree u#a u#b a pre post)
+      #a #pre #post (t : prog_tree a pre post)
   : Lemma (ensures equiv (flatten_prog t) t) (decreases %[t; 1])
   = flatten_equiv_aux t flatten_prog_k_id
       (fun _ _ _ -> ()) (fun _ _ _ _ _ -> ())
 
 and flatten_equiv_aux
-      #a  #pre #post (t : prog_tree u#a u#b a pre post)
+      #a  #pre #post (t : prog_tree a pre post)
       #a1 #post1 (k : ((#pre' : pre_t) -> (t' : prog_tree a pre' post) -> prog_tree a1 pre' post1))
       (k_equiv : (pre' : pre_t) -> (t'0 : prog_tree a pre' post) -> (t'1 : prog_tree a pre' post) ->
                      Lemma (requires equiv t'0 t'1) (ensures equiv (k t'0) (k t'1)))
-      (k_bind  : ((a0 : Type u#a) -> (pre' : pre_t) -> (itm : post_t a0) ->
+      (k_bind  : ((a0 : Type) -> (pre' : pre_t) -> (itm : post_t a0) ->
                       (f : prog_tree a0 pre' itm) -> (g : ((x : a0) -> (prog_tree a (itm x) post))) ->
                      Lemma (equiv (k (Tbind a0 a pre' itm post f g))
                                   (Tbind a0 a1 pre' itm post1 f (fun x -> k (g x))))))
@@ -106,7 +106,7 @@ and flatten_equiv_aux
              k_equiv _ (Tif a guard pre post (flatten_prog thn) (flatten_prog els)) t
 
 let rec flatten_prog_shape
-      #a #pre #post (t : prog_tree u#a u#b a pre post)
+      #a #pre #post (t : prog_tree a pre post)
       (#post_n : nat) (s : shape_tree (L.length pre) post_n)
    : Lemma (requires prog_has_shape t s)
            (ensures  prog_has_shape (flatten_prog t) (flatten_shape s))
@@ -114,9 +114,9 @@ let rec flatten_prog_shape
    = flatten_prog_shape_aux t s flatten_prog_k_id post_n flatten_shape_k_id (fun _ _ _ -> ())
 
 and flatten_prog_shape_aux
-      #a #pre #post (t : prog_tree u#a u#b a pre post)
+      #a #pre #post (t : prog_tree a pre post)
       (#post_n : nat) (s : shape_tree (L.length pre) post_n)
-      #a1 #post1 (k_t : ((#pre' : pre_t) -> (t' : prog_tree a pre' post) -> prog_tree u#a u#b a1 pre' post1))
+      #a1 #post1 (k_t : ((#pre' : pre_t) -> (t' : prog_tree a pre' post) -> prog_tree a1 pre' post1))
       (post1_n : nat {post_has_len post1 post1_n})
       (k_s : ((#pre'_n : nat) -> (s' : shape_tree pre'_n post_n) -> shape_tree pre'_n post1_n))
       (k_hyp : (pre' : pre_t) -> (t' : prog_tree a pre' post) -> (s' : shape_tree (L.length pre') post_n) ->

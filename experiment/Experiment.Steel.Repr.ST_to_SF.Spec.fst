@@ -595,7 +595,7 @@ let repr_SF_of_ST_ens__Tif a guard pre post
 
 #push-options " --ifuel 0 --z3rlimit 10"
 let rec repr_SF_of_ST_req
-  (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
+  (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a)
   (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
   (sl0 : Fl.flist pre)
   : Lemma (ensures req_equiv t s sl0) (decreases t)
@@ -653,7 +653,7 @@ let rec repr_SF_of_ST_req
     end s sl0
 
 and repr_SF_of_ST_ens
-  (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
+  (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a)
   (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
   (sl0 : Fl.flist pre) (res : a) (sl1 : Fl.flist (post res))
   : Lemma (ensures ens_equiv t s sl0 res sl1)
@@ -705,7 +705,7 @@ and repr_SF_of_ST_ens
 
 #push-options "--ifuel 0 --fuel 0"
 let repr_SF_of_ST_rall_equiv
-      (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
+      (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a)
       (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
       (sl0 : Fl.flist pre)
   : Lemma ((ST.tree_req t sl0 <==> tree_req (repr_SF_of_ST_rall t s sl0)) /\
@@ -749,7 +749,7 @@ let repr_SF_of_ST_rall_equiv
 // The high rlimit is needed for batch mode
 #push-options "--fuel 3 --z3rlimit 400 --z3refresh"
 let rec repr_SF_of_ST_shape
-  (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
+  (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a)
   (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
   (sl0 : Fl.flist pre)
   : Lemma (ensures prog_has_shape (repr_SF_of_ST t s sl0) (shape_SF_of_ST s.shp))
@@ -792,7 +792,7 @@ let rec repr_SF_of_ST_shape
 
 #push-options "--fuel 2"
 let repr_SF_of_ST_rall_shape
-  (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
+  (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a)
   (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
   (sl0 : Fl.flist pre)
   : Lemma (prog_has_shape (repr_SF_of_ST_rall t s sl0) (shape_SF_of_ST_rall s.shp))

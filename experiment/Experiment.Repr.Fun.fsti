@@ -98,7 +98,7 @@ type prog_tree (#s : tys u#t u#v u#r) : s.t -> Type u#(max t v r a + 1) =
   | Tbind  : (a : s.t) -> (b : s.t) ->
              (f : prog_tree #s a) -> (g : s.v a -> prog_tree #s b) ->
              prog_tree #s b
-  (* [a] could be of type [s.t] *)
+  // having [a] of type [Type u#a] instead of [s.t] allows it to be in a different universe
   | TbindP : (a : Type u#a) -> (b : s.t) ->
              (wp : pure_wp a) -> (g : a -> prog_tree #s b) ->
              prog_tree #s b

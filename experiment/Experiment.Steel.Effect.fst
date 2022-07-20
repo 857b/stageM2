@@ -18,12 +18,18 @@ irreducible let __mrepr_implicit__ : unit = ()
 
 (**** MRepr effect *)
 
-type repr (a : Type u#a) (t : M.prog_tree a) : Type
-  = r : M.repr SH.KSteel a { r.repr_tree == t }
+/// We fix the universe [u#p] of the types in bind_pure to [u#0]
+/// TODO highest universe
+
+unfold
+type prog_tree = M.prog_tree u#a u#0
+
+type repr (a : Type) (t : prog_tree u#a a) : Type
+  = r : M.repr u#a u#0 SH.KSteel a { r.repr_tree == t }
 
 let return_
-      (a : Type u#a) (x : a)
-  : repr a (M.Tret a x (fun _ -> []))
+      (a : Type) (x : a)
+  : repr u#a a (M.Tret a x (fun _ -> []))
   = C.return #a x
 
 (***** bind *)
@@ -32,9 +38,9 @@ let return_
 noeq inline_for_extraction
 type combine_bind_t
        (a : Type u#a) (b : Type u#b)
-       (f : M.prog_tree a) (g : a -> M.prog_tree b)
+       (f : prog_tree a) (g : a -> prog_tree b)
 = {
-  cb_bind_repr : M.prog_tree b;
+  cb_bind_repr : prog_tree b;
   cb_bind_impl : (rf : repr a f) -> (rg : ((x : a) -> repr b (g x))) ->
                  repr b cb_bind_repr
 }
@@ -43,7 +49,7 @@ type combine_bind_t
 inline_for_extraction
 let combine_bind
       (a : Type u#b) (b : Type u#b) 
-      (f : M.prog_tree a) (g : a -> M.prog_tree b)
+      (f : prog_tree a) (g : a -> prog_tree b)
   : combine_bind_t a b f g
   = {
     cb_bind_repr = M.Tbind a b f (fun x -> g x); // We need the functional extensionality so we eta-expend g
@@ -62,7 +68,7 @@ let combine_bind
 /// The tactic will fail if [u#a <> u#b].
 let bind_
       (a : Type u#a) (b : Type u#b)
-      (#f : M.prog_tree a) (#g : a -> M.prog_tree b)
+      (#f : prog_tree a) (#g : a -> prog_tree b)
       (#[@@@ __mrepr_implicit__] cb : combine_bind_t a b f g)
       (rf : repr u#a a f) (rg : (x : a) -> repr u#b b (g x))
   : repr u#b b cb.cb_bind_repr
@@ -72,17 +78,17 @@ let bind_
 (***** subcomp *)
 
 type combine_subcomp_t
-      (a : Type u#a) (f : M.prog_tree a) (g : M.prog_tree a)
+      (a : Type u#a) (f : prog_tree a) (g : prog_tree a)
   = repr a f -> repr a g
 
 let combine_subcomp_refl
-      (a : Type u#a) (f : M.prog_tree a)
+      (a : Type u#a) (f : prog_tree a)
   : combine_subcomp_t a f f
   = fun rf -> rf
 
 let subcomp
       (a : Type u#a)
-      (#f : M.prog_tree a) (#g : M.prog_tree a)
+      (#f : prog_tree a) (#g : prog_tree a)
       (#[@@@ __mrepr_implicit__] cb : combine_subcomp_t a f g)
       (rf : repr a f)
   : repr a g
@@ -93,14 +99,14 @@ let subcomp
 
 let if_then_else
       (a : Type)
-      (#thn : M.prog_tree a) (#els : M.prog_tree a)
+      (#thn : prog_tree a) (#els : prog_tree a)
       (rthn : repr a thn) (rels : repr a els)
       (guard : bool)
   : Type
   = repr a (M.Tif a guard thn els)
 
 let ite_combine_thn
-      (a : Type) (guard : bool) (thn els : M.prog_tree a)
+      (a : Type) (guard : bool) (thn els : prog_tree a)
       (_ : squash guard)
   : combine_subcomp_t a thn (M.Tif a guard thn els)
   = fun rthn -> {
@@ -111,7 +117,7 @@ let ite_combine_thn
   }
 
 let ite_combine_els
-      (a : Type) (guard : bool) (thn els : M.prog_tree a)
+      (a : Type) (guard : bool) (thn els : prog_tree a)
       (_ : squash (~guard))
   : combine_subcomp_t a els (M.Tif a guard thn els)
   = fun rels -> {
@@ -136,7 +142,7 @@ let ite_soundness_tac () : T.Tac unit
 
 [@@ ite_soundness_by __ite_soundness__]
 total reflectable effect {
-  MRepr (a : Type) (r : M.prog_tree a)
+  MRepr (a : Type) (r : prog_tree a)
   with {
     repr;
     return = return_;
@@ -156,10 +162,10 @@ let return (#a : Type u#a) (x : a)
 [@@ __repr_M__]
 noeq inline_for_extraction
 type combine_bind_pure_t
-       (a : Type u#a) (b : Type u#b)
-       (wp : pure_wp a) (g : a -> M.prog_tree b)
+       (a : Type u#p) (b : Type u#a)
+       (wp : pure_wp a) (g : a -> prog_tree b)
 = {
-  cb_bindP_repr : M.prog_tree b;
+  cb_bindP_repr : prog_tree b;
   cb_bindP_impl : (rf : unit -> PURE a wp) -> (rg : ((x : a) -> repr b (g x))) ->
                   repr b cb_bindP_repr
 }
@@ -167,8 +173,8 @@ type combine_bind_pure_t
 [@@ __repr_M__]
 inline_for_extraction
 let combine_bind_pure
-      (a : Type u#b) (b : Type u#b)
-      (wp : pure_wp a) (g : a -> M.prog_tree b)
+      (a : Type u#0) (b : Type u#a)
+      (wp : pure_wp a) (g : a -> prog_tree b)
       
   : combine_bind_pure_t a b wp g
   = {
@@ -180,11 +186,11 @@ let combine_bind_pure
                        C.bindP #a #b wp rf rg);
   }
 
-// TODO Avoid [cb] by allowing the bound variable to be of a type in a different universe in [M.TbindP].
+// TODO raise the universe of [a]
 let bind_pure_mrepr
-      (a : Type u#a) (b : Type u#b)
+      (a : Type u#p) (b : Type u#a)
       (#wp : pure_wp a)
-      (#g : a -> M.prog_tree b)
+      (#g : a -> prog_tree b)
       (#[@@@ __mrepr_implicit__] cb : combine_bind_pure_t a b wp g)
       (rf : eqtype_as_type unit -> PURE a wp)
       (rg : (x : a) -> repr b (g x))
@@ -202,18 +208,18 @@ let lift_steel_mrepr
       (a : Type) (pre : SE.pre_t) (post : SE.post_t a)
       (req : SE.req_t pre) (ens : SE.ens_t pre a post)
       (f : Steel.Effect.repr a false pre post req ens)
-  : repr a M.(Tspec a (spec_r_steel pre post req ens))
+  : repr a M.(Tspec a (spec_r_steel u#a u#0 pre post req ens))
   = C.repr_of_steel #a pre post req ens
       (fun () -> SE.SteelBase?.reflect f)
   
 sub_effect Steel.Effect.SteelBase ~> MRepr = lift_steel_mrepr
 
 unfold
-let call (#b : Type)
+let call (#b : Type u#b)
       (#a : b -> Type) (#pre : b -> SE.pre_t) (#post : (x : b) -> SE.post_t (a x))
       (#req : (x : b) -> SE.req_t (pre x)) (#ens : (x : b) -> SE.ens_t (pre x) (a x) (post x))
       ($f : (x : b) -> SE.Steel (a x) (pre x) (post x) (req x) (ens x)) (x : b)
-  : MRepr (a x) (M.Tspec (a x) (M.spec_r_steel (pre x) (post x) (req x) (ens x)))
+  : MRepr (a x) (M.Tspec (a x) (M.spec_r_steel u#a u#0 (pre x) (post x) (req x) (ens x)))
   = MRepr?.reflect (C.repr_of_steel #(a x) (pre x) (post x) (req x) (ens x) (fun () -> f x))
 
 (**** Conversion to Steel *)
@@ -260,8 +266,8 @@ let cv_bind
   : dummy_cv b
   = elim_cv_unused u
 
-/// We need the reification for extracting the Steel representation and [lift_mrepr_cv] has [t : M.prog_tree a]
-/// as an informative binder. (ALT? make [M.prog_tree] erasable)
+/// We need the reification for extracting the Steel representation and [lift_mrepr_cv] has [t : prog_tree a]
+/// as an informative binder. (ALT? make [prog_tree] erasable)
 [@@ allow_informative_binders]
 total reifiable effect {
   ConvEffect
@@ -291,11 +297,11 @@ noeq
 type mrepr_to_steel_t
        (flags : list flag)
        (a : Type) (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t pre) (ens : SE.ens_t pre a post)
-       (t : M.prog_tree a)
+       (t : prog_tree a)
   = | MReprToSteel of (repr a t -> SH.unit_steel a pre post req ens)
 
 let lift_mrepr_cv
-      (a : Type) (t : M.prog_tree a)
+      (a : Type) (t : prog_tree a)
       (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t pre) (ens : SE.ens_t pre a post) (flags : list flag)
       ([@@@ __mrepr_implicit__] cv : mrepr_to_steel_t flags a pre post req ens t)
       (r : repr a t)
@@ -311,7 +317,7 @@ sub_effect MRepr ~> ConvEffect = lift_mrepr_cv
 let __build_mrepr_to_steel
       (flags : list flag)
       (a : Type) (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t pre) (ens : SE.ens_t pre a post)
-      (t : M.prog_tree a)
+      (t : prog_tree a)
       (goal : (impl : ((pre : M.pre_t) -> (post : M.post_t a) -> (c : M.tree_cond t pre post) ->
                           M.repr_steel_t SH.KSteel a pre post (M.tree_req t c) (M.tree_ens t c))) ->
               ES.__to_steel_goal a pre post req ens M.({repr_tree = t; repr_steel = impl}))
@@ -368,7 +374,7 @@ let display_term (#a : Type) (x : a) : Type = unit
 
 /// This retypecheck [r]. It fails if r contains a bind_pure since it will need to prove the monotonicity of the
 /// weakest precondition ([pure_wp_monotonic]).
-let dump_repr (#a : Type) (#r : M.prog_tree a)
+let dump_repr (#a : Type) (#r : prog_tree a)
       ($re : unit -> MRepr a r)
       (#[T.(norm [delta_attr [`%__repr_M__]; iota]; dump "dump_repr"; exact (`()))] d : display_term r)
       ()
@@ -423,7 +429,7 @@ let test4 (r0 r1 : ref int) =
     return ())
   ()
 
-// Fails because the M.prog_tree contains some uvar (because the Steel's tactic is called after our tactic ?)
+// Fails because the prog_tree contains some uvar (because the Steel's tactic is called after our tactic ?)
 //let test5 (r : ref nat)
 //  : SH.unit_steel unit
 //      (vptr r) (fun _ -> vptr r)

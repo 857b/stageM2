@@ -23,7 +23,7 @@ let normal_SF_of_LV : list norm_step =
 
 #push-options "--ifuel 0 --fuel 0"
 let rec repr_SF_of_LV_sound
-      (#env : vprop_list) (#a : Type u#a) (#t : M.prog_tree a)
+      (#env : vprop_list) (#a : Type) (#t : M.prog_tree a)
       (#csm : csm_t env) (#prd : prd_t a)
       (lc : lin_cond env t csm prd)
       (sl0 : sl_list env)

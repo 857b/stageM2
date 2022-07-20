@@ -21,13 +21,13 @@ let res_env_f (env : vprop_list) (#a : Type) (csm : csm_t env) (prd : prd_t a) (
 
 let typ_to_M
       (env : vprop_list)
-      (#a : Type u#a) (t : M.prog_tree a)
+      (#a : Type) (t : M.prog_tree u#a u#p a)
       (csm : csm_t env) (prd : prd_t a)
   : Type
   = M.tree_cond t env (res_env_f env csm prd)
 
 let lc_to_M
-      (#env : vprop_list) (#a : Type u#a) (#t : M.prog_tree a)
+      (#env : vprop_list) (#a : Type) (#t : M.prog_tree u#a u#p a)
       (#csm : csm_t env) (#prd : prd_t a)
       (lc : lin_cond env t csm prd)
   : Type
@@ -245,9 +245,9 @@ val inv_lcsub_at_leaves__LCsub
 [@@ strict_on_arguments [5]] (* strict on [lc] *)
 inline_for_extraction
 let rec repr_M_of_LV
-      (#env : vprop_list) (#a : Type u#a) (#t : M.prog_tree a)
+      (#env : vprop_list) (#a : Type) (#t : M.prog_tree a)
       (#csm : csm_t env) (#prd : prd_t a)
-      (lc : lin_cond env t csm prd)
+      (lc : lin_cond u#a u#p env t csm prd)
   : Pure (lc_to_M lc) (requires lcsub_at_leaves lc) (ensures fun _ -> True) (decreases lc)
   = match lc with
   | LCspec env #a #sp s sh pre_f ->
@@ -296,8 +296,8 @@ let rec repr_M_of_LV
 #push-options "--ifuel 0 --fuel 0"
 inline_for_extraction
 let repr_M_of_LV_top
-      (#a : Type u#a) (#t : M.prog_tree a) (#pre : M.pre_t) (#post : M.post_t a)
-      (lc : top_lin_cond t pre post)
+      (#a : Type) (#t : M.prog_tree a) (#pre : M.pre_t) (#post : M.post_t a)
+      (lc : top_lin_cond u#a u#p t pre post)
   : Pure (M.tree_cond t pre (U.eta post))
          (requires lcsub_at_leaves lc) (ensures fun _ -> True)
   =
@@ -324,9 +324,9 @@ let res_env_app
     append_vars sl1 sl2
 
 let sound_M_of_LV
-      (#env : vprop_list) (#a : Type u#a) (#t : M.prog_tree a)
+      (#env : vprop_list) (#a : Type) (#t : M.prog_tree a)
       (#csm : csm_t env) (#prd : prd_t a)
-      (lc : lin_cond env t csm prd) (mc : lc_to_M lc)
+      (lc : lin_cond u#a u#p env t csm prd) (mc : lc_to_M lc)
   : prop
   =
     forall (sl0 : sl_f env) .
@@ -337,14 +337,14 @@ let sound_M_of_LV
        sl_rem == filter_sl (mask_not csm) sl0)))
 
 val repr_M_of_LV_sound
-      (#env : vprop_list) (#a : Type u#a) (#t : M.prog_tree a)
+      (#env : vprop_list) (#a : Type) (#t : M.prog_tree a)
       (#csm : csm_t env) (#prd : prd_t a)
-      (lc : lin_cond env t csm prd {lcsub_at_leaves lc})
+      (lc : lin_cond u#a u#p env t csm prd {lcsub_at_leaves lc})
   : Lemma (sound_M_of_LV lc (repr_M_of_LV lc))
 
 val repr_M_of_LV_top_sound
-      (#a : Type u#a) (#t : M.prog_tree a) (#pre : M.pre_t) (#post : M.post_t a)
-      (lc : top_lin_cond t pre post {lcsub_at_leaves lc})
+      (#a : Type) (#t : M.prog_tree a) (#pre : M.pre_t) (#post : M.post_t a)
+      (lc : top_lin_cond u#a u#p t pre post {lcsub_at_leaves lc})
   : Lemma (let mc = repr_M_of_LV_top lc in
       forall (sl0 : sl_f pre) . (M.tree_req t mc sl0 <==> tree_req lc sl0)  /\
      (forall (x : a) (sl1 : sl_f (post x)) .

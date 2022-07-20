@@ -8,7 +8,7 @@ open FStar.Calc
 
 #push-options "--fuel 2 --z3rlimit 30"
 let rec repr_SF_of_ST_req
-      (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
+      (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a)
       (t : ST.prog_tree a pre post)
       (sl0 : Fl.flist pre)
   : Lemma (ensures ST.tree_req t sl0 <==> tree_req (repr_SF_of_ST t sl0)) (decreases t)
@@ -54,7 +54,7 @@ let rec repr_SF_of_ST_req
     end sl0
 
 and repr_SF_of_ST_ens
-      (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
+      (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a)
       (t : ST.prog_tree a pre post)
       (sl0 : Fl.flist pre) (res : a) (sl1 : Fl.flist (post res))
   : Lemma (ensures ST.tree_ens t sl0 res sl1 <==> tree_ens (repr_SF_of_ST t sl0) res sl1) (decreases t)
@@ -117,7 +117,7 @@ and repr_SF_of_ST_ens
 
 #push-options "--fuel 2 --z3rlimit 20"
 let rec repr_SF_of_ST_shape
-      (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
+      (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a)
       (t : ST.prog_tree a pre post)
       (#post_n : nat) (s : ST.shape_tree (L.length pre) post_n)
       (sl0 : Fl.flist pre)

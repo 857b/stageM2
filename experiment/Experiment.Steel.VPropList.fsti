@@ -69,7 +69,7 @@ let vprop_to_list_equiv' (#v : vprop) (#vs : vprop_list) (t : vprop_to_list v vs
 
 (***** selectors *)
 
-let vprop_list_sels_t : vprop_list -> Dl.ty_list =
+let vprop_list_sels_t : vprop_list -> Dl.ty_list u#0 =
   L.map Mkvprop'?.t
 
 unfold

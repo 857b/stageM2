@@ -156,10 +156,10 @@ let lcsub_add_csm
 [@@ __cond_solver__]
 let __build_LCret
       (env : vprop_list)
-      (a : Type u#a) (x : a) (sl_hint : M.post_t a)
+      (a : Type) (x : a) (sl_hint : M.post_t a)
       (prd : prd_t a) (prd_h : prd_hint sl_hint -> prd_hint prd)
       (csm_f : eq_injection_l (prd x) env)
-  : lin_cond env (M.Tret a x sl_hint) (eij_trg_mask csm_f) prd
+  : lin_cond u#a u#p env (M.Tret a x sl_hint) (eij_trg_mask csm_f) prd
   = LCret env #a #x #sl_hint prd csm_f
 
 /// To infer a [Tbind], we first infer the left side [f] then the right side [g] in the resulting environment.
@@ -173,7 +173,7 @@ let __build_LCret
 [@@ __cond_solver__]
 let __build_LCbind
       (env : vprop_list)
-      (a : Type u#a) (b : Type u#a) (f : M.prog_tree a) (g : (a -> M.prog_tree b))
+      (a : Type) (b : Type) (f : M.prog_tree a) (g : (a -> M.prog_tree b))
       (f_csm : csm_t env) (f_prd : prd_t a)
       (cf : lin_cond env f f_csm f_prd)
       (g_csm0 : (x : a) -> csm_t (res_env env f_csm (f_prd x))) (g_prd0 : (x : a) -> prd_t b)
@@ -185,7 +185,7 @@ let __build_LCbind
             let g_csm0_f_prd : Ll.vec n0 bool = (L.splitAt n0 (g_csm0 x))._1 in
             eq2 #(list bool) g_csm (L.splitAt (L.length (f_prd x)) (g_csm0 x))._2 /\
             g_prd == (fun (y : b) -> L.(g_prd0 x y @ filter_mask (mask_not g_csm0_f_prd) (f_prd x)))))
-  : lin_cond env (M.Tbind a b f g) (bind_csm env f_csm g_csm) g_prd
+  : lin_cond u#a u#p env (M.Tbind a b f g) (bind_csm env f_csm g_csm) g_prd
   =
     LCbind env #a #b #f #g
       f_csm f_prd cf
@@ -245,14 +245,14 @@ let __build_LCbind
 [@@ __cond_solver__]
 let __build_LCbindP
       (env : vprop_list)
-      (a : Type u#a) (b : Type u#a) (wp : pure_wp a) (g : a -> M.prog_tree b)
+      (a : Type) (b : Type) (wp : pure_wp a) (g : a -> M.prog_tree b)
       (csm0 : (x : a) -> csm_t env) (prd0 : (x : a) -> prd_t b)
       (cg : (x : a) -> lin_cond env (g x) (csm0 x) (prd0 x))
       (csm : csm_t env) (prd : prd_t b)
       // Since we use [__defer_sig_unification], it is probably not necessary to do this indirection,
       // but it allows to point the dependency on x in the failure message
       (eqs : (x : a) -> squash (csm == csm0 x /\ prd == prd0 x))
-  : lin_cond env (M.TbindP a b wp g) csm prd
+  : lin_cond u#a u#p env (M.TbindP a b wp g) csm prd
   =
     LCbindP env #a #b #wp #g csm prd (fun x -> eqs x; cg x)
 
@@ -268,15 +268,15 @@ let __build_LCbindP
 [@@ __cond_solver__]
 let __build_LCif
       (env : vprop_list)
-      (a : Type u#a) (guard : bool) (thn els : M.prog_tree a)
+      (a : Type) (guard : bool) (thn els : M.prog_tree a)
       (thn_csm : csm_t env) (thn_prd : prd_t a)
       (cthn : lin_cond env thn thn_csm thn_prd)
       (els_csm : csm_t env) (els_prd : prd_t a)
       (cels : prd_hint thn_prd -> lin_cond env els els_csm els_prd)
       (veq : (x : a) -> Perm.pequiv_list L.(els_prd x @ filter_diff els_csm thn_csm env)
                                         L.(thn_prd x @ filter_diff thn_csm els_csm env))
-  : lin_cond env (M.Tif a guard thn els)
-                 (mask_or thn_csm els_csm) L.(fun x -> thn_prd x @ filter_diff thn_csm els_csm env)
+  : lin_cond u#a u#p env (M.Tif a guard thn els)
+             (mask_or thn_csm els_csm) L.(fun x -> thn_prd x @ filter_diff thn_csm els_csm env)
   =
     let prd (x : a) = L.(thn_prd x @ filter_diff thn_csm els_csm env) in
     (**) mask_or_sym thn_csm els_csm;
@@ -291,11 +291,11 @@ let __build_LCif
 /// Just an utility to extract the tactic.
 [@@ __cond_solver__]
 let __build_LCgen
-      (env : vprop_list) (a : Type u#a) (gen_tac : M.gen_tac_t) (gen_c : M.spec_r a -> Type u#(max a 2))
+      (env : vprop_list) (a : Type u#a) (gen_tac : M.gen_tac_t) (gen_c : M.spec_r a -> Type u#(max a p 2))
       (_ : extract_term gen_tac)
       (csm : csm_t env) (prd : prd_t a)
       (lc : lin_cond env (M.Tgen a gen_tac gen_c) csm prd)
-  : lin_cond env (M.Tgen a gen_tac gen_c) csm prd
+  : lin_cond u#a u#p env (M.Tgen a gen_tac gen_c) csm prd
   = lc
 
 #pop-options

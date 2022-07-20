@@ -16,9 +16,9 @@ open Experiment.Steel.Repr.SF
 
 [@@ strict_on_arguments [3]] (* strict on t *)
 let rec repr_SF_of_ST
-      (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
-      (t : ST.prog_tree a pre post) (sl0 : Fl.flist pre)
-  : Tot (prog_tree a post) (decreases t)
+      (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a)
+      (t : ST.prog_tree u#a u#b u#p a pre post) (sl0 : Fl.flist pre)
+  : Tot (prog_tree u#a u#b u#p a post) (decreases t)
   = match t with
   | ST.Tequiv pre post0 e ->
           // TODO? specialized constructor / wp
@@ -63,20 +63,20 @@ let rec shape_SF_of_ST
 (*** Soundness *)
 
 val repr_SF_of_ST_req
-      (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
-      (t : ST.prog_tree a pre post)
+      (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a)
+      (t : ST.prog_tree u#a u#b u#p a pre post)
       (sl0 : Fl.flist pre)
   : Lemma (ST.tree_req t sl0 <==> tree_req (repr_SF_of_ST t sl0))
 
 val repr_SF_of_ST_ens
-      (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
-      (t : ST.prog_tree a pre post)
+      (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a)
+      (t : ST.prog_tree u#a u#b u#p a pre post)
       (sl0 : Fl.flist pre) (res : a) (sl1 : Fl.flist (post res))
   : Lemma (ST.tree_ens t sl0 res sl1 <==> tree_ens (repr_SF_of_ST t sl0) res sl1)
 
 val repr_SF_of_ST_shape
-      (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
-      (t : ST.prog_tree a pre post)
+      (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a)
+      (t : ST.prog_tree u#a u#b u#p a pre post)
       (#post_n : nat) (s : ST.shape_tree (L.length pre) post_n)
       (sl0 : Fl.flist pre)
   : Lemma (requires ST.prog_has_shape t s)

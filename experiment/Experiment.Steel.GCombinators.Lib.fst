@@ -125,9 +125,9 @@ let make_combinator_steel_ek
 [@@ __repr_M__]
 inline_for_extraction
 let make_combinator
-      (a : Type u#a) (ek : SH.effect_kind) (gen_tac : M.gen_tac_t) (gen_c : M.spec_r a -> Type u#(max a 2))
+      (a : Type) (ek : SH.effect_kind) (gen_tac : M.gen_tac_t) (gen_c : M.spec_r a -> Type u#(max a p 2))
       (f : (s : M.spec_r a) -> (sh : gen_c s) -> M.spc_steel_t ek s)
-  : M.repr ek a
+  : M.repr u#a u#p ek a
   = {
     repr_tree  = M.Tgen a gen_tac gen_c;
     repr_steel = (fun pre post c ->
@@ -160,42 +160,42 @@ let gen_sf_Tspec (#a : Type) (s : M.spec_r a)
 
 [@@ __cond_solver__; __LV2SF__]
 let lc_pre
-      (#a : Type u#a) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
-      (lc : LV.lin_cond env t csm prd)
+      (#a : Type) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
+      (lc : LV.lin_cond u#a u#p env t csm prd)
   : M.pre_t
   = Msk.(filter_mask csm env)
 
 [@@ __cond_solver__; __LV2SF__]
 let lc_post
-      (#a : Type u#a) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
-      (lc : LV.lin_cond env t csm prd)
+      (#a : Type) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
+      (lc : LV.lin_cond u#a u#p env t csm prd)
   : M.post_t a
   = prd
 
 [@@ __cond_solver__; __LV2SF__]
 let lc_ro
-      (#a : Type u#a) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
-      (lc : LV.lin_cond env t csm prd)
+      (#a : Type) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
+      (lc : LV.lin_cond u#a u#p env t csm prd)
   : vprop_list
   = Msk.(filter_mask (mask_not csm) env)
 
 let lc_req
-      (#a : Type u#a) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
-      (lc : LV.lin_cond env t csm prd)
+      (#a : Type) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
+      (lc : LV.lin_cond u#a u#p env t csm prd)
       (sl0 : sl_f (lc_pre lc)) (sl_ro : sl_f (lc_ro lc))
   : Type0
   = LV.tree_req lc (append_vars_mask csm sl0 sl_ro)
 
 let lc_ens
-      (#a : Type u#a) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
-      (lc : LV.lin_cond env t csm prd)
+      (#a : Type) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
+      (lc : LV.lin_cond u#a u#p env t csm prd)
       (sl0 : sl_f (lc_pre lc)) (x : a) (sl1 : sl_f (lc_post lc x)) (sl_ro : sl_f (lc_ro lc))
   : Type0
   = LV.tree_ens lc (append_vars_mask csm sl0 sl_ro) x sl1
 
 let lc_spec_r
-      (#a : Type u#a) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
-      (lc : LV.lin_cond env t csm prd)
+      (#a : Type) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
+      (lc : LV.lin_cond u#a u#p env t csm prd)
   : M.spec_r a
   = M.Mkspec_r (lc_pre lc) (lc_post lc) (lc_ro lc) (lc_req lc) (lc_ens lc)
 
@@ -204,8 +204,8 @@ let lc_spec_r
 
 [@@ __LV2SF__]
 let lc_sf
-      (#a : Type u#a) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
-      (lc : LV.lin_cond env t csm prd)
+      (#a : Type) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
+      (lc : LV.lin_cond u#a u#p env t csm prd)
   : LV.gen_sf (lc_spec_r lc)
   =
     fun (sl0 : sl_f (lc_pre lc)) (sl_ro : sl_f (lc_ro lc)) ->
@@ -214,15 +214,15 @@ let lc_sf
       LV2SF.repr_SF_of_LV lc sl0'
 
 let rew_lc_sf_req
-      (#a : Type u#a) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
-      (lc : LV.lin_cond env t csm prd)
+      (#a : Type) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
+      (lc : LV.lin_cond u#a u#p env t csm prd)
       (sl0 : sl_f (lc_pre lc)) (sl_ro : sl_f (lc_ro lc))
   : squash (lc_req lc sl0 sl_ro <==> SF.tree_req (lc_sf lc sl0 sl_ro))
   = ()
 
 let rew_lc_sf_ens
-      (#a : Type u#a) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
-      (lc : LV.lin_cond env t csm prd)
+      (#a : Type) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
+      (lc : LV.lin_cond u#a u#p env t csm prd)
       (sl0 : sl_f (lc_pre lc)) (x : a) (sl1 : sl_f (lc_post lc x)) (sl_ro : sl_f (lc_ro lc))
   : squash (lc_ens lc sl0 x sl1 sl_ro <==> SF.tree_ens (lc_sf lc sl0 sl_ro) x sl1)
   = ()
@@ -234,8 +234,8 @@ let rew_lc_sf_ens
 // extracting the .krml of a module that depends on this one.
 [@@ __LV2SF__]
 let lc_wp
-      (#a : Type u#a) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
-      (lc : LV.lin_cond env t csm prd)
+      (#a : Type) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
+      (lc : LV.lin_cond u#a u#p env t csm prd)
       (sl0 : sl_f (lc_pre lc)) (sl_ro : sl_f (lc_ro lc))
   : GTot (pure_wp SF2Fun.(sl_tys_v ({val_t = a; sel_t = M.post_sl_t prd})))
   =
@@ -246,8 +246,8 @@ let lc_wp
     Fun.tree_wp fn
 
 let lc_wp_sound
-      (#a : Type u#a) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
-      (lc : LV.lin_cond env t csm prd)
+      (#a : Type) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
+      (lc : LV.lin_cond u#a u#p env t csm prd)
       (sl0 : sl_f (lc_pre lc)) (sl_ro : sl_f (lc_ro lc))
       (post : pure_post SF2Fun.(sl_tys_v ({val_t = a; sel_t = M.post_sl_t prd})))
   : Lemma (requires lc_wp lc sl0 sl_ro post)
@@ -272,9 +272,9 @@ let lc_wp_sound
 #push-options "--fuel 0 --ifuel 0 --z3rlimit 20"
 inline_for_extraction
 let lc_to_spc_steel_t__steel
-      (#a : Type u#a) (mr : M.repr SH.KSteel a)
+      (#a : Type) (mr : M.repr SH.KSteel a)
       (#env : vprop_list) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
-      (lc : LV.lin_cond env mr.repr_tree csm prd {LV.lcsub_at_leaves lc})
+      (lc : LV.lin_cond u#a u#p env mr.repr_tree csm prd {LV.lcsub_at_leaves lc})
   : M.spc_steel_t SH.KSteel (lc_spec_r lc)
   =
     let tc = LV2M.repr_M_of_LV lc                              in
@@ -299,9 +299,9 @@ let lc_to_spc_steel_t__steel
 
 inline_for_extraction
 let lc_to_spc_steel_t__atomic
-      (opened : Mem.inames) (#a : Type u#a) (mr : M.repr (SH.KAtomic opened) a)
+      (opened : Mem.inames) (#a : Type) (mr : M.repr (SH.KAtomic opened) a)
       (#env : vprop_list) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
-      (lc : LV.lin_cond env mr.repr_tree csm prd {LV.lcsub_at_leaves lc})
+      (lc : LV.lin_cond u#a u#p env mr.repr_tree csm prd {LV.lcsub_at_leaves lc})
   : M.spc_steel_t (SH.KAtomic opened) (lc_spec_r lc)
   =
     let tc = LV2M.repr_M_of_LV lc                              in
@@ -326,9 +326,9 @@ let lc_to_spc_steel_t__atomic
 
 inline_for_extraction
 let lc_to_spc_steel_t__ghost
-      (opened : Mem.inames) (#a : Type u#a) (mr : M.repr (SH.KGhost opened) a)
+      (opened : Mem.inames) (#a : Type) (mr : M.repr (SH.KGhost opened) a)
       (#env : vprop_list) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
-      (lc : LV.lin_cond env mr.repr_tree csm prd {LV.lcsub_at_leaves lc})
+      (lc : LV.lin_cond u#a u#p env mr.repr_tree csm prd {LV.lcsub_at_leaves lc})
   : M.spc_steel_t (SH.KGhost opened) (lc_spec_r lc)
   =
     let tc = LV2M.repr_M_of_LV lc                              in
@@ -355,9 +355,9 @@ let lc_to_spc_steel_t__ghost
 
 inline_for_extraction
 let lc_to_spc_steel_t
-      (#ek : SH.effect_kind) (#a : Type u#a) (mr : M.repr ek a)
+      (#ek : SH.effect_kind) (#a : Type) (mr : M.repr ek a)
       (#env : vprop_list) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
-      (lc : LV.lin_cond env mr.repr_tree csm prd {LV.lcsub_at_leaves lc})
+      (lc : LV.lin_cond u#a u#p env mr.repr_tree csm prd {LV.lcsub_at_leaves lc})
   : M.spc_steel_t ek (lc_spec_r lc)
   =
     match ek with
@@ -372,9 +372,9 @@ let lc_to_spc_steel_t
 
 [@@ __cond_solver__]
 let build_lcsub_at_leaves_lc
-       (env : vprop_list) (#a : Type u#a) (t : M.prog_tree a)
+       (env : vprop_list) (#a : Type) (t : M.prog_tree a)
        (csm : LV.csm_t env) (prd : LV.prd_t a)
-       (lc0 : LV.lin_cond env #a t csm prd)
+       (lc0 : LV.lin_cond u#a u#p env #a t csm prd)
   : lc : LV.lin_cond env #a t csm prd { LV.lcsub_at_leaves lc }
   =
     (**) LV.lc_sub_push_at_leaves env lc0;
@@ -430,10 +430,10 @@ let test_lin_cond_exact (v : int -> vprop')
 #push-options "--ifuel 0 --fuel 0"
 
 type lin_cond_st
-       (env : vprop_list) (#a : Type u#a) (t : M.prog_tree a)
+       (env : vprop_list) (#a : Type) (t : M.prog_tree a)
        (must_csm : LV.csm_t env) (must_prd : LV.prd_t a)
        (csm1 : LV.csm_t Msk.(filter_mask (mask_not must_csm) env)) (prd1 : LV.prd_t a)
-  = lc : LV.lin_cond env #a t (Msk.mask_comp_or must_csm csm1) L.(fun x -> must_prd x @ prd1 x)
+  = lc : LV.lin_cond u#a u#p env #a t (Msk.mask_comp_or must_csm csm1) L.(fun x -> must_prd x @ prd1 x)
        { LV.lcsub_at_leaves lc }
 
 let pequiv_append_02 (#a : Type) (l0 l1 l2 l3 : list a)
@@ -506,7 +506,7 @@ let build_lin_cond_st_prd_f
 
 [@@ __cond_solver__]
 let __build_lin_cond_st
-      (env : vprop_list) (#a : Type u#a) (t : M.prog_tree a)
+      (env : vprop_list) (#a : Type) (t : M.prog_tree a)
       (csm0 : LV.csm_t env) (prd0 : LV.prd_t a)
       (ct : LV.lin_cond env t csm0 prd0)
       (must_csm : LV.csm_t env) (must_prd : LV.prd_t a)
@@ -517,7 +517,7 @@ let __build_lin_cond_st
         let m0 = LV.eij_trg_mask (post_f x) in
         (**) L.splitAt_length n0 m0;
         csm' = (L.splitAt n0 m0)._2))
-  : lin_cond_st env t must_csm must_prd
+  : lin_cond_st u#a u#p env t must_csm must_prd
         Msk.(mask_diff must_csm (mask_comp_or csm0 csm'))
         (fun x ->
           let n0 = L.length (prd0 x)          in
@@ -612,7 +612,7 @@ let test_lin_cond_st_0 (v : int -> vprop')
 
 [@@ __cond_solver__]
 let __normalize_lin_cond_st
-       (env : vprop_list) (#a : Type u#a) (t : M.prog_tree a)
+       (env : vprop_list) (#a : Type) (t : M.prog_tree a)
        (must_csm : LV.csm_t env) (must_prd : LV.prd_t a)
        (csm1 : LV.csm_t Msk.(filter_mask (mask_not must_csm) env)) (prd1 : LV.prd_t a)
        (lc : lin_cond_st env t must_csm must_prd csm1 prd1)
@@ -620,7 +620,7 @@ let __normalize_lin_cond_st
        (_ : squash (lc1 == lc))
        (csm2 : LV.csm_t Msk.(filter_mask (mask_not must_csm) env)) (prd2 : LV.prd_t a)
        (_ : squash (csm2 == csm1 /\ prd2 == prd1))
-  : lin_cond_st env t must_csm must_prd csm2 prd2
+  : lin_cond_st u#a u#p env t must_csm must_prd csm2 prd2
   = lc1
 
 #pop-options

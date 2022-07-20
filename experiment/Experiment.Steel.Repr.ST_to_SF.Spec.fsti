@@ -159,7 +159,7 @@ let return_SF_post_of_ST
       (#a : Type u#a) (post : ST.post_t u#a u#b a)
       (#pre_n #post_n : nat) (s : ST.shape_tree pre_n post_n {post_has_len post post_n})
       (x : a) (post_val : Fl.flist (post x))
-  : prog_tree a (post_SF_of_ST post s)
+  : prog_tree u#a u#b u#p a (post_SF_of_ST post s)
   = Tret a x (post_SF_of_ST post s) (Fl.dlist_of_f (sel_SF_of_ST post s x post_val))
 
 
@@ -213,8 +213,8 @@ val post_SF_of_ST__ret
 
 [@@ strict_on_arguments [3]] (* strict on t *)
 let rec repr_SF_of_ST
-      (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
-      (t : ST.prog_tree a pre post)
+      (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a)
+      (t : ST.prog_tree u#a u#b u#p a pre post)
   : Tot ((s : ST.prog_shape t) -> Fl.flist pre -> prog_tree a (post_SF_of_ST post s.shp))
         (decreases t)
   = match t as t'
@@ -272,8 +272,8 @@ let rec repr_SF_of_ST
 
 /// A version that returns all selectors, to be used at top-level
 let repr_SF_of_ST_rall
-      (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
-      (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
+      (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a)
+      (t : ST.prog_tree u#a u#b u#p a pre post) (s : ST.prog_shape t)
       (sl0 : Fl.flist pre)
   : prog_tree a post
   = Tbind a a _ _ (repr_SF_of_ST t s sl0) (fun x sl1' ->
@@ -382,20 +382,20 @@ let ens_equiv_rev #a #pre #post (t : ST.prog_tree a pre post) (s : ST.prog_shape
 /// The soundness (and completeness) lemmas:
 
 val repr_SF_of_ST_req
-      (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
-      (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
+      (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a)
+      (t : ST.prog_tree u#a u#b u#p a pre post) (s : ST.prog_shape t)
       (sl0 : Fl.flist pre)
   : Lemma (req_equiv t s sl0)
 
 val repr_SF_of_ST_ens
-      (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
-      (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
+      (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a)
+      (t : ST.prog_tree u#a u#b u#p a pre post) (s : ST.prog_shape t)
       (sl0 : Fl.flist pre) (res : a) (sl1 : Fl.flist (post res))
   : Lemma (ens_equiv t s sl0 res sl1)
 
 val repr_SF_of_ST_rall_equiv
-      (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
-      (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
+      (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a)
+      (t : ST.prog_tree u#a u#b u#p a pre post) (s : ST.prog_shape t)
       (sl0 : Fl.flist pre)
   : Lemma ((ST.tree_req t sl0 <==> tree_req (repr_SF_of_ST_rall t s sl0)) /\
            (forall (x : a) (sl1 : Fl.flist (post x)) .
@@ -403,13 +403,13 @@ val repr_SF_of_ST_rall_equiv
 
 
 val repr_SF_of_ST_shape
-      (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
-      (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
+      (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a)
+      (t : ST.prog_tree u#a u#b u#p a pre post) (s : ST.prog_shape t)
       (sl0 : Fl.flist pre)
   : Lemma (prog_has_shape (repr_SF_of_ST t s sl0) (shape_SF_of_ST s.shp))
 
 val repr_SF_of_ST_rall_shape
-      (#a : Type u#a) (#pre : ST.pre_t u#b) (#post : ST.post_t u#a u#b a)
-      (t : ST.prog_tree a pre post) (s : ST.prog_shape t)
+      (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a)
+      (t : ST.prog_tree u#a u#b u#p a pre post) (s : ST.prog_shape t)
       (sl0 : Fl.flist pre)
   : Lemma (prog_has_shape (repr_SF_of_ST_rall t s sl0) (shape_SF_of_ST_rall s.shp))
