@@ -1,6 +1,7 @@
 module Experiment.Steel.Steel
 
 module U   = Learn.Util
+module T   = FStar.Tactics
 module Mem = Steel.Memory
 
 include Experiment.Steel.SteelHack
@@ -93,6 +94,8 @@ noeq
 type effect_kind =
   | KSteel
   | KAtomic of Mem.inames
+  // Informative Ghost
+  | KGhostI of Mem.inames
   | KGhost  of Mem.inames
 
 noeq inline_for_extraction
@@ -102,6 +105,8 @@ type steel (a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : e
                steel a pre post req ens KSteel
   | FAtomic : (o : Mem.inames) -> (f : unit_steel_atomic a o pre post req ens) ->
                steel a pre post req ens (KAtomic o)
+  | FGhostI : (o : Mem.inames) -> (f : unit_steel_ghostI a o pre post req ens) ->
+               steel a pre post req ens (KGhostI o)
   | FGhost  : (o : Mem.inames) -> (f : unit_steel_ghost  a o pre post req ens) ->
                steel a pre post req ens (KGhost o)
 
@@ -134,3 +139,13 @@ unfold inline_for_extraction
 let ghost_f #opened #a #pre #post #req #ens (f : unit_steel_ghost a opened pre post req ens)
   : steel a pre post req ens (KGhost opened)
   = FGhost opened f
+
+unfold inline_for_extraction
+let ghostI_u #opened #a #pre #post #req #ens (f : steel a pre post req ens (KGhostI opened))
+  : unit_steel_ghostI a opened pre post req ens
+  = U.cast (unit_steel_ghostI a opened pre post req ens) (FGhostI?.f f)
+
+unfold inline_for_extraction
+let ghostI_f #opened #a #pre #post #req #ens (f : unit_steel_ghostI a opened pre post req ens)
+  : steel a pre post req ens (KGhostI opened)
+  = FGhostI opened f

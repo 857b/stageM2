@@ -11,6 +11,7 @@ module Dl   = Learn.DList
 module Fl   = Learn.FList
 module UV   = Learn.Universe
 module Msk  = Learn.List.Mask
+module Mem  = Steel.Memory
 module Perm = Learn.Permutation
 
 module M   = Experiment.Steel.Repr.M
@@ -86,9 +87,10 @@ let prog_LV_to_Fun_equiv_M
             let _ = mintros () in apply_lemma (``@lem_ens))
 #pop-options
 
+
 inline_for_extraction
 let prog_LV_to_Fun_extract
-      (#a : Type) (t : M.repr SH.KSteel a)
+      (#ek : SH.effect_kind) (#a : Type) (t : M.repr ek a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (lc : LV.top_lin_cond t.repr_tree pre post {LV.lcsub_at_leaves lc})
       (req : M.req_t pre) (ens : M.ens_t pre a post)
@@ -97,11 +99,11 @@ let prog_LV_to_Fun_extract
                   (forall (x : a) (sl1 : Vpl.sl_f (post x)) .
                     Fun.tree_ens (prog_LV_to_Fun t.repr_tree lc sl0) SF.({val_v = x; sel_v = sl1}) ==>
                     ens sl0 x sl1)))
-  : M.repr_steel_t SH.KSteel a pre post req ens
+  : M.repr_steel_t ek a pre post req ens
   =
     let tr = t.repr_tree in
     let mc = LV2M.repr_M_of_LV_top lc in
-    U.cast _ (M.repr_steel_subcomp _ _ req ens
+    U.cast _ (M.repr_steel_subcomp ek _ _ req ens
       (fun sl0       -> let _ =
         let f = prog_LV_to_Fun t.repr_tree lc sl0 in
         sub sl0;
@@ -125,9 +127,10 @@ let prog_LV_to_Fun_extract
         in ())
       (t.repr_steel pre (U.eta post) mc))
 
+#push-options "--ifuel 0 --fuel 0"
 inline_for_extraction
 let prog_LV_to_Fun_extract_wp
-      (#a : Type) (t : M.repr SH.KSteel a)
+      (#ek : SH.effect_kind) (#a : Type) (t : M.repr ek a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (lc0 : LV.top_lin_cond t.repr_tree pre post)
       (lc1 : LV.top_lin_cond t.repr_tree pre post) (_ : squash (lc1 == LV.lc_sub_push lc0))
@@ -135,12 +138,13 @@ let prog_LV_to_Fun_extract_wp
       (wp : (sl0 : Vpl.sl_f pre) -> Lemma
               (requires req sl0)
               (ensures Fun.tree_wp (prog_LV_to_Fun t.repr_tree lc1 sl0) (fun res -> ens sl0 res.val_v res.sel_v)))
-  : M.repr_steel_t SH.KSteel a pre post req ens
+  : M.repr_steel_t ek a pre post req ens
   =
     (**) LV.lc_sub_push_at_leaves _ lc0;
     prog_LV_to_Fun_extract t lc1 req ens
       (fun sl0 -> wp sl0;
                Fun.tree_wp_sound (prog_LV_to_Fun t.repr_tree lc1 sl0) (fun res -> ens sl0 res.val_v res.sel_v))
+#pop-options
 
 
 (**** normalisation steps *)

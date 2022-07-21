@@ -45,3 +45,10 @@ let raise_pure_val (#a : Type u#a) (wp : pure_wp a) (f : unit -> PURE a wp)
   =
     FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp;
     fun () -> raise_val u#a u#b (f ())
+
+inline_for_extraction
+let raise_ghost_val (#a : Type u#a) (wp : pure_wp a) (f : unit -> GHOST a wp)
+  : unit -> GHOST (raise_t u#a u#b a) (raise_pure_wp u#a u#b wp)
+  =
+    FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp;
+    fun () -> raise_val u#a u#b (f ())

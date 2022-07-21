@@ -9,9 +9,14 @@ open Steel.Effect.Atomic
 type unit_steel (a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
   = unit -> Steel a pre post req ens
 
+// ALT? merge atomic and ghostI
 let unit_steel_atomic
       (a : Type) (opened : Mem.inames) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
   = unit -> SteelAtomic a opened pre post req ens
+
+let unit_steel_ghostI
+      (a : Type) (opened : Mem.inames) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
+  = unit -> SteelAtomicBase a false opened Unobservable pre post req ens
 
 let unit_steel_ghost
       (a : Type) (opened : Mem.inames) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)

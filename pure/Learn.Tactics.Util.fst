@@ -154,3 +154,9 @@ let squash_intro () : Tac unit =
 (*let long_proof : l_True = ()
 let test : squash True = _ by ((*FStar.Tactics.Logic.*)squash_intro (); exact (`long_proof))
 let _ : U.print_util test = _ by (norm [delta_only [`%test]]; fail "print")*)
+
+
+let collect_fvar (t : term) : Tac string
+  = match inspect t with
+  | Tv_FVar fv | Tv_UInst fv _ -> implode_qn (inspect_fv fv)
+  | _ -> fail "expected an fvar"

@@ -109,6 +109,29 @@ let make_combinator_steel_ghost
       (post_eq x).veq_g _;
       x
     )
+
+inline_for_extraction
+let make_combinator_steel_ghostI
+      (#a : Type u#a) (opened : Mem.inames) (s : M.spec_r a) (f : M.spc_steel_t (SH.KGhostI opened) s)
+      (#pre : M.pre_t) (pre_eq : Veq.vequiv pre (M.spc_pre1 s))
+      (#post : M.post_t a) (post_eq : ((x : a) -> Veq.vequiv (M.spc_post1 s x) (post x)))
+  : M.repr_steel_t (SH.KGhostI opened) a pre post (M.gen_req s pre_eq post_eq) (M.gen_ens s pre_eq post_eq)
+  =
+    SH.ghostI_f #opened (fun () ->
+      pre_eq.veq_g _;
+      (**) elim_vpl_append s.spc_pre s.spc_ro;
+      (**) let sl0'  = gget_f s.spc_pre in
+      (**) let sl_ro = gget_f s.spc_ro in     
+      (**) assert (s.spc_req sl0' sl_ro);
+      let (x : a) = SH.ghostI_u f () in
+      (**) let sl1'   = gget_f (s.spc_post x) in
+      (**) let sl_ro' = gget_f s.spc_ro       in
+      (**) assert (sl_ro' == sl_ro);
+      (**) assert (s.spc_ens sl0' x sl1' sl_ro);
+      (**) intro_vpl_append (s.spc_post x) s.spc_ro;
+      (post_eq x).veq_g _;
+      SA.return x
+    )
 #pop-options
 
 inline_for_extraction
@@ -121,6 +144,7 @@ let make_combinator_steel_ek
   | SH.KSteel         -> make_combinator_steel               s f pre_eq post_eq
   | SH.KAtomic opened -> make_combinator_steel_atomic opened s f pre_eq post_eq
   | SH.KGhost  opened -> make_combinator_steel_ghost  opened s f pre_eq post_eq
+  | SH.KGhostI opened -> make_combinator_steel_ghostI opened s f pre_eq post_eq
 
 [@@ __repr_M__]
 inline_for_extraction
@@ -351,6 +375,33 @@ let lc_to_spc_steel_t__ghost
       (**) noop ();
       x
     )
+
+inline_for_extraction
+let lc_to_spc_steel_t__ghostI
+      (opened : Mem.inames) (#a : Type) (mr : M.repr (SH.KGhostI opened) a)
+      (#env : vprop_list) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
+      (lc : LV.lin_cond u#a u#p env mr.repr_tree csm prd {LV.lcsub_at_leaves lc})
+  : M.spc_steel_t (SH.KGhostI opened) (lc_spec_r lc)
+  =
+    let tc = LV2M.repr_M_of_LV lc                              in
+    let sf = mr.repr_steel env (LV2M.res_env_f env csm prd) tc in
+    (**) LV2M.repr_M_of_LV_sound lc;
+    SH.ghostI_f #opened (fun () ->
+      (**) let sl0    = gget_f (lc_pre lc)    in
+      (**) let sl_ro0 = gget_f (lc_ro  lc)    in
+      elim_vpl_filter_mask_append env csm;
+      (**) let sl0'   = gget_f env            in
+      let x = SH.ghostI_u sf () in
+      (**) let sl1'   = gget_f L.(lc_post lc x @ lc_ro lc) in
+      elim_vpl_append (lc_post lc x) (lc_ro lc);
+      (**) let sl1    = gget_f (lc_post lc x) in
+      (**) let sl_ro1 = gget_f (lc_ro   lc)   in
+      (**) assert (Ghost.reveal sl1' == LV2M.res_env_app sl1 sl_ro1);
+      (**) assert (M.tree_ens _ tc sl0' x sl1');
+      (**) filter_append_vars_mask csm sl0 sl_ro0;
+      (**) assert (LV.tree_ens lc sl0' x sl1 /\ sl_ro0 == sl_ro1);
+      SA.return x
+    )
 #pop-options
 
 inline_for_extraction
@@ -364,6 +415,7 @@ let lc_to_spc_steel_t
     | SH.KSteel    -> lc_to_spc_steel_t__steel    mr lc
     | SH.KAtomic o -> lc_to_spc_steel_t__atomic o mr lc
     | SH.KGhost  o -> lc_to_spc_steel_t__ghost  o mr lc
+    | SH.KGhostI o -> lc_to_spc_steel_t__ghostI o mr lc
 
 
 (*** Building [lin_cond] *)

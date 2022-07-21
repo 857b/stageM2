@@ -4,8 +4,6 @@ module T    = FStar.Tactics
 module Fext = FStar.FunctionalExtensionality
 
 
-(*** Steel *)
-
 let focus_rmem_feq (p q r : vprop) (h : rmem p)
   : Lemma (requires can_be_split p q /\ can_be_split q r)
           (ensures  can_be_split p r /\ focus_rmem h q r == h r)

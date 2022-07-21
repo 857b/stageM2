@@ -38,7 +38,7 @@ type repr_steel_t (ek : SH.effect_kind) (a : Type)
 
 // FIXME: this definition fails when loaded as a dependency but not when lax-checked
 inline_for_extraction noextract
-let repr_steel_subcomp
+let repr_steel_subcomp__steel
       (#a : Type) (#pre : pre_t) (#post : post_t a)
       (req_f : req_t pre) (ens_f : ens_t pre a post)
       (req_g : req_t pre) (ens_g : ens_t pre a post)
@@ -55,6 +55,82 @@ let repr_steel_subcomp
       (**) let sl1 = gget_f (post x) in
       (**) pf_ens sl0 x sl1;
       Steel.Effect.Atomic.return x)
+
+inline_for_extraction noextract
+let repr_steel_subcomp__atomic
+      (#a : Type) (opened : Mem.inames) (#pre : pre_t) (#post : post_t a)
+      (req_f : req_t pre) (ens_f : ens_t pre a post)
+      (req_g : req_t pre) (ens_g : ens_t pre a post)
+      (pf_req : (sl0 : sl_f pre) ->
+                Lemma (requires req_g sl0) (ensures req_f sl0))
+      (pf_ens : (sl0 : sl_f pre) -> (x : a) -> (sl1 : sl_f (post x)) ->
+                Lemma (requires req_f sl0 /\ req_g sl0 /\ ens_f sl0 x sl1) (ensures ens_g sl0 x sl1))
+      (r : repr_steel_t (SH.KAtomic opened) a pre post req_f ens_f)
+  : repr_steel_t (SH.KAtomic opened) a pre post req_g ens_g
+  = SH.atomic_f (fun () ->
+      (**) let sl0 = gget_f pre in
+      (**) pf_req (sl0);
+      let x = SH.atomic_u r () in
+      (**) let sl1 = gget_f (post x) in
+      (**) pf_ens sl0 x sl1;
+      Steel.Effect.Atomic.return x)
+
+inline_for_extraction noextract
+let repr_steel_subcomp__ghostI
+      (#a : Type) (opened : Mem.inames) (#pre : pre_t) (#post : post_t a)
+      (req_f : req_t pre) (ens_f : ens_t pre a post)
+      (req_g : req_t pre) (ens_g : ens_t pre a post)
+      (pf_req : (sl0 : sl_f pre) ->
+                Lemma (requires req_g sl0) (ensures req_f sl0))
+      (pf_ens : (sl0 : sl_f pre) -> (x : a) -> (sl1 : sl_f (post x)) ->
+                Lemma (requires req_f sl0 /\ req_g sl0 /\ ens_f sl0 x sl1) (ensures ens_g sl0 x sl1))
+      (r : repr_steel_t (SH.KGhostI opened) a pre post req_f ens_f)
+  : repr_steel_t (SH.KGhostI opened) a pre post req_g ens_g
+  = SH.ghostI_f (fun () ->
+      (**) let sl0 = gget_f pre in
+      (**) pf_req (sl0);
+      let x = SH.ghostI_u r () in
+      (**) let sl1 = gget_f (post x) in
+      (**) pf_ens sl0 x sl1;
+      Steel.Effect.Atomic.return x)
+
+inline_for_extraction noextract
+let repr_steel_subcomp__ghost
+      (#a : Type) (opened : Mem.inames) (#pre : pre_t) (#post : post_t a)
+      (req_f : req_t pre) (ens_f : ens_t pre a post)
+      (req_g : req_t pre) (ens_g : ens_t pre a post)
+      (pf_req : (sl0 : sl_f pre) ->
+                Lemma (requires req_g sl0) (ensures req_f sl0))
+      (pf_ens : (sl0 : sl_f pre) -> (x : a) -> (sl1 : sl_f (post x)) ->
+                Lemma (requires req_f sl0 /\ req_g sl0 /\ ens_f sl0 x sl1) (ensures ens_g sl0 x sl1))
+      (r : repr_steel_t (SH.KGhost opened) a pre post req_f ens_f)
+  : repr_steel_t (SH.KGhost opened) a pre post req_g ens_g
+  = SH.ghost_f (fun () ->
+      (**) let sl0 = gget_f pre in
+      (**) pf_req (sl0);
+      let x = SH.ghost_u r () in
+      (**) let sl1 = gget_f (post x) in
+      (**) pf_ens sl0 x sl1;
+      noop ();
+      x)
+
+inline_for_extraction noextract
+let repr_steel_subcomp
+      (ek : SH.effect_kind) (#a : Type) (#pre : pre_t) (#post : post_t a)
+      (req_f : req_t pre) (ens_f : ens_t pre a post)
+      (req_g : req_t pre) (ens_g : ens_t pre a post)
+      (pf_req : (sl0 : sl_f pre) ->
+                Lemma (requires req_g sl0) (ensures req_f sl0))
+      (pf_ens : (sl0 : sl_f pre) -> (x : a) -> (sl1 : sl_f (post x)) ->
+                Lemma (requires req_f sl0 /\ req_g sl0 /\ ens_f sl0 x sl1) (ensures ens_g sl0 x sl1))
+      (r : repr_steel_t ek a pre post req_f ens_f)
+  : repr_steel_t ek a pre post req_g ens_g
+  = match ek with
+  | SH.KSteel    -> repr_steel_subcomp__steel    req_f ens_f req_g ens_g pf_req pf_ens r
+  | SH.KAtomic o -> repr_steel_subcomp__atomic o req_f ens_f req_g ens_g pf_req pf_ens r
+  | SH.KGhostI o -> repr_steel_subcomp__ghostI o req_f ens_f req_g ens_g pf_req pf_ens r
+  | SH.KGhost  o -> repr_steel_subcomp__ghost  o req_f ens_f req_g ens_g pf_req pf_ens r
+
 
 (*// This fail, seemingly because of the expansion of the memories when checking the post
 [@@ handle_smt_goals ]
