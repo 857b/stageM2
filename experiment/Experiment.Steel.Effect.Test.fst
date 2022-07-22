@@ -14,7 +14,7 @@ let display_term (#a : Type) (x : a) : Type = unit
 /// This retypecheck [r]. It fails if r contains a bind_pure since it will need to prove the monotonicity of the
 /// weakest precondition ([pure_wp_monotonic]).
 let dump_repr (#a : Type) (#r : prog_tree a) (ek : SH.effect_kind)
-      ($re : unit -> MRepr a ek r)
+      ($re : unit -> MRepr a ek r None)
       (#[(norm [delta_attr [`%__repr_M__]; iota]; dump "dump_repr"; exact (`()))] d : display_term r)
       ()
   : unit
@@ -23,6 +23,7 @@ let dump_repr (#a : Type) (#r : prog_tree a) (ek : SH.effect_kind)
 
 // We need to annotate [SH.KGhostI Set.empty] otherwise the infered effect is [SH.KGhostI ?opened] and
 // ?opened is not constrained
+// This raise a non-fatal GOAL IS ALREADY SOLVED error
 let test0 =
   dump_repr (SH.KGhostI Set.empty) (fun () -> let x = return 5 in return (x + 1)) ()
 
@@ -94,14 +95,13 @@ let test6 (opened : Mem.inames) (r : ghost_ref int) (x : int)
     call_g (ghost_write r) x
   end
 
-// MRepr _ (SH.KGhost _) is not erasable and we cannot define a polymonadic bind with GHOST
-[@@ expect_failure]
+// Since MRepr _ (SH.KGhost _) is erasable, we can use ghost operations
 let test7 (opened: Mem.inames) (r : ghost_ref int)
   : usteel_ghost int opened
       (ghost_vptr r) (fun _ -> ghost_vptr r) (fun _ -> True) (fun _ _ _ -> True)
   = to_steel_g begin fun () ->
     let x = call_g ghost_read r in
-    return_g (Ghost.reveal x)
+    Ghost.reveal x
   end
 
 let test8 (opened : Mem.inames) (r : ghost_ref int) (b : bool) (x0 x1 : int)
@@ -111,4 +111,17 @@ let test8 (opened : Mem.inames) (r : ghost_ref int) (b : bool) (x0 x1 : int)
     if b
     then call_g (ghost_write r) x0
     else call_g (ghost_write r) x1
+  end
+
+let test9 (r : ghost_ref int) (x : int)
+  : usteel unit (ghost_vptr r) (fun _ -> ghost_vptr r) (fun _ -> True) (fun _ _ _ -> True)
+  = to_steel begin fun () ->
+    call_g (ghost_write r) x
+  end
+
+let test9' (r : ghost_ref int) (x : int)
+  : usteel unit (ghost_vptr r) (fun _ -> ghost_vptr r) (fun _ -> True) (fun _ _ _ -> True)
+  = to_steel begin fun () ->
+    call_g (ghost_write r) x;
+    return ()
   end
