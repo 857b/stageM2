@@ -74,7 +74,7 @@ let mk_repr (#a : Type) (#ek : SH.effect_kind) (#t : prog_tree a) (repr_M : repr
 let return_ghostI
       (a : Type) (x : a) (#[@@@ __mrepr_implicit__] opened: Mem.inames)
   : repr u#a a (SH.KGhostI opened) (M.Tret a x (fun _ -> [])) None
-  = mk_repr (C.return_ghostI_hint #a x (fun _ -> []))
+  = mk_repr (C.return (SH.KGhostI opened) #a x)
 
 
 (***** bind *)
@@ -358,15 +358,15 @@ let combine_bind_pure
     cb_bindP_repr = t;
     cb_bindP_impl = (fun rf rg ->
                        let rg' = UV.lift_dom rg in
-                       let r = C.bindP_ek #(UV.raise_t u#r u#8 a) #b ek (UV.raise_pure_wp u#r u#8 wp)
-                                          (UV.raise_pure_val wp rf) rg'
+                       let r = C.bindP #(UV.raise_t u#r u#8 a) #b ek (UV.raise_pure_wp u#r u#8 wp)
+                                        (UV.raise_pure_val wp rf) rg'
                        in
                        U.funext_eta (UV.lift_dom g) (fun x -> (rg' x).repr_tree)
                          (U.by_refl ()) (U.by_refl ())
                          (fun x -> ());
                        assert (r.repr_tree == t)
                          by T.(norm [delta_only [`%M.Mkrepr?.repr_tree]];
-                               norm [delta_only [`%C.bindP_ek]; iota];
+                               norm [delta_only [`%C.bindP]; iota];
                                smt ());
                        r)
   }
@@ -402,7 +402,7 @@ type repr_ghost (a : Type u#a) (opened : Mem.inames) (t : prog_tree a) (cvi : op
 let return_ghost
       (a : Type) (x : a) (#opened: Mem.inames)
   : repr_ghost u#a a opened (M.Tret a x (fun _ -> [])) None
-  = mk_repr (C.return_ghost #a x)
+  = mk_repr (C.return (SH.KGhost opened) #a x)
 
 let bind_ghost
       (a : Type u#a) (b : Type u#b)
@@ -505,16 +505,30 @@ let call (#b : Type u#b)
       (#a : b -> Type) (#pre : b -> SE.pre_t) (#post : (x : b) -> SE.post_t (a x))
       (#req : (x : b) -> SE.req_t (pre x)) (#ens : (x : b) -> SE.ens_t (pre x) (a x) (post x))
       ($f : (x : b) -> SE.Steel (a x) (pre x) (post x) (req x) (ens x)) (x : b)
-  : MRepr (a x) SH.KSteel (M.Tspec (a x) (M.spec_r_steel u#a u#8 (pre x) (post x) (req x) (ens x))) None
-  = MRepr?.reflect (mk_repr (C.repr_of_steel #(a x) (pre x) (post x) (req x) (ens x) (fun () -> f x)))
+  : MRepr (a x) SH.KSteel
+      (M.Tspec (a x) (M.spec_r_steel u#a u#8 (pre x) (post x) (req x) (ens x))) None
+  = MRepr?.reflect
+      (mk_repr (C.repr_of_steel #(a x) (pre x) (post x) (req x) (ens x) (SH.steel_fe (fun () -> f x))))
+
+unfold
+let call_a (#b : Type u#b)
+      (#a : b -> Type) (#opened : b -> Mem.inames) (#pre : b -> SE.pre_t) (#post : (x : b) -> SE.post_t (a x))
+      (#req : (x : b) -> SE.req_t (pre x)) (#ens : (x : b) -> SE.ens_t (pre x) (a x) (post x))
+      ($f : (x : b) -> SA.SteelAtomic (a x) (opened x) (pre x) (post x) (req x) (ens x)) (x : b)
+  : MRepr (a x) (SH.KAtomic (opened x))
+      (M.Tspec (a x) (M.spec_r_steel u#a u#8 (pre x) (post x) (req x) (ens x))) None
+  = MRepr?.reflect (mk_repr
+      (C.repr_of_steel #(a x) (pre x) (post x) (req x) (ens x) (SH.atomic_fe (fun () -> f x))))
 
 unfold
 let call_g (#b : Type u#b)
       (#a : b -> Type) (#opened : b -> Mem.inames) (#pre : b -> SE.pre_t) (#post : (x : b) -> SE.post_t (a x))
       (#req : (x : b) -> SE.req_t (pre x)) (#ens : (x : b) -> SE.ens_t (pre x) (a x) (post x))
       ($f : (x : b) -> SA.SteelGhost (a x) (opened x) (pre x) (post x) (req x) (ens x)) (x : b)
-  : MReprGhost (a x) (opened x) (M.Tspec (a x) (M.spec_r_steel u#a u#8 (pre x) (post x) (req x) (ens x))) None
-  = MReprGhost?.reflect (mk_repr (C.repr_of_steel_ghost #(a x) (pre x) (post x) (req x) (ens x) (fun () -> f x)))
+  : MReprGhost (a x) (opened x)
+      (M.Tspec (a x) (M.spec_r_steel u#a u#8 (pre x) (post x) (req x) (ens x))) None
+  = MReprGhost?.reflect (mk_repr
+       (C.repr_of_steel #(a x) (pre x) (post x) (req x) (ens x) (SH.ghost_fe (fun () -> f x))))
 
 
 (*** Resolution of [__mrepr_implicit__] *)
@@ -775,30 +789,17 @@ let build_mrepr_to_steel_norew (fr : flags_record) : Tac unit
     //exact (`((_ by (ES.build_to_steel (make_flags_record (`#flags)))) <: (`#(cur_goal ()))))
     ES.build_to_steel fr
 
-
-inline_for_extraction noextract
-let steel_of_repr_ek
-      (#ek : SH.effect_kind {SH.KSteel? ek \/ SH.KGhost? ek}) // TODO derive for the other effects
-      (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
-      (tr : M.to_repr_t a pre post req ens)
-      (f : M.repr_steel_t ek a tr.r_pre tr.r_post tr.r_req tr.r_ens)
-  : SH.steel a pre post req ens ek
-  = match ek with
-  | SH.KSteel   -> SH.steel_f (M.steel_of_repr tr f)
-  | SH.KGhost o -> SH.ghost_f (M.steel_ghost_of_repr #a #o tr f)
-
 private
 let __build_mrepr_to_steel_wrew
       (flags : list flag)
       (ek : SH.effect_kind)
       (a : Type) (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t pre) (ens : SE.ens_t pre a post)
       (t : prog_tree a)
-      (ek_restr : squash (SH.KSteel? ek \/ SH.KGhost? ek))
       (goal_tr : M.to_repr_t a pre post req ens)
       (goal_sp : ES.to_steel_goal_spec a goal_tr.r_pre goal_tr.r_post goal_tr.r_req goal_tr.r_ens t)
   : mrepr_to_steel_t flags a ek pre post req ens t
   = MReprToSteel (fun r ->
-      steel_of_repr_ek goal_tr
+      M.steel_of_repr goal_tr
         (let lc1 = LV.lc_sub_push goal_sp.goal_spec_LV in
          ES.prog_LV_to_Fun_extract_wp r goal_sp.goal_spec_LV lc1 ()
             goal_tr.r_req goal_tr.r_ens (fun sl0 -> goal_sp.goal_spec_WP)))
@@ -809,10 +810,6 @@ let build_mrepr_to_steel_wrew (fr : flags_record) (flags : list flag) : Tac unit
   =
     let fr = make_flags_record flags in
     apply_raw (`__build_mrepr_to_steel_wrew);
-
-    // ek_restr
-    norm [delta; iota; simplify];
-    trivial ();
 
     // goal_tr
     let t = timer_start "specs     " fr.f_timer in
@@ -901,11 +898,9 @@ let mrepr_implicits_tac () : Tac unit
 
 (*** Notations *)
 
-unfold
-let usteel = SH.unit_steel
-
-unfold
-let usteel_ghost = SH.unit_steel_ghost
+unfold let usteel        = SH.unit_steel
+unfold let usteel_atomic = SH.unit_steel_atomic
+unfold let usteel_ghost  = SH.unit_steel_ghost
 
 
 let to_steel
@@ -917,6 +912,17 @@ let to_steel
     let r : repr a SH.KSteel (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags))
       = reify (r ()) in
     U.cast _ (SH.steel_u (ISome?.v r.repr_cv))
+
+let to_steel_a
+      (#[apply (`[])] flags : list flag)
+      (#a : Type) (#opened : Mem.inames)
+      (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
+      (r : unit -> MRepr a (SH.KAtomic opened) (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags)))
+  : usteel_atomic a opened pre post req ens
+  =
+    let r : repr a (SH.KAtomic opened) (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags))
+      = reify (r ()) in
+    U.cast _ (SH.atomic_u (ISome?.v r.repr_cv))
 
 let to_steel_g
       (#[apply (`[])] flags : list flag)

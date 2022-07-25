@@ -36,12 +36,12 @@ let to_steel
 unfold
 let return_hint (#a : Type) (x : a) (sl_hint : M.post_t a)
   : M.repr SH.KSteel a
-  = MC.return_hint #a x sl_hint
+  = MC.return_hint SH.KSteel #a x sl_hint
 
 unfold
 let return (#a : Type) (x : a)
   : M.repr SH.KSteel a
-  = MC.return #a x
+  = MC.return SH.KSteel #a x
 
 // TODO? generalize with typeclass
 unfold
@@ -52,12 +52,13 @@ let bind (#a #b : Type) (f : M.repr SH.KSteel a) (g : a -> M.repr SH.KSteel b)
 unfold
 let pure (#a : Type) (#wp : pure_wp a) ($f : unit -> PURE a wp)
   : M.repr SH.KSteel a
-  = MC.bindP wp f (fun x -> MC.return x)
+  = MC.bindP SH.KSteel wp f (fun x -> MC.return SH.KSteel x)
 
 unfold
 let ite (#a : Type) (guard : bool) (thn : M.repr SH.KSteel a) (els : M.repr SH.KSteel a)
   : M.repr SH.KSteel a
   = MC.ite guard thn els
+
 
 /// Calling a Steel function from our representation
 unfold
@@ -66,7 +67,7 @@ let call (#b : Type)
       (#req : (x : b) -> SE.req_t (pre x)) (#ens : (x : b) -> SE.ens_t (pre x) (a x) (post x))
       ($f : (x : b) -> SE.Steel (a x) (pre x) (post x) (req x) (ens x)) (x : b)
   : M.repr SH.KSteel (a x)
-  = MC.repr_of_steel (pre x) (post x) (req x) (ens x) (fun () -> f x)
+  = MC.repr_of_steel (pre x) (post x) (req x) (ens x) (SH.steel_fe (fun () -> f x))
 
 unfold
 let call_g (#b : Type)
@@ -74,4 +75,4 @@ let call_g (#b : Type)
       (#req : (x : b) -> SE.req_t (pre x)) (#ens : (x : b) -> SE.ens_t (pre x) (a x) (post x))
       ($f : (x : b) -> SA.SteelGhost (a x) (opened x) (pre x) (post x) (req x) (ens x)) (x : b)
   : M.repr (SH.KGhost (opened x)) (a x)
-  = MC.repr_of_steel_ghost (pre x) (post x) (req x) (ens x) (fun () -> f x)
+  = MC.repr_of_steel (pre x) (post x) (req x) (ens x) (SH.ghost_fe (fun () -> f x))

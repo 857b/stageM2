@@ -521,7 +521,7 @@ let test_ghost (r : ref U32.t)
             (requires fun _ -> True) (ensures fun h0 _ h1 -> frame_equalities (vptr r) h0 h1)
   = F.(to_steel (
     x <-- MC.ghost_to_steel (MC.bind_ghost (call_g aux_ghost r) (fun x ->
-                                         MC.return_ghost (Ghost.hide x)));
+                                         MC.return (SH.KGhost _) (Ghost.hide x)));
     call (aux_steel r) x
   ) #(_ by (mk_steel [Extract])) ())
 

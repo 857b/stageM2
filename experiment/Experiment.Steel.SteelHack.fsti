@@ -9,14 +9,13 @@ open Steel.Effect.Atomic
 type unit_steel (a : Type) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
   = unit -> Steel a pre post req ens
 
-// ALT? merge atomic and ghostI
-let unit_steel_atomic
+let unit_steel_atomicO
+      (o : observability)
       (a : Type) (opened : Mem.inames) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
-  = unit -> SteelAtomic a opened pre post req ens
+  = unit -> SteelAtomicBase a false opened o pre post req ens
 
-let unit_steel_ghostI
-      (a : Type) (opened : Mem.inames) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
-  = unit -> SteelAtomicBase a false opened Unobservable pre post req ens
+let unit_steel_atomic = unit_steel_atomicO Observable // SteelAtomic
+let unit_steel_ghostI = unit_steel_atomicO Unobservable
 
 let unit_steel_ghost
       (a : Type) (opened : Mem.inames) (pre : pre_t) (post : post_t a) (req : req_t pre) (ens : ens_t pre a post)
@@ -86,7 +85,7 @@ val intro_subcomp_pre'
 
 
 inline_for_extraction noextract
-val steel_subcomp (a:Type)
+val steel_subcomp__steel (a:Type)
   (pre_f:pre_t)       (post_f:post_t a)
   (req_f:req_t pre_f) (ens_f:ens_t pre_f a post_f)
   (pre_g:pre_t)       (post_g:post_t a)
@@ -100,7 +99,24 @@ val steel_subcomp (a:Type)
   : unit_steel a pre_g post_g req_g ens_g
 
 inline_for_extraction noextract
-val steel_ghost_subcomp (a:Type) (opened : Mem.inames)
+val steel_subcomp__atomic
+  (o0 o1 : observability)
+  (a:Type) (opened : Mem.inames)
+  (pre_f:pre_t)       (post_f:post_t a)
+  (req_f:req_t pre_f) (ens_f:ens_t pre_f a post_f)
+  (pre_g:pre_t)       (post_g:post_t a)
+  (req_g:req_t pre_g) (ens_g:ens_t pre_g a post_g)
+  (frame:vprop)
+  (pr : prop)
+  (p1 : squash (can_be_split_dep pr pre_g (pre_f `star` frame)))
+  (p2 : squash (equiv_forall post_g (fun x -> post_f x `star` frame)))
+  (sc : squash (subcomp_pre' req_f ens_f req_g ens_g p1 p2))
+  (so : squash (o0 = Unobservable || o1 = Observable))
+  ($f : unit_steel_atomicO o0 a opened pre_f post_f req_f ens_f)
+  : unit_steel_atomicO o1 a opened pre_g post_g req_g ens_g
+
+inline_for_extraction noextract
+val steel_subcomp__ghost (a:Type) (opened : Mem.inames)
   (pre_f:pre_t)       (post_f:post_t a)
   (req_f:req_t pre_f) (ens_f:ens_t pre_f a post_f)
   (pre_g:pre_t)       (post_g:post_t a)

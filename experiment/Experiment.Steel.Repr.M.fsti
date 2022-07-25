@@ -161,35 +161,22 @@ type to_repr_t (a : Type) (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t 
                   == r_ens (vprop_of_list_sel r_pre h0) x (vprop_of_list_sel (r_post x) h1))
 }
 
+
 inline_for_extraction noextract
 val steel_of_repr
+      (#ek : SH.effect_kind)
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
       (tr : to_repr_t a pre post req ens)
-      (f : repr_steel_t SH.KSteel a tr.r_pre tr.r_post tr.r_req tr.r_ens)
-  : SH.unit_steel a pre post req ens
+      (f : repr_steel_t ek a tr.r_pre tr.r_post tr.r_req tr.r_ens)
+  : SH.steel a pre post req ens ek
 
 inline_for_extraction noextract
-val repr_steel_of_steel
+val repr_of_steel
+      (#ek : SH.effect_kind)
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
       (tr : to_repr_t a pre post req ens)
-      ($f  : SH.unit_steel a pre post req ens)
-  : repr_steel_t SH.KSteel a tr.r_pre tr.r_post tr.r_req tr.r_ens 
-
-inline_for_extraction noextract
-val steel_ghost_of_repr
-      (#a : Type) (#opened : Mem.inames)
-      (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
-      (tr : to_repr_t a pre post req ens)
-      (f : repr_steel_t (SH.KGhost opened) a tr.r_pre tr.r_post tr.r_req tr.r_ens)
-  : SH.unit_steel_ghost a opened pre post req ens
-
-inline_for_extraction noextract
-val repr_steel_of_steel_ghost
-      (#a : Type) (#opened : Mem.inames)
-      (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
-      (tr : to_repr_t a pre post req ens)
-      ($f  : SH.unit_steel_ghost a opened pre post req ens)
-  : repr_steel_t (SH.KGhost opened) a tr.r_pre tr.r_post tr.r_req tr.r_ens
+      ($f  : SH.steel a pre post req ens ek)
+  : repr_steel_t ek a tr.r_pre tr.r_post tr.r_req tr.r_ens 
 
 
 (*** [spec_r] *)
@@ -223,25 +210,6 @@ type spc_steel_t (ek : SH.effect_kind) (#a : Type) (s : spec_r a)
       (ensures  fun h0 x h1 -> s.spc_ens (sel_f s.spc_pre h0) x (sel_f (s.spc_post x) h1) (sel_f s.spc_ro h0) /\
                             sel_f s.spc_ro h1 == sel_f s.spc_ro h0)
       ek
-
-type spc_steel_t_steel (#a : Type) (s : spec_r a)
-  =
-    SH.unit_steel a
-      (      vprop_of_list  s.spc_pre     `star` vprop_of_list s.spc_ro)
-      (fun x -> vprop_of_list (s.spc_post x) `star` vprop_of_list s.spc_ro)
-      (requires fun h0      -> s.spc_req (sel_f s.spc_pre h0) (sel_f s.spc_ro h0))
-      (ensures  fun h0 x h1 -> s.spc_ens (sel_f s.spc_pre h0) x (sel_f (s.spc_post x) h1) (sel_f s.spc_ro h0) /\
-                            sel_f s.spc_ro h1 == sel_f s.spc_ro h0)
-
-type spc_steel_t_ghost (#a : Type) (opened : Mem.inames) (s : spec_r a)
-  =
-    SH.unit_steel_ghost a opened
-      (      vprop_of_list  s.spc_pre     `star` vprop_of_list s.spc_ro)
-      (fun x -> vprop_of_list (s.spc_post x) `star` vprop_of_list s.spc_ro)
-      (requires fun h0      -> s.spc_req (sel_f s.spc_pre h0) (sel_f s.spc_ro h0))
-      (ensures  fun h0 x h1 -> s.spc_ens (sel_f s.spc_pre h0) x (sel_f (s.spc_post x) h1) (sel_f s.spc_ro h0) /\
-                            sel_f s.spc_ro h1 == sel_f s.spc_ro h0)
-
 
 type spec_r_exact (#a : Type u#a) (s0 : spec_r a) : (s : spec_r a) -> Type u#(max a p 2) =
   | SpecExact : spec_r_exact s0 s0
@@ -277,15 +245,8 @@ inline_for_extraction noextract
 val spec_r_of_find_ro
       (#a : Type) (#pre : pre_t) (#post : post_t a) (#req : req_t pre) (#ens : ens_t pre a post)
       (sro : spec_find_ro a pre post req ens)
-      (f : repr_steel_t SH.KSteel a pre post req ens)
-  : spc_steel_t_steel sro.sro_spc
-
-inline_for_extraction noextract
-val spec_r_of_find_ro_ghost
-      (#a : Type) (#pre : pre_t) (#post : post_t a) (#req : req_t pre) (#ens : ens_t pre a post)
-      (sro : spec_find_ro a pre post req ens)
-      (#opened : Mem.inames) (f : repr_steel_t (SH.KGhost opened) a pre post req ens)
-  : spc_steel_t_ghost opened sro.sro_spc
+      (#ek : SH.effect_kind) (f : repr_steel_t ek a pre post req ens)
+  : spc_steel_t ek sro.sro_spc
 
 (**) private val __end_spec_r_of_find_ro : unit
 

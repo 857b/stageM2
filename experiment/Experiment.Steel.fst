@@ -335,7 +335,7 @@ let __build_to_steel
       (goal_tr : M.to_repr_t a pre post req ens)
       (goal_f  : extract a goal_tr.r_pre goal_tr.r_post goal_tr.r_req goal_tr.r_ens t)
   : __to_steel_goal a pre post req ens t
-  = M.steel_of_repr goal_tr goal_f
+  = SH.steel_u (M.steel_of_repr goal_tr goal_f)
 
 /// Solves a goal [__to_steel_goal]
 let build_to_steel (fr : flags_record) : Tac unit

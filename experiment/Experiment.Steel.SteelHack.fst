@@ -71,19 +71,29 @@ let resolve_framing () : Tac unit =
   // Finally running the core of the tactic, scheduling and solving goals
   resolve_tac_logical []
 
+let find_binder (nm : string) : Tac binder
+  = first (map (fun (b : binder) () -> guard (term_to_string b = nm); b) (cur_binders ()))
+
 [@@ handle_smt_goals ]
 let tac () =
-  first (map (fun (b : binder) -> fun () -> (
-    if term_to_string b <> "sc" then fail "";
-    norm_binder_type [delta_only [`%subcomp_pre']] b;
-    norm_binder_type normal_steps b;
-    exact b
-  ) <: Tac unit) (cur_binders ()))
+  let bs = cur_binders () in
+  (try let so = find_binder "so" in
+       split ();
+       exact so
+    with _ -> ());
+  let sc = find_binder "sc" in
+  norm_binder_type [delta_only [`%subcomp_pre']] sc;
+  norm_binder_type normal_steps sc;
+  exact sc
 
 inline_for_extraction noextract
-let steel_subcomp a pre_f post_f req_f ens_f pre_g post_g req_g ens_g frame pr p1 p2 sc $f ()
+let steel_subcomp__steel a pre_f post_f req_f ens_f pre_g post_g req_g ens_g frame pr p1 p2 sc $f ()
   = f ()
 
 inline_for_extraction noextract
-let steel_ghost_subcomp a opened pre_f post_f req_f ens_f pre_g post_g req_g ens_g frame pr p1 p2 sc $f ()
+let steel_subcomp__atomic o0 o1 a opened pre_f post_f req_f ens_f pre_g post_g req_g ens_g frame pr p1 p2 sc so $f ()
+  = f ()
+
+inline_for_extraction noextract
+let steel_subcomp__ghost a opened pre_f post_f req_f ens_f pre_g post_g req_g ens_g frame pr p1 p2 sc $f ()
   = f ()

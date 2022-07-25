@@ -157,17 +157,20 @@ let test12 (r : ghost_ref int)
     Ghost.reveal x
   end
 
-assume
-val mrepr_atomic_test (#opened : Mem.inames)
-  : unit -> MRepr unit (SH.KAtomic opened)
-                 (M.Tspec unit (M.spec_r_steel u#0 u#8 #unit emp (fun _ -> emp) (fun _ -> True) (fun _ _ _ -> True)))
-                 None
+let atomic_write_u32 #opened (r : ref U32.t) (x : U32.t)
+  : SteelAtomic unit opened
+      (vptr r) (fun _ -> vptr r)
+      (requires fun _ -> True) (ensures fun _ _ h1 -> sel r h1 = x)
+  =
+    let x0 = elim_vptr r _ in
+    atomic_write_pt_u32 r x;
+    intro_vptr r _ x
 
-let test13
-  : usteel unit emp (fun _ -> emp) (fun _ -> True) (fun _ _ _ -> True)
+let test13 (r : ref U32.t)
+  : usteel unit (vptr r) (fun _ -> vptr r) (fun _ -> True) (fun _ _ _ -> True)
   = to_steel begin fun () ->
-    mrepr_atomic_test ();
-    mrepr_atomic_test ()
+    call_a (atomic_write_u32 r) 0ul;
+    call_a (atomic_write_u32 r) 0ul
   end
 
 [@@ expect_failure [228]]
