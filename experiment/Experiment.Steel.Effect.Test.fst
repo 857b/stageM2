@@ -1,10 +1,13 @@
 module Experiment.Steel.Effect.Test
 
+module M   = Experiment.Steel.Repr.M
 module SH  = Experiment.Steel.Steel
 module Mem = Steel.Memory
+module U32 = FStar.UInt32
 
 open FStar.Tactics
-open Steel.Effect.Common
+open Steel.Effect
+open Steel.Effect.Atomic
 open Steel.Reference
 open Experiment.Steel.Interface
 open Experiment.Steel.Effect
@@ -34,7 +37,7 @@ let test1 = dump_repr (SH.KGhostI Set.empty) (fun () -> assert (5 >= 0); return 
 
 let test1' (x : int)
   : usteel int emp (fun _ -> emp) (requires fun _ -> x >= 1) (ensures fun _ y _ -> y >= 5)
-  = to_steel begin fun () ->
+  = to_steel #[Dump Stage_WP] begin fun () ->
     assert (x >= 0);
     return (5 + x)
   end
@@ -95,7 +98,7 @@ let test6 (opened : Mem.inames) (r : ghost_ref int) (x : int)
     call_g (ghost_write r) x
   end
 
-// Since MRepr _ (SH.KGhost _) is erasable, we can use ghost operations
+// Since MReprGhost is erasable, we can use ghost operations
 let test7 (opened: Mem.inames) (r : ghost_ref int)
   : usteel_ghost int opened
       (ghost_vptr r) (fun _ -> ghost_vptr r) (fun _ -> True) (fun _ _ _ -> True)
@@ -124,4 +127,52 @@ let test9' (r : ghost_ref int) (x : int)
   = to_steel begin fun () ->
     call_g (ghost_write r) x;
     return ()
+  end
+
+let test10 (r0 r1 : ref U32.t)
+  : usteel unit (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
+      (requires fun _ -> True)
+      (ensures fun h0 () h1 -> sel r0 h1 = sel r1 h0 /\ sel r1 h1 = sel r0 h0)
+  = to_steel begin fun () ->
+    // note: using match blocks some reductions
+    //let () = () in
+    let x0 = call read r0 in
+    let x1 = call read r1 in
+    call (write r0) x1;
+    call (write r1) x0
+  end
+
+[@@ expect_failure]
+let test11 #opened (r : ref int)
+  : usteel_ghost unit opened (vptr r) (fun _ -> vptr r) (fun _ -> True) (fun _ _ _ -> True)
+  = to_steel_g begin fun () ->
+    call (write r) 0
+  end
+
+[@@ expect_failure]
+let test12 (r : ghost_ref int)
+  : usteel unit (ghost_vptr r) (fun _ -> ghost_vptr r) (fun _ -> True) (fun _ _ _ -> True)
+  = to_steel begin fun () ->
+    let x = call_g ghost_read r in
+    Ghost.reveal x
+  end
+
+assume
+val mrepr_atomic_test (#opened : Mem.inames)
+  : unit -> MRepr unit (SH.KAtomic opened)
+                 (M.Tspec unit (M.spec_r_steel u#0 u#8 #unit emp (fun _ -> emp) (fun _ -> True) (fun _ _ _ -> True)))
+                 None
+
+let test13
+  : usteel unit emp (fun _ -> emp) (fun _ -> True) (fun _ _ _ -> True)
+  = to_steel begin fun () ->
+    mrepr_atomic_test ();
+    mrepr_atomic_test ()
+  end
+
+[@@ expect_failure [228]]
+let test14 (r0 r1 : ref int)
+  : usteel unit (vptr r0) (fun _ -> vptr r1) (fun _ -> True) (fun _ _ _ -> True)
+  = to_steel begin fun () ->
+    call (write r1) 0
   end

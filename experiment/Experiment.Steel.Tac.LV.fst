@@ -32,12 +32,18 @@ let traverse_partial_injection
     introduce forall (i : Fin.fin (L.length src)) . L.index trg (ij' i) == L.index src i
       with Opt.traverse_list_index ij i
 
+type __build_eq_injection_l_check
+      (#a : Type) (src trg : list a)
+      (ij0 : Veq.partial_injection src trg)
+      (ij1 : list (Fin.fin (L.length trg)))
+  = squash (Some ij1 == Opt.traverse_list ij0)
+
 [@@ __cond_solver__]
 let __build_eq_injection_l
       (#a : Type) (src trg : list a)
       (ij0 : Veq.partial_injection src trg)
       (ij1 : list (Fin.fin (L.length trg)))
-      (ij1_eq : squash (Some ij1 == Opt.traverse_list ij0))
+      (ij1_eq : __build_eq_injection_l_check src trg ij0 ij1)
   : eq_injection_l src trg
   =
     (**) traverse_partial_injection src trg ij0;
@@ -45,10 +51,29 @@ let __build_eq_injection_l
 
 let __normal_build_eq_injection_l : list norm_step = [
   delta_only [`%L.splitAt; `%L.length; `%Ll.initi; `%len; `%Ll.set;
-              `%Opt.traverse_list; `%Opt.map];
+              `%Opt.traverse_list; `%Opt.map;
+              `%__build_eq_injection_l_check];
   delta_attr [`%__cond_solver__];
   iota; zeta; primops
 ]
+
+private
+let fail_eq_injection_error
+      (#a : Type)
+      (_ : string) (src0 trg0 : list a)
+      (_ : string) (src1 trg1 : list a)
+  = squash False
+
+private
+let __build_eq_injection_l_display_error
+      #a #src #trg (#ij0 : Veq.partial_injection src trg) #ij1
+      (_ : fail_eq_injection_error
+             "original goal:" src trg
+             "remaining goal:"
+               (filter_mask (Veq.ij_src_mask ij0) src)
+               (filter_mask (Veq.ij_trg_mask ij0) trg))
+  : __build_eq_injection_l_check #a src trg ij0 ij1
+  = false_elim ()
 
 /// Solves a goal [eq_injection_l src trg].
 let build_eq_injection_l fr ctx : Tac unit
@@ -59,9 +84,16 @@ let build_eq_injection_l fr ctx : Tac unit
     build_partial_injection fr ctx;
     // ij1
     dismiss (); //ij1
-    norm __normal_build_eq_injection_l;
-    cs_try trefl fr ctx (fun m -> fail (m Fail_eq_injection [Info_goal goal]))
-    // TODO better error message: show remaining elements
+    cs_try (fun () ->
+      norm __normal_build_eq_injection_l;
+      trefl ()
+    ) fr ctx (fun m ->
+      apply (`__build_eq_injection_l_display_error);
+      norm normal_build_partial_injection;
+      norm [delta_only (L.append __delta_list [`%Veq.ij_src_mask; `%Veq.ij_trg_mask; `%None?; `%Veq.mem_Some]);
+            delta_attr [`%__mask__]; iota; zeta; primops];
+      fail (m Fail_eq_injection [])
+    )
 
 let test_build_eq_injection_l
   : eq_injection_l (String.list_of_string "aabc") (String.list_of_string "faedcab")

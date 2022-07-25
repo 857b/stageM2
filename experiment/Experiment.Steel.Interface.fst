@@ -79,6 +79,8 @@ type failure_goal_shape =
   | GShape_tree_cond
   | GShape_lin_cond
   | GShape_M_prog_tree
+  | GShape_repr_implicit
+  | GShape_effect_kind
 
 noeq
 type failure_enum =
@@ -93,7 +95,9 @@ type failure_enum =
   | Fail_pequiv_len
   | Fail_dependency : (what : string) -> (on : binder) -> failure_enum
   | Fail_csm_le
-  | Fail_MRepr_implicit
+  | Fail_liftable
+  | Fail_solve_combinables
+  | Fail_not_erasable : (ty : term) -> failure_enum
 
 noeq
 type info =

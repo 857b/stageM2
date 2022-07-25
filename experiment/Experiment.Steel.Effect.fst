@@ -168,11 +168,6 @@ type combine_subcomp_t
     cba_subc : repr a ek0 f None -> repr a ek1 g cvi;
   }
 
-let combine_subcomp_refl
-      (a : Type u#a) (ek : SH.effect_kind) (f : prog_tree a)
-  : combine_subcomp_t a ek ek f f None
-  = Mkcombine_subcomp_t (fun rf -> rf)
-
 noeq
 type mrepr_to_steel_t
        (flags : list flag)
@@ -522,16 +517,14 @@ let call_g (#b : Type u#b)
   = MReprGhost?.reflect (mk_repr (C.repr_of_steel_ghost #(a x) (pre x) (post x) (req x) (ens x) (fun () -> f x)))
 
 
-(*** Implicits resolution *)
+(*** Resolution of [__mrepr_implicit__] *)
 
-module ES   = Experiment.Steel
-module LV   = Experiment.Steel.Repr.LV
-module TcS  = Experiment.Steel.Tac
+module ES = Experiment.Steel
+module LV = Experiment.Steel.Repr.LV
 
 open FStar.Tactics
 open Learn.Tactics.Util
-
-// TODO: better errors
+open Experiment.Steel.Tac
 
 (***** stage 1 *)
 
@@ -545,10 +538,7 @@ type filter_goals_r = {
   fgoals_subc : list goal;
 }
 
-let remove_already_solved () : Tac unit =
-  iterAll (fun () -> if not (Tv_Uvar? (cur_witness ())) then dismiss ())
-
-let rec mrepr_implicits_init (r : filter_goals_r) : Tac filter_goals_r
+let rec mrepr_implicits_init (fr : flags_record) (r : filter_goals_r) : Tac filter_goals_r
   =
     match goals () with
     | [] -> r
@@ -557,8 +547,8 @@ let rec mrepr_implicits_init (r : filter_goals_r) : Tac filter_goals_r
         if not (Tv_Uvar? (goal_witness g))
         then (dismiss (); r) // the goal has already been solved
         else begin
-          let hd = try collect_fvar (collect_app (goal_type g))._1
-                   with _ -> fail "unexpected shape"
+          let hd = cs_try (fun () -> collect_fvar (collect_app (goal_type g))._1)
+                     fr dummy_ctx (fun m -> fail (m (Fail_goal_shape (GShape_repr_implicit)) []))
           in
           // The only sources of failure here should be a bind where the two types involved belong to
           // different universes. Or a polymonadic bind with an universe greater than [u#8].
@@ -580,16 +570,16 @@ let rec mrepr_implicits_init (r : filter_goals_r) : Tac filter_goals_r
           then (dismiss (); {r with fgoals_subc = g :: r.fgoals_subc})
           else if hd = (`%Mem.inames)
           then (dismiss (); r) // should be inferred as side effects of other goals
-          else fail "unexpected shape"
+          else cs_raise fr dummy_ctx (fun m -> fail (m (Fail_goal_shape (GShape_repr_implicit)) []))
         end
       in
-      mrepr_implicits_init r
+      mrepr_implicits_init fr r
 
 (***** stage 2 *)
 
 /// Solves a goal [C.steel_liftable a ek0 ek1].
 /// Since we start by trying to apply [C.Rt1n_refl], if [ek0] or [ek1] is an uvar, we will choose a trivial lift.
-let rec build_steel_liftable () : Tac unit
+let rec build_steel_liftable_aux fr ctx : Tac unit
   =
     try apply (`C.Rt1n_refl)
     with _ ->
@@ -597,14 +587,19 @@ let rec build_steel_liftable () : Tac unit
       // lift1
       begin
         match catch (fun () -> apply (`C.Lift_ghost_ghostI)) with
-        | Inr () -> C.build_erasable_t ()
+        | Inr () -> C.build_erasable_t fr ctx
         | Inl _ ->
         try apply (`C.Lift_ghostI_atomic) with _ ->
         try apply (`C.Lift_atomic_steel)  with _ ->
-        fail "build_steel_liftable"
+        cs_raise fr ctx (fun m -> fail (m Fail_liftable []))
       end;
 
-      build_steel_liftable ()
+      build_steel_liftable_aux fr ctx
+
+let build_steel_liftable fr ctx : Tac unit
+  =
+    let goal = cur_goal () in
+    build_steel_liftable_aux fr (fun () -> Info_goal goal :: ctx ())
   
 
 private
@@ -622,16 +617,17 @@ private
 let ek_le (ek0 ek1 : effect_kind_enum) : bool
   = ek_ord ek0 <= ek_ord ek1
 
-let collect_effect_kind (t : term) : Tac (option effect_kind_enum)
+let collect_effect_kind fr ctx (t : term) : Tac (option effect_kind_enum)
   =
     if Tv_Uvar? (inspect t) then None
     else begin
-      let hd = collect_fvar (collect_app t)._1 in
+      let hd = cs_try (fun () -> collect_fvar (collect_app t)._1)
+                 fr ctx (fun m -> fail (m (Fail_goal_shape GShape_effect_kind) [])) in
       Some (if hd = (`%SH.KSteel ) then ESteel
        else if hd = (`%SH.KAtomic) then EAtomic
        else if hd = (`%SH.KGhostI) then EGhostI
        else if hd = (`%SH.KGhost ) then EGhost
-       else fail "collect_effect_kind")
+       else cs_raise fr ctx (fun m -> fail (m (Fail_goal_shape GShape_effect_kind) [])))
     end
 
 let combinable_bind_steel (a0 a1 : Type u#a)
@@ -690,15 +686,16 @@ let combinable_ite_kind (ek0 ek1 : effect_kind_enum) : term
 /// Try to solves a goal [combinable_bind_t a0 a1 ek0 ek1 ek2] or [combinable_ite_t a ek0 ek1 ek2]:
 /// - succeed and returns true if the heads of ek0 and ek1 are known.
 /// - otherwise, returns false.
-let build_combinable () : Tac bool
+let build_combinable fr ctx : Tac bool
   =
+    norm []; // sometime there are some beta-redexes
     let hd, args = collect_app (cur_goal ()) in
     let hd = try collect_fvar hd with _ -> "unexpected shape" in
     if hd = (`%combinable_bind_t)
     then begin
       guard (L.length args = 5);
-      let ek0 = collect_effect_kind (L.index args 2)._1 in
-      let ek1 = collect_effect_kind (L.index args 3)._1 in
+      let ek0 = collect_effect_kind fr ctx (L.index args 2)._1 in
+      let ek1 = collect_effect_kind fr ctx (L.index args 3)._1 in
       match ek0, ek1 with
       | Some ek0, Some ek1 ->
              let op = combinable_bind_op ek0 ek1 in
@@ -706,18 +703,18 @@ let build_combinable () : Tac bool
              // cba_bind_repr
              seq (fun () -> apply op) dismiss;
              // cba_bind_lift0
-             build_steel_liftable ();
+             build_steel_liftable fr ctx;
              // cba_bind_lift1
-             build_steel_liftable ();
+             build_steel_liftable fr ctx;
              // cba_bind_lift2
-             build_steel_liftable ();
+             build_steel_liftable fr ctx;
              true
       | _ -> false
     end else if hd = (`%combinable_ite_t)
     then begin
       guard (L.length args = 4);
-      let ek0 = collect_effect_kind (L.index args 1)._1 in
-      let ek1 = collect_effect_kind (L.index args 2)._1 in
+      let ek0 = collect_effect_kind fr ctx (L.index args 1)._1 in
+      let ek1 = collect_effect_kind fr ctx (L.index args 2)._1 in
       match ek0, ek1 with
       | Some ek0, Some ek1 ->
              let ek = combinable_ite_kind ek0 ek1 in
@@ -725,37 +722,37 @@ let build_combinable () : Tac bool
              // cba_ite_ek2'
              seq (fun () -> apply ek) dismiss;
              // cba_ite_lift0
-             build_steel_liftable ();
+             build_steel_liftable fr ctx;
              // cba_ite_lift1
-             build_steel_liftable ();
+             build_steel_liftable fr ctx;
              // cba_ite_lift2
-             build_steel_liftable ();
+             build_steel_liftable fr ctx;
              true
       | _ -> false
     end else fail "build_combinable : goal_shape"
 
-let rec solve_combinables_round () : Tac (bool & list goal)
+let rec solve_combinables_round fr : Tac (bool & list goal)
   = match goals () with
     | [] -> false, []
     | g :: _ ->
-        if build_combinable ()
+        if build_combinable fr dummy_ctx
         then
-          let _, gs = solve_combinables_round () in
+          let _, gs = solve_combinables_round fr in
           true, gs
         else begin
           dismiss ();
-          let b, gs = solve_combinables_round () in
+          let b, gs = solve_combinables_round fr in
           b, g :: gs
         end
 
-let rec solve_combinables () : Tac unit
+let rec solve_combinables fr : Tac unit
   = match goals () with
   | [] -> ()
   | _ :: _ ->
-    let b, gs = solve_combinables_round () in
-    if not b then fail "solve_combinables: could not progress";
+    let b, gs = solve_combinables_round fr in
+    if not b then cs_raise fr dummy_ctx (fun m -> fail (m Fail_solve_combinables []));
     set_goals gs;
-    solve_combinables ()
+    solve_combinables fr
 
 (***** stage 3 *)
 
@@ -819,7 +816,7 @@ let build_mrepr_to_steel_wrew (fr : flags_record) (flags : list flag) : Tac unit
 
     // goal_tr
     let t = timer_start "specs     " fr.f_timer in
-    TcS.build_to_repr_t fr (fun () -> [Info_location "in the specification"]);
+    build_to_repr_t fr (fun () -> [Info_location "in the specification"]);
 
     // goal_sp
     norm [delta_attr [`%__tac_helper__]; iota];
@@ -827,59 +824,78 @@ let build_mrepr_to_steel_wrew (fr : flags_record) (flags : list flag) : Tac unit
 
     timer_stop t
 
-
-/// On a goal [mrepr_to_steel_t flags a ek pre post req ens t] returns [flags].
-let collect_flags () : Tac (list flag)
-  =
-    let args = (collect_app (cur_goal ()))._2      in
-    guard (L.length args = 8);
-    unquote (L.hd args)._1
-
 /// Solves a goal [mrepr_to_steel_t flags a ek pre post req ens t].
-let build_mrepr_to_steel () : Tac unit
+let build_mrepr_to_steel (flags : list flag) (fr : flags_record) : Tac unit
   =
-    let flags = collect_flags ()        in
-    let fr    = make_flags_record flags in
     if fr.f_wrew
     then build_mrepr_to_steel_wrew  fr flags
     else build_mrepr_to_steel_norew fr
 
 /// Solves a goal [combine_subcomp_t a ek0 ek1 (ReprIM t) (ReprIS pre post req ens flag)]
-let solve_conversion_subcomp () : Tac unit
+let solve_conversion_subcomp flags fr : Tac unit
   =
     apply (`combine_subcomp_convert);
     // lt
-    build_steel_liftable ();
+    build_steel_liftable fr (fun () -> [Info_location "In top-level subcomp"]);
     // cv
-    build_mrepr_to_steel ()
+    build_mrepr_to_steel flags fr
 
 (***** entry *)
+
+/// Search for a goal [combine_subcomp_t _ _ _ _ _ (Some {flags})] and returns [flags].
+let rec collect_flags (gs : list goal) : Tac (list flag)
+  = match gs with
+    | [] -> []
+    | g :: gs ->
+        try
+          let app = collect_app (goal_type g) in
+          guard (collect_fvar app._1 = (`%combine_subcomp_t));
+          guard (L.length app._2 = 6);
+          let arg  = (L.index app._2 5)._1 in // Some #_ _
+          let args = (collect_app arg)._2  in
+          guard (L.length args = 2);
+          let arg  = (L.index args 1)._1   in
+          let app  = collect_app arg       in
+          guard (collect_fvar app._1 = (`%Mkconv_index));
+          guard (L.length app._2 = 6);
+          unquote (L.index app._2 5)._1
+          with _ -> collect_flags gs
 
 [@@ resolve_implicits; __mrepr_implicit__]
 let mrepr_implicits_tac () : Tac unit
   = with_policy Force (fun () ->
 
+    ////// Stage 1 //////
+
     //let t = timer_start "implicits" true in
+
+    let flags = collect_flags (goals ()) in
+    let fr    = make_flags_record flags  in
     iterAll (fun () -> try trefl () with _ -> ());
     iterAll intros';
-    let fgoals = mrepr_implicits_init (Mkfilter_goals_r [] [] []) in
+
+    let fgoals = mrepr_implicits_init fr (Mkfilter_goals_r [] [] []) in
+
+    ////// Stage 2 //////
 
     // Solve the combinable_* goals
     set_goals fgoals.fgoals_comb;
-    solve_combinables ();
+    solve_combinables fr;
 
-    // Solve the [steel_liftable] goals
+    // Solve the [steel_liftable] goals (from the subcomps MReprGhost ~> MRepr)
     set_goals fgoals.fgoals_lift;
-    iterAll build_steel_liftable;
+    iterAll (fun () -> build_steel_liftable fr dummy_ctx);
 
     //timer_stop t;
 
     // useful to debug `Tactic left uninstantiated unification variable` errors
     //dump_all true "implicits";
 
+    ////// Stage 3 //////
+
     // Solve the [combine_subcomp_t] goals by building the conversion to Steel ([mrepr_to_steel_t])
     set_goals fgoals.fgoals_subc;
-    iterAll solve_conversion_subcomp
+    iterAll (fun () -> solve_conversion_subcomp flags fr)
   )
 
 

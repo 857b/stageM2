@@ -141,6 +141,25 @@ let test_set_ptr_caller () : SteelT unit emp (fun () -> emp)
     free ys
 
 (* ----------------------- *)
+
+inline_for_extraction noextract
+let atomic_write_u32 #opened (r : ref U32.t) (x : U32.t)
+  : SteelAtomic unit opened
+      (vptr r) (fun _ -> vptr r)
+      (requires fun _ -> True) (ensures fun _ _ h1 -> sel r h1 = x)
+  =
+    let x0 = elim_vptr r _ in
+    atomic_write_pt_u32 r x;
+    intro_vptr r _ x
+
+[@@ expect_failure]
+let test_atomic_bind (r : ref U32.t)
+  : SteelT unit (vptr r) (fun _ -> vptr r)
+  =
+    atomic_write_u32 r 0ul;
+    atomic_write_u32 r 0ul
+
+(* ----------------------- *)
 (*
 assume
 val int_sl ([@@@smt_fallback] n:int) : vprop

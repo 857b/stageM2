@@ -159,4 +159,4 @@ let _ : U.print_util test = _ by (norm [delta_only [`%test]]; fail "print")*)
 let collect_fvar (t : term) : Tac string
   = match inspect t with
   | Tv_FVar fv | Tv_UInst fv _ -> implode_qn (inspect_fv fv)
-  | _ -> fail "expected an fvar"
+  | _ -> fail "expected an fvar, got: "^(term_to_string t)

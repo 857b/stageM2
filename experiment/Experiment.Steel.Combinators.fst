@@ -8,6 +8,7 @@ module SH  = Experiment.Steel.Steel
 module Fl  = Learn.FList
 module Mem = Steel.Memory
 module Veq = Experiment.Steel.VEquiv
+module TcS = Experiment.Steel.Tac
 
 open Steel.Effect
 open Steel.Effect.Atomic
@@ -585,9 +586,8 @@ private
 let __build_revealed_value (a : Type) : (x : Ghost.erased a) -> GTot (revealed_value x)
   = fun x -> Ghost.reveal x
 
-// TODO: exceptions
 /// Solves a goal [erasable_t a] if a is an erasable type.
-let build_erasable_t () : T.Tac unit
+let build_erasable_t fr ctx : T.Tac unit
   = T.(
     let a : term
       = match inspect (cur_goal ()) with
@@ -598,23 +598,24 @@ let build_erasable_t () : T.Tac unit
     // The following requires a conversion from [_ -> GTot (revealed_value x)] to [_ -> Tot (revealed_value x)]
     // which succeeds iff [revealed_value x] (i.e. [a]) is erasable.
     // Since we use (`#a), this may generate some guards to retypecheck (`#a).
-    with_policy SMT (fun () ->
-    exact (`(__build_revealed_value (`#a) <: _ -> Tot _)))
+    with_policy SMT (fun () -> TcS.cs_try (fun () ->
+      exact (`(__build_revealed_value (`#a) <: _ -> Tot _)))
+    fr ctx (fun m -> fail (m (Fail_not_erasable a) [])))
   )
 
 private
 let test_erasable_unit : erasable_t unit
-  = _ by (build_erasable_t ())
+  = _ by (build_erasable_t default_flags TcS.dummy_ctx)
 
 private
 let test_erasable_unit' : erasable_t U.unit'
-  = _ by (build_erasable_t ())
+  = _ by (build_erasable_t default_flags TcS.dummy_ctx)
 
 #push-options "--silent"
 [@@ expect_failure [228]]
 private
 let test_erasable_int : erasable_t int
-  = _ by (build_erasable_t ())
+  = _ by (build_erasable_t default_flags TcS.dummy_ctx)
 #pop-options
 
 [@@ erasable]
@@ -623,7 +624,7 @@ type test_guard_type (_ : squash (forall (n : nat) . n >= 0)) =
 
 private
 let test_erasable_guard : erasable_t (test_guard_type ())
-  = _ by (build_erasable_t ())
+  = _ by (build_erasable_t default_flags TcS.dummy_ctx)
 
 
 (***** [steel_liftable] *)
