@@ -53,8 +53,18 @@ type indexed_option (a : Type) (f : a -> Type) : option a -> Type =
   | ISome : (x : a) -> (v : f x) -> indexed_option a f (Some x)
   | INone : indexed_option a f None
 
+
+// location placeholder
+type location_p = | LocationP
+
+type location_goal (sub : list location_p) = location_p
+
+let locm (l : location_p) : location_p = l
+
+
 noeq
-type repr (a : Type) (ek : SH.effect_kind) (t : prog_tree a) (cvi : option (conv_index a)) =
+type repr (a : Type) (ek : SH.effect_kind) (t : prog_tree a)
+          (cvi : option (conv_index a)) (loc : location_p) =
   {
     repr_M  : repr' a ek t;
     repr_cv : indexed_option
@@ -63,7 +73,7 @@ type repr (a : Type) (ek : SH.effect_kind) (t : prog_tree a) (cvi : option (conv
   }
 
 let mk_repr (#a : Type) (#ek : SH.effect_kind) (#t : prog_tree a) (repr_M : repr' a ek t)
-  : repr a ek t None
+  : repr a ek t None LocationP
   = {
     repr_M;
     repr_cv = INone
@@ -73,7 +83,8 @@ let mk_repr (#a : Type) (#ek : SH.effect_kind) (#t : prog_tree a) (repr_M : repr
 
 let return_ghostI
       (a : Type) (x : a) (#[@@@ __mrepr_implicit__] opened: Mem.inames)
-  : repr u#a a (SH.KGhostI opened) (M.Tret a x (fun _ -> [])) None
+      (#[@@@ __mrepr_implicit__] loc : location_goal [])
+  : repr u#a a (SH.KGhostI opened) (M.Tret a x (fun _ -> [])) None (locm loc)
   = mk_repr (C.return (SH.KGhostI opened) #a x)
 
 
@@ -153,8 +164,10 @@ let bind_
       (#f : prog_tree a) (#g : a -> prog_tree b)
       (#[@@@ __mrepr_implicit__] cb
         : (f : prog_tree a) -> (g : (a -> prog_tree b)) -> combine_bind_t a b ek0 ek1 ek f g)
-      (rf : repr u#a a ek0 f None) (rg : (x : a) -> repr u#b b ek1 (g x) None)
-  : repr u#b b ek (cb f g).cb_bind_repr None
+      (loc_f loc_g : location_p)
+      (#[@@@ __mrepr_implicit__] loc : location_goal [loc_f; loc_g])
+      (rf : repr u#a a ek0 f None loc_f) (rg : (x : a) -> repr u#b b ek1 (g x) None loc_g)
+  : repr u#b b ek (cb f g).cb_bind_repr None (locm loc)
   = mk_repr ((cb f g).cb_bind_impl rf.repr_M (fun x -> (rg x).repr_M))
 
 
@@ -163,9 +176,9 @@ let bind_
 noeq
 type combine_subcomp_t
       (a : Type u#a) (ek0 ek1 : SH.effect_kind) (f : prog_tree a) (g : prog_tree a)
-      (cvi : option (conv_index a))
+      (cvi : option (conv_index a)) (loc : location_p)
   = {
-    cba_subc : repr a ek0 f None -> repr a ek1 g cvi;
+    cba_subc : repr a ek0 f None LocationP -> repr a ek1 g cvi LocationP;
   }
 
 noeq
@@ -193,11 +206,12 @@ let dummy_repr (a : Type u#a) (ek : SH.effect_kind) : repr' a ek (dummy_prog_tre
 /// This subcomp is used at top-level, to convert our representation to Steel. To avoid the retypechecking of
 /// [t], we replace it with [dummy_prog_tree].
 let combine_subcomp_convert
+      (#loc : location_p)
       (a : Type u#a) (ek0 ek1 : SH.effect_kind) (t : prog_tree a)
       (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t pre) (ens : SE.ens_t pre a post) (flags : list flag)
       (lt : C.steel_liftable a ek0 ek1)
       (cv : mrepr_to_steel_t flags a ek1 pre post req ens t)
-  : combine_subcomp_t a ek0 ek1 t (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags))
+  : combine_subcomp_t a ek0 ek1 t (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags)) loc
   = Mkcombine_subcomp_t (fun r ->
       let r' = C.repr_lift lt r.repr_M in
       let MReprToSteel cv = cv in
@@ -211,9 +225,10 @@ let subcomp
       (#ek0 : SH.effect_kind) (#ek1 : SH.effect_kind)
       (#f : prog_tree a) (#g : prog_tree a)
       (cvi : option (conv_index a))
-      (#[@@@ __mrepr_implicit__] cb : combine_subcomp_t a ek0 ek1 f g cvi)
-      (rf : repr a ek0 f None)
-  : repr a ek1 g cvi
+      (#loc_f : location_p) (#[@@@ __mrepr_implicit__] loc_g : location_goal [])
+      (#[@@@ __mrepr_implicit__] cb : combine_subcomp_t a ek0 ek1 f g cvi loc_f)
+      (rf : repr a ek0 f None loc_f)
+  : repr a ek1 g cvi (locm loc_g)
   = cb.cba_subc rf
 
 
@@ -236,10 +251,12 @@ let if_then_else
       (#ek0 #ek1 #ek2 : SH.effect_kind)
       (#thn : prog_tree a) (#els : prog_tree a)
       (#[@@@ __mrepr_implicit__] cb : combinable_ite_t a ek0 ek1 ek2)
-      (rthn : repr a ek0 thn None) (rels : repr a ek1 els None)
+      (#loc_f #loc_g : location_p)
+      (#[@@@ __mrepr_implicit__] loc : location_goal [loc_f; loc_g])
+      (rthn : repr a ek0 thn None loc_f) (rels : repr a ek1 els None loc_g)
       (guard : bool)
   : Type
-  = repr a ek2 (M.Tif a guard thn els) None
+  = repr a ek2 (M.Tif a guard thn els) None (locm loc)
 
 
 inline_for_extraction noextract
@@ -264,10 +281,10 @@ let ite_steel_els
 
 
 let ite_combine_thn
-      (a : Type) (ek0 ek1 ek2 : SH.effect_kind) (guard : bool) (thn els : prog_tree a)
+      (#loc : location_p) (a : Type) (ek0 ek1 ek2 : SH.effect_kind) (guard : bool) (thn els : prog_tree a)
       (_ : squash guard)
       (l0 : C.steel_liftable a ek0 ek1) (l1 : C.steel_liftable a ek1 ek2)
-  : combine_subcomp_t a ek0 ek2 thn (M.Tif a guard thn els) None
+  : combine_subcomp_t a ek0 ek2 thn (M.Tif a guard thn els) None loc
   = Mkcombine_subcomp_t (fun rthn -> mk_repr ({
     repr_tree  = M.Tif a guard thn els;
     repr_steel = (fun pre0 post0 c ->
@@ -277,10 +294,10 @@ let ite_combine_thn
   }))
 
 let ite_combine_els
-      (a : Type) (ek0 ek1 ek2 : SH.effect_kind) (guard : bool) (thn els : prog_tree a)
+      (#loc : location_p) (a : Type) (ek0 ek1 ek2 : SH.effect_kind) (guard : bool) (thn els : prog_tree a)
       (_ : squash (~guard))
       (l0 : C.steel_liftable a ek0 ek1) (l1 : C.steel_liftable a ek1 ek2)
-  : combine_subcomp_t a ek0 ek2 els (M.Tif a guard thn els) None
+  : combine_subcomp_t a ek0 ek2 els (M.Tif a guard thn els) None loc
   = Mkcombine_subcomp_t (fun rels -> mk_repr ({
     repr_tree  = M.Tif a guard thn els;
     repr_steel = (fun pre0 post0 c ->
@@ -313,7 +330,8 @@ let ite_soundness_tac () : T.Tac unit
 
 [@@ ite_soundness_by __ite_soundness__; allow_informative_binders]
 total reflectable reifiable effect {
-  MRepr (a : Type) (ek : SH.effect_kind) (t : prog_tree a) (cvi : option (conv_index a))
+  MRepr (a : Type) (ek : SH.effect_kind) (t : prog_tree a)
+        (cvi : option (conv_index a)) (loc : location_p)
   with {
     repr;
     return = return_ghostI;
@@ -323,9 +341,14 @@ total reflectable reifiable effect {
   }
 }
 
-let return (#a : Type u#a) (#opened : Mem.inames) (x : a)
-  : MRepr a (SH.KGhostI opened) (M.Tret a x (fun _ -> [])) None
+let return (#a : Type u#a) (#opened : Mem.inames) (#[@@@ __mrepr_implicit__] loc : location_goal []) (x : a)
+  : MRepr a (SH.KGhostI opened) (M.Tret a x (fun _ -> [])) None (locm loc)
   = MRepr?.reflect (return_ghostI a x #opened)
+
+let return_hint (#a : Type u#a) (#opened : Mem.inames) (#[@@@ __mrepr_implicit__] loc : location_goal []) (x : a)
+                (sl_hint : M.post_t a)
+  : MRepr a (SH.KGhostI opened) (M.Tret a x sl_hint) None (locm loc)
+  = MRepr?.reflect (mk_repr (C.return_hint (SH.KGhostI opened) #a x sl_hint))
 
 
 (***** bind (PURE, MRepr) |> MRepr *)
@@ -378,9 +401,11 @@ let bind_pure_mrepr
       (#g : a -> prog_tree b)
       (#[@@@ __mrepr_implicit__] cb
         : (wp : pure_wp a) -> (g : (a -> prog_tree b)) -> combine_bind_pure_t u#r u#a u#8 a b ek wp g)
+      (#loc_g : location_p)
+      (#[@@@ __mrepr_implicit__] loc : location_goal [loc_g])
       (rf : eqtype_as_type unit -> PURE a wp)
-      (rg : (x : a) -> repr b ek (g x) None)
-  : repr b ek (cb wp g).cb_bindP_repr None
+      (rg : (x : a) -> repr b ek (g x) None loc_g)
+  : repr b ek (cb wp g).cb_bindP_repr None (locm loc)
   = mk_repr ((cb wp g).cb_bindP_impl rf (fun x -> (rg x).repr_M))
 
 #push-options "--warn_error -330"
@@ -396,12 +421,14 @@ polymonadic_bind (PURE, MRepr) |> MRepr = bind_pure_mrepr
 // ALT: fix the combinator (bind, if then else) in the effect instead of relying on tactics to always infer
 //      the ghost combinator
 
-type repr_ghost (a : Type u#a) (opened : Mem.inames) (t : prog_tree a) (cvi : option (conv_index a)) =
-  repr a (SH.KGhost opened) t cvi
+type repr_ghost (a : Type u#a) (opened : Mem.inames) (t : prog_tree a)
+                (cvi : option (conv_index a)) (loc : location_p) =
+  repr a (SH.KGhost opened) t cvi loc
 
 let return_ghost
       (a : Type) (x : a) (#opened: Mem.inames)
-  : repr_ghost u#a a opened (M.Tret a x (fun _ -> [])) None
+      (#[@@@ __mrepr_implicit__] loc : location_goal [])
+  : repr_ghost u#a a opened (M.Tret a x (fun _ -> [])) None (locm loc)
   = mk_repr (C.return (SH.KGhost opened) #a x)
 
 let bind_ghost
@@ -411,8 +438,10 @@ let bind_ghost
       (#[@@@ __mrepr_implicit__] cb
         : (f : prog_tree a) -> (g : (a -> prog_tree b)) ->
           combine_bind_t a b (SH.KGhost o) (SH.KGhost o) (SH.KGhost o) f g)
-      (rf : repr_ghost u#a a o f None) (rg : (x : a) -> repr_ghost u#b b o (g x) None)
-  : repr_ghost u#b b o (cb f g).cb_bind_repr None
+      (loc_f loc_g : location_p)
+      (#[@@@ __mrepr_implicit__] loc : location_goal [loc_f; loc_g])
+      (rf : repr_ghost u#a a o f None loc_f) (rg : (x : a) -> repr_ghost u#b b o (g x) None loc_g)
+  : repr_ghost u#b b o (cb f g).cb_bind_repr None (locm loc)
   = mk_repr ((cb f g).cb_bind_impl rf.repr_M (fun x -> (rg x).repr_M))
 
 let subcomp_ghost
@@ -420,9 +449,10 @@ let subcomp_ghost
       (#o : Mem.inames)
       (#f : prog_tree a) (#g : prog_tree a)
       (cvi : option (conv_index a))
-      (#[@@@ __mrepr_implicit__] cb : combine_subcomp_t a (SH.KGhost o) (SH.KGhost o) f g cvi)
-      (rf : repr_ghost a o f None)
-  : repr_ghost a o g cvi
+      (#loc_f : location_p) (#[@@@ __mrepr_implicit__] loc_g : location_goal [])
+      (#[@@@ __mrepr_implicit__] cb : combine_subcomp_t a (SH.KGhost o) (SH.KGhost o) f g cvi loc_f)
+      (rf : repr_ghost a o f None loc_f)
+  : repr_ghost a o g cvi (locm loc_g)
   = cb.cba_subc rf
 
 let if_then_else_ghost
@@ -430,15 +460,18 @@ let if_then_else_ghost
       (#o : Mem.inames)
       (#thn : prog_tree a) (#els : prog_tree a)
       (#[@@@ __mrepr_implicit__] cb : combinable_ite_t a (SH.KGhost o) (SH.KGhost o) (SH.KGhost o))
-      (rthn : repr_ghost a o thn None) (rels : repr_ghost a o els None)
+      (#loc_f #loc_g : location_p)
+      (#[@@@ __mrepr_implicit__] loc : location_goal [loc_f; loc_g])
+      (rthn : repr_ghost a o thn None loc_f) (rels : repr_ghost a o els None loc_g)
       (guard : bool)
   : Type
-  = repr_ghost a o (M.Tif a guard thn els) None
+  = repr_ghost a o (M.Tif a guard thn els) None (locm loc)
 
 
 [@@ erasable; ite_soundness_by __ite_soundness__; allow_informative_binders]
 total reflectable reifiable effect {
-  MReprGhost (a : Type) (opened : Mem.inames) (t : prog_tree a) (cvi : option (conv_index a))
+  MReprGhost (a : Type) (opened : Mem.inames) (t : prog_tree a)
+             (cvi : option (conv_index a)) (loc : location_p)
   with {
     repr         = repr_ghost;
     return       = return_ghost;
@@ -448,9 +481,15 @@ total reflectable reifiable effect {
   }
 }
 
-let return_g (#a : Type u#a) (#opened : Mem.inames) (x : a)
-  : MReprGhost a opened (M.Tret a x (fun _ -> [])) None
+let return_g (#a : Type u#a) (#opened : Mem.inames) (#[@@@ __mrepr_implicit__] loc : location_goal []) (x : a)
+  : MReprGhost a opened (M.Tret a x (fun _ -> [])) None (locm loc)
   = MReprGhost?.reflect (return_ghost a x #opened)
+
+let return_g_hint (#a : Type u#a) (#opened : Mem.inames) (#[@@@ __mrepr_implicit__] loc : location_goal []) (x : a)
+                  (sl_hint : M.post_t a)
+  : MReprGhost a opened (M.Tret a x sl_hint) None (locm loc)
+  = MReprGhost?.reflect (mk_repr (C.return_hint (SH.KGhost opened) #a x sl_hint))
+
 
 let bind_pure_mrepr_ghost
       (a : Type u#r) (b : Type u#a)
@@ -459,9 +498,11 @@ let bind_pure_mrepr_ghost
       (#g : a -> prog_tree b)
       (#[@@@ __mrepr_implicit__] cb
         : (wp : pure_wp a) -> (g : (a -> prog_tree b)) -> combine_bind_pure_t u#r u#a u#8 a b (SH.KGhost o) wp g)
+      (#loc_g : location_p)
+      (#[@@@ __mrepr_implicit__] loc : location_goal [loc_g])
       (rf : eqtype_as_type unit -> PURE a wp)
-      (rg : (x : a) -> repr_ghost b o (g x) None)
-  : repr_ghost b o (cb wp g).cb_bindP_repr None
+      (rg : (x : a) -> repr_ghost b o (g x) None loc_g)
+  : repr_ghost b o (cb wp g).cb_bindP_repr None (locm loc)
   = mk_repr ((cb wp g).cb_bindP_impl rf (fun x -> (rg x).repr_M))
 
 #push-options "--warn_error -330"
@@ -475,8 +516,9 @@ let lift_mrepr_ghost_mrepr
       (a : Type) (opened: Mem.inames)
       (#t : prog_tree a)
       (#[@@@ __mrepr_implicit__] lt : C.steel_liftable a (SH.KGhost opened) (SH.KGhostI opened))
-      (r : repr_ghost a opened t None)
-  : repr a (SH.KGhostI opened) t None
+      (#loc : location_p)
+      (r : repr_ghost a opened t None loc)
+  : repr a (SH.KGhostI opened) t None loc
   = mk_repr (C.repr_lift lt r.repr_M)
 
 sub_effect MReprGhost ~> MRepr = lift_mrepr_ghost_mrepr
@@ -504,9 +546,11 @@ unfold
 let call (#b : Type u#b)
       (#a : b -> Type) (#pre : b -> SE.pre_t) (#post : (x : b) -> SE.post_t (a x))
       (#req : (x : b) -> SE.req_t (pre x)) (#ens : (x : b) -> SE.ens_t (pre x) (a x) (post x))
+      (#[@@@ __mrepr_implicit__] loc : location_goal [])
       ($f : (x : b) -> SE.Steel (a x) (pre x) (post x) (req x) (ens x)) (x : b)
   : MRepr (a x) SH.KSteel
-      (M.Tspec (a x) (M.spec_r_steel u#a u#8 (pre x) (post x) (req x) (ens x))) None
+      (M.Tspec (a x) (M.spec_r_steel u#a u#8 (pre x) (post x) (req x) (ens x)))
+      None (locm loc)
   = MRepr?.reflect
       (mk_repr (C.repr_of_steel #(a x) (pre x) (post x) (req x) (ens x) (SH.steel_fe (fun () -> f x))))
 
@@ -514,9 +558,11 @@ unfold
 let call_a (#b : Type u#b)
       (#a : b -> Type) (#opened : b -> Mem.inames) (#pre : b -> SE.pre_t) (#post : (x : b) -> SE.post_t (a x))
       (#req : (x : b) -> SE.req_t (pre x)) (#ens : (x : b) -> SE.ens_t (pre x) (a x) (post x))
+      (#[@@@ __mrepr_implicit__] loc : location_goal [])
       ($f : (x : b) -> SA.SteelAtomic (a x) (opened x) (pre x) (post x) (req x) (ens x)) (x : b)
   : MRepr (a x) (SH.KAtomic (opened x))
-      (M.Tspec (a x) (M.spec_r_steel u#a u#8 (pre x) (post x) (req x) (ens x))) None
+      (M.Tspec (a x) (M.spec_r_steel u#a u#8 (pre x) (post x) (req x) (ens x)))
+      None (locm loc)
   = MRepr?.reflect (mk_repr
       (C.repr_of_steel #(a x) (pre x) (post x) (req x) (ens x) (SH.atomic_fe (fun () -> f x))))
 
@@ -524,9 +570,11 @@ unfold
 let call_g (#b : Type u#b)
       (#a : b -> Type) (#opened : b -> Mem.inames) (#pre : b -> SE.pre_t) (#post : (x : b) -> SE.post_t (a x))
       (#req : (x : b) -> SE.req_t (pre x)) (#ens : (x : b) -> SE.ens_t (pre x) (a x) (post x))
+      (#[@@@ __mrepr_implicit__] loc : location_goal [])
       ($f : (x : b) -> SA.SteelGhost (a x) (opened x) (pre x) (post x) (req x) (ens x)) (x : b)
   : MReprGhost (a x) (opened x)
-      (M.Tspec (a x) (M.spec_r_steel u#a u#8 (pre x) (post x) (req x) (ens x))) None
+      (M.Tspec (a x) (M.spec_r_steel u#a u#8 (pre x) (post x) (req x) (ens x)))
+      None (locm loc)
   = MReprGhost?.reflect (mk_repr
        (C.repr_of_steel #(a x) (pre x) (post x) (req x) (ens x) (SH.ghost_fe (fun () -> f x))))
 
@@ -550,19 +598,26 @@ type filter_goals_r = {
   fgoals_lift : list goal;
   // combine_subcomp_t
   fgoals_subc : list goal;
+  // location goals
+  fgoals_loca : list goal;
 }
 
-let rec mrepr_implicits_init (fr : flags_record) (r : filter_goals_r) : Tac filter_goals_r
+let already_solved (g : goal) : Tac bool
+  = Tv_Uvar? (inspect (goal_witness g))
+
+let rec mrepr_implicits_init (fr : flags_record) (gs : list goal) (r : filter_goals_r) : Tac filter_goals_r
   =
-    match goals () with
+    match gs with
     | [] -> r
-    | g :: _ ->
+    | g :: gs ->
+      set_goals [g];
       let r =
-        if not (Tv_Uvar? (goal_witness g))
-        then (dismiss (); r) // the goal has already been solved
+        if not (already_solved g)
+        then r // the goal has already been solved
         else begin
-          let hd = cs_try (fun () -> collect_fvar (collect_app (goal_type g))._1)
-                     fr dummy_ctx (fun m -> fail (m (Fail_goal_shape (GShape_repr_implicit)) []))
+          let app = collect_app (goal_type g) in
+          let hd  = cs_try (fun () -> collect_fvar app._1)
+                      fr dummy_ctx (fun m -> fail (m (Fail_goal_shape (GShape_repr_implicit)) []))
           in
           // The only sources of failure here should be a bind where the two types involved belong to
           // different universes. Or a polymonadic bind with an universe greater than [u#8].
@@ -571,23 +626,24 @@ let rec mrepr_implicits_init (fr : flags_record) (r : filter_goals_r) : Tac filt
               apply (`combine_bind);
               // combinable_bind_t
               let g = _cur_goal () in
-              dismiss ();
               {r with fgoals_comb = g :: r.fgoals_comb}
           end else if hd = (`%combine_bind_pure_t)
           then (apply (`combine_bind_pure); r)
 
           else if hd = (`%combinable_ite_t)
-          then (dismiss (); {r with fgoals_comb = g :: r.fgoals_comb})
+          then {r with fgoals_comb = g :: r.fgoals_comb}
           else if hd = (`%C.steel_liftable)
-          then (dismiss (); {r with fgoals_lift = g :: r.fgoals_lift})
+          then {r with fgoals_lift = g :: r.fgoals_lift}
           else if hd = (`%combine_subcomp_t)
-          then (dismiss (); {r with fgoals_subc = g :: r.fgoals_subc})
+          then {r with fgoals_subc = g :: r.fgoals_subc}
+          else if hd = (`%location_goal)
+          then (dismiss (); {r with fgoals_loca = g :: r.fgoals_loca})
           else if hd = (`%Mem.inames)
-          then (dismiss (); r) // should be inferred as side effects of other goals
+          then r // should be inferred as side effects of other goals
           else cs_raise fr dummy_ctx (fun m -> fail (m (Fail_goal_shape (GShape_repr_implicit)) []))
         end
       in
-      mrepr_implicits_init fr r
+      mrepr_implicits_init fr gs r
 
 (***** stage 2 *)
 
@@ -613,8 +669,8 @@ let rec build_steel_liftable_aux fr ctx : Tac unit
 let build_steel_liftable fr ctx : Tac unit
   =
     let goal = cur_goal () in
-    build_steel_liftable_aux fr (fun () -> Info_goal goal :: ctx ())
-  
+    build_steel_liftable_aux fr (ctx_app_info ctx [Info_goal goal])
+
 
 private
 type effect_kind_enum = | ESteel | EAtomic | EGhostI | EGhost
@@ -702,7 +758,9 @@ let combinable_ite_kind (ek0 ek1 : effect_kind_enum) : term
 /// - otherwise, returns false.
 let build_combinable fr ctx : Tac bool
   =
-    norm []; // sometime there are some beta-redexes
+    // there are some beta-redexes + aliases
+    norm [delta_only [`%combinable_ite_ghost; `%combinable_ite_ghostI; `%combinable_ite_steel]];
+    
     let hd, args = collect_app (cur_goal ()) in
     let hd = try collect_fvar hd with _ -> "unexpected shape" in
     if hd = (`%combinable_bind_t)
@@ -806,40 +864,110 @@ let __build_mrepr_to_steel_wrew
 
 /// Solves a goal [mrepr_to_steel_t flags a ek pre post req ens t] using a [rewrite_with_tactic] to avoid
 /// normalizing the WP twice.
-let build_mrepr_to_steel_wrew (fr : flags_record) (flags : list flag) : Tac unit
+let build_mrepr_to_steel_wrew (fr : flags_record) (ctx : cs_context) (flags : list flag) : Tac unit
   =
     let fr = make_flags_record flags in
     apply_raw (`__build_mrepr_to_steel_wrew);
 
     // goal_tr
     let t = timer_start "specs     " fr.f_timer in
-    build_to_repr_t fr (fun () -> [Info_location "in the specification"]);
+    build_to_repr_t fr (root_ctx ["in the specification"]);
 
     // goal_sp
     norm [delta_attr [`%__tac_helper__]; iota];
-    let t = ES.build_to_steel_wrew fr flags t in
+    let t = ES.build_to_steel_wrew fr ctx flags t in
 
     timer_stop t
 
 /// Solves a goal [mrepr_to_steel_t flags a ek pre post req ens t].
-let build_mrepr_to_steel (flags : list flag) (fr : flags_record) : Tac unit
+let build_mrepr_to_steel (flags : list flag) (fr : flags_record) (ctx : cs_context) : Tac unit
   =
     if fr.f_wrew
-    then build_mrepr_to_steel_wrew  fr flags
+    then build_mrepr_to_steel_wrew  fr ctx flags
     else build_mrepr_to_steel_norew fr
 
-/// Solves a goal [combine_subcomp_t a ek0 ek1 (ReprIM t) (ReprIS pre post req ens flag)]
+(****** Locations *)
+
+/// Utilities for following a path in the locations
+
+let rec collect_loc_uvar (t : term) : Tac term =
+  match inspect t with
+  | Tv_Uvar _ _ -> t
+  | Tv_App hd (t, Q_Explicit) ->
+      guard (collect_fvar hd = (`%locm));
+      collect_loc_uvar t
+  | _ -> fail "collect_loc_uvar"
+
+/// Returns the i-th element of a list represented as by a term
+let rec term_list_nth (l : term) (i : nat) : Tac term =
+  // Cons
+  let hd, args = collect_app l in
+  guard (L.length args = 3);
+  if i = 0
+  then (L.index args 1)._1
+  else term_list_nth (L.index args 2)._1 (i-1)
+
+let rec follow_loc_path (pth : list nat) : Tac unit =
+  match pth with
+  | [] -> ()
+  | i :: pth ->
+    try// If there is an error, we stop at the closest goal
+      // location_goal
+      let gl = inspect (cur_goal ()) in
+      guard (Tv_App? gl);
+      let Tv_App _ (sub, _) = gl in
+      let uv = collect_loc_uvar (term_list_nth sub i) in
+      dismiss ();
+      unshelve uv;
+      follow_loc_path pth 
+      with _ -> ()
+
+let rec revert_all_binders () : Tac nat
+  = try revert ();
+        (revert_all_binders () + 1 <: nat)
+    with _ -> 0
+
+private
+let __paste_goal (#src #dst : Type) (_ : squash False) (x0 : src) (x1 : src) : dst
+  = false_elim ()
+
+let move_to_location (entry_uvar : term) (pth : list nat) : Tac unit
+  =
+    // Copy the current goal
+    let n_bs = revert_all_binders () in
+    let copy_uv = fresh_uvar None in
+    exact copy_uv;
+    // Move to a goal with a more precise location
+    unshelve entry_uvar;
+    follow_loc_path pth;
+    // Paste the goal
+    apply (`__paste_goal);
+    dismiss (); // squash False
+    exact copy_uv;
+    let _ = repeatn n_bs intro in
+    ()
+
+
+/// Solves a goal [combine_subcomp_t a ek0 ek1 (ReprIM t) (ReprIS pre post req ens flag) loc]
 let solve_conversion_subcomp flags fr : Tac unit
   =
+    let args = (collect_app (cur_goal ()))._2 in
+    guard (L.length args = 7);
+    let entry_loc_uv = try Some (collect_loc_uvar (L.index args 6)._1) with _ -> None in
+
     apply (`combine_subcomp_convert);
     // lt
-    build_steel_liftable fr (fun () -> [Info_location "In top-level subcomp"]);
+    build_steel_liftable fr (root_ctx ["In the top-level subcomp"]);
     // cv
-    build_mrepr_to_steel flags fr
+    let ctx = root_ctx_with_move_to [] (fun pth ->
+      match entry_loc_uv with
+      | None    -> ()
+      | Some uv -> try move_to_location uv (L.rev pth) with _ -> ()) in
+    build_mrepr_to_steel flags fr ctx
 
 (***** entry *)
 
-/// Search for a goal [combine_subcomp_t _ _ _ _ _ (Some {flags})] and returns [flags].
+/// Search for a goal [combine_subcomp_t _ _ _ _ _ (Some {flags}) _] and returns [flags].
 let rec collect_flags (gs : list goal) : Tac (list flag)
   = match gs with
     | [] -> []
@@ -847,7 +975,7 @@ let rec collect_flags (gs : list goal) : Tac (list flag)
         try
           let app = collect_app (goal_type g) in
           guard (collect_fvar app._1 = (`%combine_subcomp_t));
-          guard (L.length app._2 = 6);
+          guard (L.length app._2 = 7);
           let arg  = (L.index app._2 5)._1 in // Some #_ _
           let args = (collect_app arg)._2  in
           guard (L.length args = 2);
@@ -865,13 +993,13 @@ let mrepr_implicits_tac () : Tac unit
     ////// Stage 1 //////
 
     //let t = timer_start "implicits" true in
-
     let flags = collect_flags (goals ()) in
     let fr    = make_flags_record flags  in
+    //dump "implicits";
     iterAll (fun () -> try trefl () with _ -> ());
     iterAll intros';
 
-    let fgoals = mrepr_implicits_init fr (Mkfilter_goals_r [] [] []) in
+    let fgoals = mrepr_implicits_init fr (goals ()) (Mkfilter_goals_r [] [] [] []) in
 
     ////// Stage 2 //////
 
@@ -892,7 +1020,11 @@ let mrepr_implicits_tac () : Tac unit
 
     // Solve the [combine_subcomp_t] goals by building the conversion to Steel ([mrepr_to_steel_t])
     set_goals fgoals.fgoals_subc;
-    iterAll (fun () -> solve_conversion_subcomp flags fr)
+    iterAll (fun () -> solve_conversion_subcomp flags fr);
+
+    // clean location goals
+    set_goals fgoals.fgoals_loca;
+    iterAll (fun () -> exact (`LocationP))
   )
 
 
@@ -906,10 +1038,11 @@ unfold let usteel_ghost  = SH.unit_steel_ghost
 let to_steel
       (#[apply (`[])] flags : list flag)
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
-      (r : unit -> MRepr a SH.KSteel (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags)))
+      (r : unit ->
+           MRepr a SH.KSteel (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags)) LocationP)
   : usteel a pre post req ens
   =
-    let r : repr a SH.KSteel (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags))
+    let r : repr a SH.KSteel (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags)) LocationP
       = reify (r ()) in
     U.cast _ (SH.steel_u (ISome?.v r.repr_cv))
 
@@ -917,10 +1050,11 @@ let to_steel_a
       (#[apply (`[])] flags : list flag)
       (#a : Type) (#opened : Mem.inames)
       (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
-      (r : unit -> MRepr a (SH.KAtomic opened) (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags)))
+      (r : unit ->
+           MRepr a (SH.KAtomic opened) (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags)) LocationP)
   : usteel_atomic a opened pre post req ens
   =
-    let r : repr a (SH.KAtomic opened) (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags))
+    let r : repr a (SH.KAtomic opened) (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags)) LocationP
       = reify (r ()) in
     U.cast _ (SH.atomic_u (ISome?.v r.repr_cv))
 
@@ -928,9 +1062,10 @@ let to_steel_g
       (#[apply (`[])] flags : list flag)
       (#a : Type) (#opened : Mem.inames)
       (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
-      (r : unit -> MReprGhost a opened (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags)))
+      (r : unit ->
+           MReprGhost a opened (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags)) LocationP)
   : usteel_ghost a opened pre post req ens
   =
-    let r : repr a (SH.KGhost opened) (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags))
+    let r : repr a (SH.KGhost opened) (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags)) LocationP
       = reify (r ()) in
     U.cast _ (SH.ghost_u (ISome?.v r.repr_cv))

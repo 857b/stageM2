@@ -444,7 +444,7 @@ let __build_with_invariant
 
 let build_with_invariant_g (fr : flags_record) : Tac unit
   =
-    let ctx () = [Info_location "in with_invariant_g"] in
+    let ctx = root_ctx ["in with_invariant_g"] in
     apply (`__build_with_invariant);
     // tp
     build_vprop_to_list fr ctx;
@@ -754,7 +754,7 @@ let build_for_loop (fr : flags_record) : Tac unit
     apply_raw (`__build_for_loop);
     // pre_f
     norm_lc ();
-    build_eq_injection_l fr (fun () -> [Info_location "before the for loop"]);
+    build_eq_injection_l fr (root_ctx ["before the for loop"]);
     // ro
     dismiss ();
     norm_lc ();
@@ -770,7 +770,7 @@ let build_for_loop (fr : flags_record) : Tac unit
     let i = intro () in
     apply (`build_lcsub_at_leaves_lc);
     norm_lc ();
-    build_lin_cond_exact fr (fun () -> [Info_location "in the for loop body"])
+    build_lin_cond_exact fr (root_ctx ["in the for loop body"])
 
 
 #push-options "--fuel 0 --ifuel 0"

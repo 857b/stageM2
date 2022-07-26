@@ -343,19 +343,19 @@ let __defer_sig_unification
   : lin_cond env t csm1 prd1
   = lc
 
-/// The following tactics, [build_* fr prd_hint_b] solve goals of the form [lin_cond env t ?csm ?prd],
+/// The following tactics, [build_* fr ctx prd_hint_b] solve goals of the form [lin_cond env t ?csm ?prd],
 /// using an optional hint [prd_hint_b : option binder] which should be a binder of type [prd_hint prd].
 
-let build_LCspec fr (_ : option binder) : Tac unit
+let build_LCspec fr ctx (_ : option binder) : Tac unit
   =
     apply (`LCspec);
     // sh
-    build_spec_r fr (fun () -> [Info_location "in the spec statement"]);
+    build_spec_r fr (ctx_set_loc ctx "in the spec statement");
     // csm_f
     norm_lc ();
-    build_eq_injection_l fr (fun () -> [Info_location "before the spec statement"])
+    build_eq_injection_l fr (ctx_set_loc ctx "before the spec statement")
 
-let build_LCret fr prd_hint_b : Tac unit
+let build_LCret fr ctx prd_hint_b : Tac unit
   =
     apply (`__build_LCret);
     // prd_h
@@ -366,63 +366,63 @@ let build_LCret fr prd_hint_b : Tac unit
     let ret_hint = intro () in
     exact (binder_to_term (Opt.dflt ret_hint prd_hint_b));
     // csm_f
-    build_eq_injection_l fr (fun () -> [Info_location "at the return statement"])
+    build_eq_injection_l fr (ctx_set_loc ctx "at the return statement")
 
 
-let build_LCgen fr prd_hint_b : Tac unit
+let build_LCgen fr ctx prd_hint_b : Tac unit
   =
     apply (`__build_LCgen);
     let gen_tac = extract_term_tac (fun gtc -> unquote #M.gen_tac_t gtc) in
     gen_tac fr
 
-let rec build_LCbind fr prd_hint_b : Tac unit
+let rec build_LCbind fr ctx prd_hint_b : Tac unit
   =
     apply (`__build_LCbind);
     // cf
-    build_lin_cond fr None;
+    build_lin_cond fr (ctx_path_node ctx 0) None;
     // cg
     let x = intro () in
     norm_lc ();
-    build_lin_cond fr prd_hint_b;
+    build_lin_cond fr (ctx_path_node ctx 1) prd_hint_b;
     // [g_csm <- ...], [g_prd <- ...]
     let x = intro () in
     norm_lc ();
     split ();
-      let ctx () = [Info_location "in the bind statement"] in
+      let ctx = ctx_set_loc ctx "in the bind statement" in
       cs_try trefl fr ctx (fun m -> fail (m (Fail_dependency "csm" x) []));
       cs_try trefl fr ctx (fun m -> fail (m (Fail_dependency "prd" x) []))
 
-and build_LCbindP fr prd_hint_b : Tac unit
+and build_LCbindP fr ctx prd_hint_b : Tac unit
   =
     apply (`__build_LCbindP);
     // cg
     let x = intro () in
-    build_lin_cond fr prd_hint_b;
+    build_lin_cond fr (ctx_path_node ctx 0) prd_hint_b;
     // 
     // [g_csm <- ...], [g_prd <- ...]
     let x = intro () in
     norm_lc ();
     split ();
-      let ctx () = [Info_location "in the bindP statement"] in
+      let ctx = ctx_set_loc ctx "in the bindP statement" in
       cs_try trefl fr ctx (fun m -> fail (m (Fail_dependency "csm" x) []));
       cs_try trefl fr ctx (fun m -> fail (m (Fail_dependency "prd" x) []))
 
-and build_LCif fr prd_hint_b : Tac unit
+and build_LCif fr ctx prd_hint_b : Tac unit
   =
     apply (`__build_LCif);
     // cthn
-    build_lin_cond fr prd_hint_b;
+    build_lin_cond fr (ctx_path_node ctx 0) prd_hint_b;
     // cels
     let thn_hint = intro () in
-    build_lin_cond fr (Some (Opt.dflt thn_hint prd_hint_b));
+    build_lin_cond fr (ctx_path_node ctx 1) (Some (Opt.dflt thn_hint prd_hint_b));
     // veq
     let c = intro () in
     norm_lc ();
-    build_pequiv_list fr (fun () -> [Info_location "at the end of the if statement"])
+    build_pequiv_list fr (ctx_set_loc ctx "at the end of the if statement")
 
-and build_lin_cond (fr : flags_record) (prd_hint_b : option binder) : Tac unit
+and build_lin_cond (fr : flags_record) (ctx : cs_context) (prd_hint_b : option binder) : Tac unit
   =
-    let build_tac : flags_record -> option binder -> Tac unit =
+    let build_tac : flags_record -> cs_context -> option binder -> Tac unit =
       let goal = cur_goal () in
       let args = (collect_app goal)._2 in
       let fail_shape () =
@@ -442,7 +442,7 @@ and build_lin_cond (fr : flags_record) (prd_hint_b : option binder) : Tac unit
     // where [?csm1] and [?prd1] are fresh uvars
     apply (`__defer_sig_unification);
     // solves [lin_cond env t ?csm1 ?prd1], instantiate [?csm1] and [?prd1]
-    build_tac fr prd_hint_b;
+    build_tac fr ctx prd_hint_b;
     // [?csm0 <- csm1], [?prd0 <- prd1]
     norm_lc ();
     split (); trefl (); trefl ()
@@ -464,13 +464,13 @@ let __build_top_lin_cond
 #pop-options
 
 /// Solves a goal [top_lin_cond t pre post]
-let build_top_lin_cond (fr : flags_record) : Tac unit
+let build_top_lin_cond (fr : flags_record) (ctx : cs_context) : Tac unit
   =
     apply (`__build_top_lin_cond);
     // lc
     let prd_hint_b = intro () in
-    build_lin_cond fr (Some prd_hint_b);
+    build_lin_cond fr ctx (Some prd_hint_b);
     // veq
     let x = intro () in
     norm_lc ();
-    build_pequiv_list fr (fun () -> [Info_location "at the end of the program"])
+    build_pequiv_list fr (ctx_set_loc ctx "at the end of the program")

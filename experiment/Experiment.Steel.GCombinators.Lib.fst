@@ -452,7 +452,7 @@ let build_lin_cond_exact (fr : flags_record) (ctx : cs_context) : Tac unit
   =
     apply (`__build_lin_cond_exact);
     // lc
-    build_lin_cond fr None;
+    build_lin_cond fr ctx None;
     // csm_le
     norm_lc ();
     cs_try (fun () ->
@@ -649,7 +649,7 @@ let test_lin_cond_st_0 (v : int -> vprop')
     apply_raw (`__build_lin_cond_st);
     // ct
     dismiss (); dismiss ();
-    build_lin_cond default_flags None;
+    build_lin_cond default_flags dummy_ctx None;
     // post_f
     let x = intro () in
     norm_lc ();
@@ -687,7 +687,7 @@ let build_lin_cond_st (fr : flags_record) (ctx : cs_context) : Tac unit
       apply_raw (`__build_lin_cond_st);
       // ct
       dismiss (); dismiss ();
-      build_lin_cond fr None;
+      build_lin_cond fr ctx None;
       // post_f
       let x = intro () in
       norm_lc ();

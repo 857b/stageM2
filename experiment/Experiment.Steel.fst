@@ -278,7 +278,7 @@ let solve_by_wp (fr : flags_record) (t : timer) : Tac unit
     let t = timer_enter t "lin_cond  " in
     norm __normal_M;
     if fr.f_dump Stage_M then dump1 "at stage M";
-    TcLV.build_top_lin_cond fr;
+    TcLV.build_top_lin_cond fr (TcS.root_ctx []);
 
     (* lc1 *)
     let t = timer_enter t "sub_push  " in
@@ -350,7 +350,7 @@ let build_to_steel (fr : flags_record) : Tac unit
     with_policy Force (fun () ->
     let t = timer_start "specs     " fr.f_timer in
     apply_raw (`__build_to_steel);
-    TcS.build_to_repr_t fr (fun () -> [Info_location "in the specification"]);
+    TcS.build_to_repr_t fr (TcS.root_ctx ["in the specification"]);
 
     // [extract]
     norm [delta_attr [`%__tac_helper__]; iota];
@@ -442,7 +442,7 @@ let __build_to_steel_wrew
     Mkto_steel_goal_spec goal_LV goal_WP
 #pop-options
 
-let build_to_steel_wrew (fr : flags_record) (flags : list flag) (t : timer) : Tac timer
+let build_to_steel_wrew (fr : flags_record) (ctx : TcS.cs_context) (flags : list flag) (t : timer) : Tac timer
   =
     apply_raw (`__build_to_steel_wrew (`#(quote flags)));
     
@@ -450,7 +450,7 @@ let build_to_steel_wrew (fr : flags_record) (flags : list flag) (t : timer) : Ta
     let t = timer_enter t "lin_cond  " in
     norm __normal_M;
     if fr.f_dump Stage_M then dump1 "at stage M";
-    TcLV.build_top_lin_cond fr;
+    TcLV.build_top_lin_cond fr ctx;
 
     // goal_WP
     smt ();

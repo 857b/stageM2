@@ -264,7 +264,7 @@ type spec_r_steel (#a : Type u#a) (pre : SE.pre_t) (post : SE.post_t a)
 /// A tactic taht will be called to solves the goal:
 ///   [LV.lin_cond env (Tgen a gen_tac gen_c) ?csm ?prd]
 /// using [LV.LCgen], unifying [?csm] and [?prd].
-// TODO: prd_hint
+// TODO: ctx, prd_hint
 type gen_tac_t = Itf.flags_record -> Tactics.Tac unit
 
 noeq

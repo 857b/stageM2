@@ -24,12 +24,47 @@ open FStar.Calc
 
 #set-options "--fuel 1 --ifuel 1"
 
-type cs_context = unit -> list info
+noeq
+type cs_context = {
+  ctx_loc_str : list string;
+  ctx_infos   : list info;
+  ctx_loc_pth : list nat; // path in the AST, index of the child, from the current node to the root
+  ctx_move_to : list nat -> Tac unit;
+}
 
-let dummy_ctx = fun () -> []
+let dummy_ctx = {
+  ctx_loc_str = [];
+  ctx_infos   = [];
+  ctx_loc_pth = [];
+  ctx_move_to = (fun _ -> ());
+}
+
+let root_ctx (loc : list string) : cs_context = {
+  ctx_loc_str = loc;
+  ctx_infos   = [];
+  ctx_loc_pth = [];
+  ctx_move_to = (fun _ -> ());
+}
+
+let root_ctx_with_move_to (loc : list string) (mv : list nat -> Tac unit) : cs_context = {
+  ctx_loc_str = loc;
+  ctx_infos   = [];
+  ctx_loc_pth = [];
+  ctx_move_to = mv;
+}
 
 let ctx_app_loc (c : cs_context) (m : string) : cs_context
-  = fun () -> Info_location m :: c ()
+  = { c with ctx_loc_str = m :: c.ctx_loc_str }
+
+let ctx_set_loc (c : cs_context) (m : string) : cs_context
+  = { c with ctx_loc_str = [m] }
+
+let ctx_app_info (c : cs_context) (i : list info) : cs_context
+  = { c with ctx_infos = L.append i c.ctx_infos }
+
+let ctx_path_node (c : cs_context) (i : nat) : cs_context
+  = { c with ctx_loc_str = []; ctx_loc_pth = i :: c.ctx_loc_pth }
+
 
 // The following utilities are hacked to raise a failure at the location where they are called
 // FIXME? raise a Failure exception with a meaningful location
@@ -39,8 +74,13 @@ let cs_try (#a : Type) (f : unit -> Tac a)
                      TacH a (requires fun _ -> True) (ensures fun _ r -> Tactics.Result.Failed? r))
   : Tac a
   = try f ()
-    with | e -> fail_f (fun fail_enum infos ->
-                 let failure = {fail_enum; fail_info = L.(infos @ ctx () @ [Info_original_exn e])} in
+    with | e -> ctx.ctx_move_to ctx.ctx_loc_pth;
+               fail_f (fun fail_enum infos ->
+                 let failure = {
+                   fail_enum;
+                   fail_info = L.(infos @ ctx.ctx_infos @
+                                  map Info_location ctx.ctx_loc_str @ [Info_original_exn e])
+                 } in
                  failure_to_string fr failure)
 
 let cs_raise (#a : Type)
@@ -48,8 +88,9 @@ let cs_raise (#a : Type)
              (fail_f : (failure_enum -> list info -> Tac string) ->
                        TacH a (requires fun _ -> True) (ensures fun _ r -> Tactics.Result.Failed? r))
   : TacH a (requires fun _ -> True) (ensures fun _ r -> Tactics.Result.Failed? r)
-  = fail_f (fun fail_enum infos -> let
-      failure = {fail_enum; fail_info = L.(infos @ ctx ())} in
+  = ctx.ctx_move_to ctx.ctx_loc_pth;
+    fail_f (fun fail_enum infos -> let
+      failure = {fail_enum; fail_info = L.(infos @ ctx.ctx_infos @ map Info_location ctx.ctx_loc_str)} in
       failure_to_string fr failure)
 
 
