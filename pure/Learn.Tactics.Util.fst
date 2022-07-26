@@ -160,3 +160,40 @@ let collect_fvar (t : term) : Tac string
   = match inspect t with
   | Tv_FVar fv | Tv_UInst fv _ -> implode_qn (inspect_fv fv)
   | _ -> fail "expected an fvar, got: "^(term_to_string t)
+
+
+/// On a goal [squash (?u == t)] recheck [t] in the context of [?u] and solves the goal by unifying [?u] to [t].
+/// Used to prevent https://github.com/FStarLang/FStar/issues/2635
+let unify_recheck (p : guard_policy) : Tac unit
+  =
+    let t = inspect (cur_goal ()) in
+    guard (Tv_App? t);
+    let args = (collect_app (Tv_App?.a t)._1)._2 in
+    guard (L.length args = 3);
+    let t0 = (L.index args 1)._1 in
+    let t1 = (L.index args 2)._1 in
+    unshelve t0;
+    with_policy p (fun () -> t_exact true true t1);
+    trefl ()
+
+noeq
+type test_recheck_t (a : Type) (b : Type) (t1 : b -> a) =
+  | TestRecheckI : (t0 : a) -> ((x : b) -> squash (t0 == t1 x)) -> test_recheck_t a b t1
+
+[@@ expect_failure [228]]
+let test_recheck0 : test_recheck_t int int (fun x -> x)
+  = _ by (apply (`TestRecheckI); let x = intro () in unify_recheck SMT) // also fails with trefl
+
+let test_recheck1 : test_recheck_t int int (fun x -> 0)
+  = _ by (apply (`TestRecheckI); let x = intro () in unify_recheck Force)
+
+[@@ expect_failure [19]]
+let test_recheck2 : test_recheck_t (squash False) (squash False) (fun p -> ())
+  = _ by (apply (`TestRecheckI);
+          let x = intro () in
+          //trefl () // Was unsoundly succeeding before https://github.com/FStarLang/FStar/pull/2639
+          unify_recheck SMT
+         )
+
+let test_recheck3 : test_recheck_t (squash (forall i . i + 1 > i)) unit (fun _ -> ()) =
+  _ by (apply (`TestRecheckI); let x = intro () in unify_recheck SMT) // fails with Force

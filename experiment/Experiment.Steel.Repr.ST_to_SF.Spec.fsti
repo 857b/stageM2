@@ -400,16 +400,3 @@ val repr_SF_of_ST_rall_equiv
   : Lemma ((ST.tree_req t sl0 <==> tree_req (repr_SF_of_ST_rall t s sl0)) /\
            (forall (x : a) (sl1 : Fl.flist (post x)) .
              ST.tree_ens t sl0 x sl1 <==> tree_ens (repr_SF_of_ST_rall t s sl0) x sl1))
-
-
-val repr_SF_of_ST_shape
-      (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a)
-      (t : ST.prog_tree u#a u#b u#p a pre post) (s : ST.prog_shape t)
-      (sl0 : Fl.flist pre)
-  : Lemma (prog_has_shape (repr_SF_of_ST t s sl0) (shape_SF_of_ST s.shp))
-
-val repr_SF_of_ST_rall_shape
-      (#a : Type) (#pre : ST.pre_t) (#post : ST.post_t a)
-      (t : ST.prog_tree u#a u#b u#p a pre post) (s : ST.prog_shape t)
-      (sl0 : Fl.flist pre)
-  : Lemma (prog_has_shape (repr_SF_of_ST_rall t s sl0) (shape_SF_of_ST_rall s.shp))

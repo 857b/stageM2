@@ -237,3 +237,11 @@ let test18' (r : ref int)
   = to_steel #[Dump Stage_M] begin fun () ->
     call_read r
   end
+
+let test19 (b : bool) (r0 r1 : ref int)
+  : usteel int (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1) (fun _ -> True) (fun _ _ _ -> True)
+  = to_steel #[Dump Stage_M] begin fun () ->
+    if b
+    then call_read r0
+    else call_read r1
+  end

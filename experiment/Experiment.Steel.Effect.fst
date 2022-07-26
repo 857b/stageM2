@@ -113,7 +113,8 @@ noeq inline_for_extraction
 type combinable_bind_t (a0 a1 : Type u#a) (ek0 ek1 ek2 : SH.effect_kind) = {
   cba_bind_ek0'  : SH.effect_kind;
   cba_bind_ek1'  : SH.effect_kind;
-  // Sometime ek2 has already been resolved (for instance in test9', don't know why)
+  // Sometime ek2 has already been resolved (for instance in test9', maybe because the effect_kind
+  // are not marked as [__repr_implicit__])
   cba_bind_ek2'  : SH.effect_kind;
   cba_bind_repr  : combinable_bind_repr a0 a1 cba_bind_ek0' cba_bind_ek1' cba_bind_ek2';
   cba_bind_lift0 : C.steel_liftable a0 ek0 cba_bind_ek0';
