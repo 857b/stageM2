@@ -36,7 +36,7 @@ let to_steel
 unfold
 let return_hint (#a : Type) (x : a) (sl_hint : M.post_t a)
   : M.repr SH.KSteel a
-  = MC.return_hint SH.KSteel #a x sl_hint
+  = MC.return_hint SH.KSteel #a x (Some sl_hint)
 
 unfold
 let return (#a : Type) (x : a)

@@ -156,8 +156,9 @@ let norm_lc () : Tac unit =
 /// Instead when we have a (possibly partial) constraint on [?prd], we first infer a [lin_cond] then we use [LCsub]
 /// to satisfy the constraint. However, the knowledge of the constraints is useful for introducing dependencies in
 /// [LCret]. For this reason, we propagate some [prd_hint] in the context.
-/// Currently we replicate the behaviour of [Tac.MCond] for the introduction of dependencies.
 type prd_hint (#a : Type) (prd : prd_t a) = unit
+
+let prd_hint_none (#a : Type) : prd_hint #a (fun _ -> []) = ()
 
 
 #push-options "--fuel 0 --ifuel 0"
@@ -184,12 +185,20 @@ let lcsub_add_csm
     (**) mask_comp_or_mask_diff csm0 csm1;
     LCsub env csm0 prd0 lc csm' prd1 prd1_f
 
-/// [LCret] with [prd = sl_hint]
+/// [LCret] with [prd = Some?.v sl_hint]
 [@@ __cond_solver__]
-let __build_LCret
+let __build_LCret_with_annotated_hint
       (env : vprop_list)
-      (a : Type) (x : a) (sl_hint : M.post_t a)
-      (prd : prd_t a) (prd_h : prd_hint sl_hint -> prd_hint prd)
+      (a : Type) (x : a) (prd : prd_t a)
+      (csm_f : eq_injection_l (prd x) env)
+  : lin_cond u#a u#p env (M.Tret a x (Some prd)) (eij_trg_mask csm_f) prd
+  = LCret env #a #x #(Some prd) prd csm_f
+
+[@@ __cond_solver__]
+let __build_LCret_with_external_hint
+      (env : vprop_list)
+      (a : Type) (x : a) (sl_hint : option (M.post_t a))
+      (prd : prd_t a) (prd_h : prd_hint prd)
       (csm_f : eq_injection_l (prd x) env)
   : lin_cond u#a u#p env (M.Tret a x sl_hint) (eij_trg_mask csm_f) prd
   = LCret env #a #x #sl_hint prd csm_f
@@ -367,14 +376,16 @@ let build_LCspec fr ctx (_ : option binder) : Tac unit
 
 let build_LCret fr ctx prd_hint_b : Tac unit
   =
-    apply (`__build_LCret);
-    // prd_h
-    // If we have an hint from the context, we ignore any hint annotated on the return. This is the behaviour of
-    // [Tac.MCond]. It should be fine to keep this behaviour here as long as it is only used for introducing
-    // dependencies. If it were to be used for smt fallback, since the hint inferred from the context can be
-    // partial, it could be better to use the hint annotated on the return if it is non-empty.
-    let ret_hint = intro () in
-    exact (binder_to_term (Opt.dflt ret_hint prd_hint_b));
+    begin try
+      // We always use an annotated hint if it is present
+      apply (`__build_LCret_with_annotated_hint)
+    with _ ->
+      apply (`__build_LCret_with_external_hint);
+      // prd_h
+      match prd_hint_b with
+      | Some h -> exact (binder_to_term h)
+      | None   -> apply (`prd_hint_none)
+    end;
     // csm_f
     build_eq_injection_l fr (ctx_set_loc ctx "at the return statement")
 

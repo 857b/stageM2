@@ -261,7 +261,7 @@ type spec_r_steel (#a : Type u#a) (pre : SE.pre_t) (post : SE.post_t a)
 
 (*** [prog_tree] *)
 
-/// A tactic taht will be called to solves the goal:
+/// A tactic that will be called to solves the goal:
 ///   [LV.lin_cond env (Tgen a gen_tac gen_c) ?csm ?prd]
 /// using [LV.LCgen], unifying [?csm] and [?prd].
 // TODO: ctx, prd_hint
@@ -273,7 +273,7 @@ type prog_tree : (a : Type u#a) -> Type u#(max (1 + max a p) 3) =
   | Tspec  : (a : Type u#a) -> (sp : (spec_r a -> Type u#(max a p 2))) ->
              prog_tree a
   // return, with a hint for introducing dependencies on the returned value
-  | Tret   : (a : Type u#a) -> (x : a) -> (sl_hint : post_t a) ->
+  | Tret   : (a : Type u#a) -> (x : a) -> (sl_hint : option (post_t a)) ->
              prog_tree a
   // bind
   | Tbind  : (a : Type u#a) -> (b : Type u#a) ->
@@ -318,7 +318,7 @@ type tree_cond
               (s : spec_r a) -> (sh : sp s) ->
               (tcs : tree_cond_Spec a (spc_pre1 s) (spc_post1 s)) ->
               tree_cond (Tspec a sp) tcs.tcs_pre tcs.tcs_post
-  | TCret   : (#a : Type u#a) -> (#x : a) -> (#sl_hint : post_t a) ->
+  | TCret   : (#a : Type u#a) -> (#x : a) -> (#sl_hint : option (post_t a)) ->
               (pre : pre_t) -> (post : post_t a) ->
               (p : Veq.vequiv pre (post x)) ->
               tree_cond (Tret a x sl_hint) pre post

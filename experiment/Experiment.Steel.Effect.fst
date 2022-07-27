@@ -84,7 +84,7 @@ let mk_repr (#a : Type) (#ek : SH.effect_kind) (#t : prog_tree a) (repr_M : repr
 let return_ghostI
       (a : Type) (x : a) (#[@@@ __mrepr_implicit__] opened: Mem.inames)
       (#[@@@ __mrepr_implicit__] loc : location_goal [])
-  : repr u#a a (SH.KGhostI opened) (M.Tret a x (fun _ -> [])) None (locm loc)
+  : repr u#a a (SH.KGhostI opened) (M.Tret a x None) None (locm loc)
   = mk_repr (C.return (SH.KGhostI opened) #a x)
 
 
@@ -343,13 +343,13 @@ total reflectable reifiable effect {
 }
 
 let return (#a : Type u#a) (#opened : Mem.inames) (#[@@@ __mrepr_implicit__] loc : location_goal []) (x : a)
-  : MRepr a (SH.KGhostI opened) (M.Tret a x (fun _ -> [])) None (locm loc)
+  : MRepr a (SH.KGhostI opened) (M.Tret a x None) None (locm loc)
   = MRepr?.reflect (return_ghostI a x #opened)
 
 let return_hint (#a : Type u#a) (#opened : Mem.inames) (#[@@@ __mrepr_implicit__] loc : location_goal []) (x : a)
                 (sl_hint : M.post_t a)
-  : MRepr a (SH.KGhostI opened) (M.Tret a x sl_hint) None (locm loc)
-  = MRepr?.reflect (mk_repr (C.return_hint (SH.KGhostI opened) #a x sl_hint))
+  : MRepr a (SH.KGhostI opened) (M.Tret a x (Some sl_hint)) None (locm loc)
+  = MRepr?.reflect (mk_repr (C.return_hint (SH.KGhostI opened) #a x (Some sl_hint)))
 
 
 (***** bind (PURE, MRepr) |> MRepr *)
@@ -429,7 +429,7 @@ type repr_ghost (a : Type u#a) (opened : Mem.inames) (t : prog_tree a)
 let return_ghost
       (a : Type) (x : a) (#opened: Mem.inames)
       (#[@@@ __mrepr_implicit__] loc : location_goal [])
-  : repr_ghost u#a a opened (M.Tret a x (fun _ -> [])) None (locm loc)
+  : repr_ghost u#a a opened (M.Tret a x None) None (locm loc)
   = mk_repr (C.return (SH.KGhost opened) #a x)
 
 let bind_ghost
@@ -483,13 +483,13 @@ total reflectable reifiable effect {
 }
 
 let return_g (#a : Type u#a) (#opened : Mem.inames) (#[@@@ __mrepr_implicit__] loc : location_goal []) (x : a)
-  : MReprGhost a opened (M.Tret a x (fun _ -> [])) None (locm loc)
+  : MReprGhost a opened (M.Tret a x None) None (locm loc)
   = MReprGhost?.reflect (return_ghost a x #opened)
 
 let return_g_hint (#a : Type u#a) (#opened : Mem.inames) (#[@@@ __mrepr_implicit__] loc : location_goal []) (x : a)
                   (sl_hint : M.post_t a)
-  : MReprGhost a opened (M.Tret a x sl_hint) None (locm loc)
-  = MReprGhost?.reflect (mk_repr (C.return_hint (SH.KGhost opened) #a x sl_hint))
+  : MReprGhost a opened (M.Tret a x (Some sl_hint)) None (locm loc)
+  = MReprGhost?.reflect (mk_repr (C.return_hint (SH.KGhost opened) #a x (Some sl_hint)))
 
 
 let bind_pure_mrepr_ghost

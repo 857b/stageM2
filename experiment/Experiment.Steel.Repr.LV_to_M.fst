@@ -469,7 +469,7 @@ let sound_repr_M_of_LV__LCspec
 
 let sound_repr_M_of_LV__LCret
       (env : vprop_list)
-      (a : Type) (x : a) (sl_hint : M.post_t a)
+      (a : Type) (x : a) (sl_hint : option (M.post_t a))
       (prd : prd_t a) (csm_f : eq_injection_l (prd x) env)
   : squash (sound_repr_M_of_LV (LCret env #a #x #sl_hint prd csm_f))
   =

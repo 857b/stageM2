@@ -289,7 +289,7 @@ type lin_cond :
       lin_cond env (M.Tspec a sp) (spec_csm pre_f) s.spc_post
   | LCret :
       (env : vprop_list) ->
-      (#a : Type u#a) -> (#x : a) -> (#sl_hint : M.post_t a) ->
+      (#a : Type u#a) -> (#x : a) -> (#sl_hint : option (M.post_t a)) ->
       // NOTE: [prd] is redundant since [csm_f] determines its values
       (prd : prd_t a) -> (csm_f : eq_injection_l (prd x) env) ->
       lin_cond env (M.Tret a x sl_hint) (eij_trg_mask csm_f) prd
@@ -348,7 +348,7 @@ let match_lin_cond
                                  csm0 == spec_csm pre_f /\ prd0 == s.spc_post /\
                                  ct0 == LCspec env #a #sp s sh pre_f)
                        (ensures fun _ -> True))
-      (c_LCret  : (a : Type u#a) -> (x : a) -> (sl_hint : M.post_t a) ->
+      (c_LCret  : (a : Type u#a) -> (x : a) -> (sl_hint : option (M.post_t a)) ->
                   (prd : prd_t a) -> (csm_f : eq_injection_l (prd x) env) ->
                   Pure (r _ _ _ _ (LCret env #a #x #sl_hint prd csm_f))
                        (requires a0 == a /\ t0 == M.Tret a x sl_hint /\
@@ -578,7 +578,7 @@ val sub_ret_prd_f_eij_trg_eq
 
 [@@ __lin_cond__]
 let lcsubp_LCret
-      (env    : vprop_list) (a : Type) (x : a) (sl_hint : M.post_t a)
+      (env    : vprop_list) (a : Type) (x : a) (sl_hint : option (M.post_t a))
       (prd0   : prd_t a) (csm_f0 : eq_injection_l (prd0 x) env)
       (csm1   : csm_t (filter_mask (mask_not (eij_trg_mask csm_f0)) env)) (prd1 : prd_t a)
       (prd_f1 : (x' : a) -> Perm.pequiv_list (sub_prd env (eij_trg_mask csm_f0) (prd0 x') csm1) (prd1 x'))

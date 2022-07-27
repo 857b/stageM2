@@ -66,7 +66,7 @@ let specT (a : Type) (pre : M.pre_t) (post : M.post_t a) : M.prog_tree a
   = M.Tspec a (M.spec_r_exact (M.Mkspec_r pre post [] (fun _ _ -> True) (fun _ _ _ _ -> True)))
 
 let rec repeat_n (n : nat) (t : M.prog_tree unit) : M.prog_tree unit
-  = if n = 0 then M.Tret unit () (fun _ -> [])
+  = if n = 0 then M.Tret unit () None
     else M.Tbind unit unit t (fun () -> repeat_n (n-1) t)
 
 let norm_test () : Tac unit
@@ -165,7 +165,7 @@ let test_LCspec (v0 v1 : vprop') (vx0 : int -> vprop')
   )
 
 let test_LCret (v0 v1 : vprop') (vx0 : int -> vprop')
-  : lin_cond_r [v0; v1; vx0 0] (M.Tret int 0 (fun x -> [v1; vx0 x]))
+  : lin_cond_r [v0; v1; vx0 0] (M.Tret int 0 (Some (fun x -> [v1; vx0 x])))
   = _ by (
     norm_test (); apply (`Mklin_cond_r);
     build_LCret test_flags dummy_ctx None
@@ -216,8 +216,8 @@ let test_lin_cond0 (v : int -> vprop') (vx : int -> int -> vprop')
 
 let test_lin_cond1 (v : vprop') (vx : int -> vprop')
   : LV.top_lin_cond
-      (M.Tbind int int (M.Tret int 0 (fun x -> [vx x]))
-             (fun x -> M.Tret int x (fun x -> [vx x])))
+      (M.Tbind int int (M.Tret int 0 (Some (fun x -> [vx x])))
+             (fun x -> M.Tret int x (Some (fun x -> [vx x]))))
       [v; vx 0] (fun x -> [v; vx x])
   = _ by (build_top_lin_cond test_flags dummy_ctx)
 
@@ -225,13 +225,13 @@ let test_lin_cond1 (v : vprop') (vx : int -> vprop')
 /// post-condition to infer the dependency on [x] introduced by the [M.Tret].
 let test_lin_cond__ret_hint0 (vx : int -> vprop')
   : LV.top_lin_cond
-      (M.Tret int 0 (fun _ -> []))
+      (M.Tret int 0 None)
       [vx 0] (fun x -> [vx x])
   = _ by (build_top_lin_cond test_flags dummy_ctx)
 
 let test_lin_cond__ret_hint1 (vx : int -> vprop')
   : LV.top_lin_cond
-      (M.Tret int 0 (fun x -> [vx x]))
+      (M.Tret int 0 (Some (fun x -> [vx x])))
       [vx 0] (fun x -> [vx x])
   = _ by (build_top_lin_cond test_flags dummy_ctx)
 
@@ -239,16 +239,24 @@ let test_lin_cond__ret_hint1 (vx : int -> vprop')
 let test_lin_cond__ret_hint2 (vx : int -> vprop')
   : LV.top_lin_cond
       (M.Tbind int int
-         (M.Tret int 0 (fun _ -> []))
-         (fun x -> M.Tret int x (fun _ -> [])))
+         (M.Tret int 0 None)
+         (fun x -> M.Tret int x None))
       [vx 0] (fun x -> [vx x])
   = _ by (build_top_lin_cond test_flags dummy_ctx)
 
 let test_lin_cond__ret_hint3 (vx : int -> vprop')
   : LV.top_lin_cond
       (M.Tbind int int
-         (M.Tret int 0 (fun x -> [vx x]))
-         (fun x -> M.Tret int x (fun _ -> [])))
+         (M.Tret int 0 (Some (fun x -> [vx x])))
+         (fun x -> M.Tret int x None))
+      [vx 0] (fun x -> [vx x])
+  = _ by (build_top_lin_cond test_flags dummy_ctx)
+
+/// Since we always use a return annotation if it is present, adding a wrong annotation can make the inference fail.
+[@@ expect_failure [228]]
+let test_lin_cond__ret_hint4 (vx : int -> vprop')
+  : LV.top_lin_cond
+      (M.Tret int 0 (Some (fun _ -> [])))
       [vx 0] (fun x -> [vx x])
   = _ by (build_top_lin_cond test_flags dummy_ctx)
 
@@ -256,7 +264,7 @@ let test_lin_cond__ret_hint3 (vx : int -> vprop')
 [@@ expect_failure [228]]
 let test_lin_cond__fail0 (v : int -> vprop')
   : LV.top_lin_cond
-      (M.Tret int 0 (fun _ -> [v 1]))
+      (M.Tret int 0 (Some (fun _ -> [v 1])))
       [v 0] (fun _ -> [v 1])
   = _ by (build_top_lin_cond test_flags dummy_ctx)
 
@@ -264,7 +272,7 @@ let test_lin_cond__fail0 (v : int -> vprop')
 let test_lin_cond__fail1 (vx : int -> vprop')
   : LV.top_lin_cond
       (M.Tbind int int (specT int [] (fun x -> [vx x]))
-             (fun x -> M.Tret int 0 (fun _ -> [])))
+             (fun x -> M.Tret int 0 None))
       [] (fun x -> [])
   = _ by (norm_test (); build_top_lin_cond test_flags dummy_ctx)
 
@@ -294,18 +302,18 @@ let test_lin_cond__if_2 (v : int -> vprop')
 let test_lin_cond__if_3 (vx : int -> vprop')
   : LV.top_lin_cond
         (M.Tbind int int
-          (M.Tif _ true (M.Tret int 0 (fun _ -> []))
-                        (M.Tret int 0 (fun _ -> [])))
-          (fun x -> M.Tret int x (fun _ -> [])))
+          (M.Tif _ true (M.Tret int 0 None)
+                        (M.Tret int 0 None))
+          (fun x -> M.Tret int x None))
         [vx 0] (fun x -> [vx x])
   = _ by (norm_test (); build_top_lin_cond test_flags dummy_ctx)
 
 let test_lin_cond__if_3 (vx : int -> vprop')
   : LV.top_lin_cond
         (M.Tbind int int
-          (M.Tif _ true (M.Tret int 0 (fun x -> [vx x]))
-                        (M.Tret int 0 (fun _ -> [])))
-          (fun x -> M.Tret int x (fun _ -> [])))
+          (M.Tif _ true (M.Tret int 0 (Some (fun x -> [vx x])))
+                        (M.Tret int 0 None))
+          (fun x -> M.Tret int x None))
         [vx 0] (fun x -> [vx x])
   = _ by (norm_test (); build_top_lin_cond test_flags dummy_ctx)
 
@@ -313,8 +321,8 @@ let test_lin_cond__if_3 (vx : int -> vprop')
 let test_lin_cond__if_4 (vx : int -> vprop')
   : LV.top_lin_cond
         (M.Tbind int int
-          (M.Tif _ true (M.Tret int 0 (fun _ -> []))
-                        (M.Tret int 0 (fun x -> [vx x])))
-          (fun x -> M.Tret int x (fun _ -> [])))
+          (M.Tif _ true (M.Tret int 0 None)
+                        (M.Tret int 0 (Some (fun x -> [vx x]))))
+          (fun x -> M.Tret int x None))
         [vx 0] (fun x -> [vx x])
   = _ by (norm_test (); build_top_lin_cond test_flags dummy_ctx)
