@@ -27,6 +27,7 @@ type stage =
   | Stage_Fun
   | Stage_WP
   | Stage_Extract
+  | Side_Conditions
 
 type flag =
   | No of flag

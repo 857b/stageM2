@@ -162,7 +162,19 @@ let collect_fvar (t : term) : Tac string
   | _ -> fail "expected an fvar, got: "^(term_to_string t)
 
 
-/// On a goal [squash (?u == t)] recheck [t] in the context of [?u] and solves the goal by unifying [?u] to [t].
+let set_goal_label (l : string) : Tac unit
+  = match goals () with
+  | [] -> fail "no goals"
+  | g :: gs -> set_goals (set_label l g :: gs)
+
+let set_smt_goals_label (l : string) : Tac unit
+  =
+    set_smt_goals (L.map (set_label l) (smt_goals ()))
+
+[@@ __tac_helper__]
+let __dup_goal (#goal : Type) (wit0 wit1 : goal) : goal = wit0
+
+/// On a goal [squash (?u == t)] solves the goal by unifying [?u] to [t] and rechecks [t] in the context of [?u].
 /// Used to prevent https://github.com/FStarLang/FStar/issues/2635
 let unify_recheck (p : guard_policy) : Tac unit
   =
@@ -171,10 +183,21 @@ let unify_recheck (p : guard_policy) : Tac unit
     let args = (collect_app (Tv_App?.a t)._1)._2 in
     guard (L.length args = 3);
     let t0 = (L.index args 1)._1 in
-    let t1 = (L.index args 2)._1 in
+    
     unshelve t0;
-    with_policy p (fun () -> t_exact true true t1);
-    trefl ()
+    let wit0 = fresh_uvar None in
+    let wit1 = fresh_uvar None in
+    t_exact false true (`__dup_goal (`#wit0) (`#wit1));
+
+    norm [delta_only [`%__dup_goal]];
+    trefl (); // unify wit0 to t
+
+    unshelve wit1;
+    focus (fun () ->
+      let ty = cur_goal () in
+      with_policy p (fun () -> t_exact false true wit0); // recheck wit0
+      set_smt_goals_label ("recheck '"^term_to_string wit0^"' : '"^term_to_string ty^"'")
+    )
 
 noeq
 type test_recheck_t (a : Type) (b : Type) (t1 : b -> a) =
@@ -197,3 +220,14 @@ let test_recheck2 : test_recheck_t (squash False) (squash False) (fun p -> ())
 
 let test_recheck3 : test_recheck_t (squash (forall i . i + 1 > i)) unit (fun _ -> ()) =
   _ by (apply (`TestRecheckI); let x = intro () in unify_recheck SMT) // fails with Force
+
+
+let build_then_norm_by #a #b (t : unit -> Tac a) (n : a -> Tac b) : Tac b
+  =
+    dup ();
+    // x
+    let xa = t () in
+    // y <- x
+    let xb = n xa in
+    trefl ();
+    xb

@@ -304,6 +304,13 @@ let solve_by_wp (fr : flags_record) (t : timer) : Tac unit
     norm __normal_M;
     norm __normal_Fun_spec;
     if fr.f_dump Stage_WP then dump1 "at stage WP";
+    if fr.f_dump Side_Conditions
+    then begin
+      let gs = goals () in
+      set_goals [];
+      dump "side conditions";
+      set_goals gs
+    end;
     smt ();
 
     (* ext *)
@@ -317,6 +324,7 @@ let solve_by_wp (fr : flags_record) (t : timer) : Tac unit
     if fr.f_dump Stage_Extract then dump1 "at stage Extract";
     trefl ();
     timer_stop t
+
 
 
 (***** Extracting a [unit_steel] from a [M.repr] *)
@@ -451,6 +459,14 @@ let build_to_steel_wrew (fr : flags_record) (ctx : TcS.cs_context) (flags : list
     norm __normal_M;
     if fr.f_dump Stage_M then dump1 "at stage M";
     TcLV.build_top_lin_cond fr ctx;
+
+    if fr.f_dump Side_Conditions
+    then begin
+      let gs = goals () in
+      set_goals [];
+      dump "side conditions";
+      set_goals gs
+    end;
 
     // goal_WP
     smt ();

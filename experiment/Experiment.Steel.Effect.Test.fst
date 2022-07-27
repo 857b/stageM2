@@ -18,8 +18,8 @@ let display_term (#a : Type) (x : a) : Type = unit
 
 /// This retypecheck [r]. It fails if r contains a bind_pure since it will need to prove the monotonicity of the
 /// weakest precondition ([pure_wp_monotonic]).
-let dump_repr (#a : Type) (#r : prog_tree a) (ek : SH.effect_kind)
-      ($re : unit -> MRepr a ek r None LocationP)
+let dump_repr (#a : Type) (#r : prog_tree a) (ek : SH.effect_kind) (#loc : location_p)
+      ($re : unit -> MRepr a ek r None loc)
       (#[(norm [delta_attr [`%__repr_M__]; iota]; dump "dump_repr"; exact (`()))] d : display_term r)
       ()
   : unit
@@ -37,6 +37,7 @@ let test0 =
 let test1 = dump_repr (SH.KGhostI Set.empty) (fun () -> assert (5 >= 0); return 5) ()
 #pop-options
 
+
 let test1' (x : int)
   : usteel int emp (fun _ -> emp) (requires fun _ -> x >= 1) (ensures fun _ y _ -> y >= 5)
   = to_steel #[Dump Stage_WP] begin fun () ->
@@ -53,11 +54,15 @@ let test1' (x : int)
 //  dump_repr (fun () -> if b then let x = read r0 in return x
 //                         else let x = read r1 in return x)
 
+//[@@ handle_smt_goals ] let tac () = Tactics.dump "SMT query"
+
+// There is no side conditions due to retyping
+// The WP is the only SMT query
 let test3' (b : bool) (r0 r1 : ref int)
   : usteel int (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
          (requires fun h0 -> sel r0 h0 >= 0 /\ sel r1 h0 >= 0)
          (ensures  fun h0 x h1 -> frame_equalities (vptr r0 `star` vptr r1) h0 h1 /\ x >= 0)
-  = to_steel begin fun () ->
+  = to_steel #[Dump Side_Conditions; Dump Stage_WP] begin fun () ->
     if b then call read r0 else call read r1
   end
 
@@ -82,12 +87,26 @@ let test3' (b : bool) (r0 r1 : ref int)
 //    return ()
 //  end
 
+let assert_sq (#opened : Mem.inames) (p : Type)
+  : SteelGhost (squash p) opened emp (fun _ -> emp) (requires fun _ -> p) (ensures fun _ _ _ -> True)
+  = noop ()
+
+// Without the call to [assert_sq], this fails when rechecking the specification of write.
+// Indeed we [x - 1 >= 0] for this check to succeed.
+// F* already introduces a bind pure that assert this fact with the WP:
+//   [fun p -> x - 1 >= 0 /\ (forall (return_val : nat) . return_val == x - 1 ==> p return_val)]
+// However, the [x  - 1] is not replaced by [return_val] in the tree.
+// Since we do not allow the well-typing of the program tree to depend on its requirement, the program is
+// indeed ill-typed.
+// By calling [assert_sq], we explicitly introduce a variable with type [squash (x - 1 >= 0)] our tree can depends on.
+
 let test5' (r : ref nat)
   : usteel unit
       (vptr r) (fun _ -> vptr r)
       (requires fun h0 -> sel r h0 > 10) (ensures fun _ _ h1 -> sel r h1 >= 10)
-  = to_steel begin fun () ->
+  = to_steel #[Dump Stage_M] begin fun () ->
     let x = call read r in
+    let _ = call_g assert_sq (x - 1 >= 0) in
     call (write r) (x - 1)
   end
 

@@ -603,8 +603,11 @@ type filter_goals_r = {
   fgoals_loca : list goal;
 }
 
-let already_solved (g : goal) : Tac bool
-  = Tv_Uvar? (inspect (goal_witness g))
+let is_already_solved (g : goal) : Tac bool
+  = not (Tv_Uvar? (inspect (goal_witness g)))
+
+let filter_already_solved () : Tac unit
+  = set_goals (filter (fun g -> Tv_Uvar? (inspect (goal_witness g))) (goals ()))
 
 let rec mrepr_implicits_init (fr : flags_record) (gs : list goal) (r : filter_goals_r) : Tac filter_goals_r
   =
@@ -612,37 +615,34 @@ let rec mrepr_implicits_init (fr : flags_record) (gs : list goal) (r : filter_go
     | [] -> r
     | g :: gs ->
       set_goals [g];
-      let r =
-        if not (already_solved g)
-        then r // the goal has already been solved
-        else begin
-          let app = collect_app (goal_type g) in
-          let hd  = cs_try (fun () -> collect_fvar app._1)
-                      fr dummy_ctx (fun m -> fail (m (Fail_goal_shape (GShape_repr_implicit)) []))
-          in
-          // The only sources of failure here should be a bind where the two types involved belong to
-          // different universes. Or a polymonadic bind with an universe greater than [u#8].
-          if hd = (`%combine_bind_t)
-          then begin
-              apply (`combine_bind);
-              // combinable_bind_t
-              let g = _cur_goal () in
-              {r with fgoals_comb = g :: r.fgoals_comb}
-          end else if hd = (`%combine_bind_pure_t)
-          then (apply (`combine_bind_pure); r)
+      let r = begin
+        let app = collect_app (goal_type g) in
+        let hd  = cs_try (fun () -> collect_fvar app._1)
+                    fr dummy_ctx (fun m -> fail (m (Fail_goal_shape (GShape_repr_implicit)) []))
+        in
+        // The only sources of failure here should be a bind where the two types involved belong to
+        // different universes. Or a polymonadic bind with an universe greater than [u#8].
+        if hd = (`%combine_bind_t)
+        then begin
+            apply (`combine_bind);
+            // combinable_bind_t
+            let g = _cur_goal () in
+            {r with fgoals_comb = g :: r.fgoals_comb}
+        end else if hd = (`%combine_bind_pure_t)
+        then (apply (`combine_bind_pure); r)
 
-          else if hd = (`%combinable_ite_t)
-          then {r with fgoals_comb = g :: r.fgoals_comb}
-          else if hd = (`%C.steel_liftable)
-          then {r with fgoals_lift = g :: r.fgoals_lift}
-          else if hd = (`%combine_subcomp_t)
-          then {r with fgoals_subc = g :: r.fgoals_subc}
-          else if hd = (`%location_goal)
-          then (dismiss (); {r with fgoals_loca = g :: r.fgoals_loca})
-          else if hd = (`%Mem.inames)
-          then r // should be inferred as side effects of other goals
-          else cs_raise fr dummy_ctx (fun m -> fail (m (Fail_goal_shape (GShape_repr_implicit)) []))
-        end
+        else if hd = (`%combinable_ite_t)
+        then {r with fgoals_comb = g :: r.fgoals_comb}
+        else if hd = (`%C.steel_liftable)
+        then {r with fgoals_lift = g :: r.fgoals_lift}
+        else if hd = (`%combine_subcomp_t)
+        then {r with fgoals_subc = g :: r.fgoals_subc}
+        else if hd = (`%location_goal)
+        then (dismiss (); {r with fgoals_loca = g :: r.fgoals_loca})
+        else if hd = (`%Mem.inames)
+        then r // should be inferred as side effects of other goals
+        else cs_raise fr dummy_ctx (fun m -> fail (m (Fail_goal_shape (GShape_repr_implicit)) []))
+      end
       in
       mrepr_implicits_init fr gs r
 
@@ -996,8 +996,8 @@ let mrepr_implicits_tac () : Tac unit
     //let t = timer_start "implicits" true in
     let flags = collect_flags (goals ()) in
     let fr    = make_flags_record flags  in
-    //dump "implicits";
     iterAll (fun () -> try trefl () with _ -> ());
+    filter_already_solved ();
     iterAll intros';
 
     let fgoals = mrepr_implicits_init fr (goals ()) (Mkfilter_goals_r [] [] [] []) in
@@ -1039,8 +1039,8 @@ unfold let usteel_ghost  = SH.unit_steel_ghost
 let to_steel
       (#[apply (`[])] flags : list flag)
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
-      (r : unit ->
-           MRepr a SH.KSteel (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags)) LocationP)
+      (#loc : location_p)
+      (r : unit -> MRepr a SH.KSteel (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags)) loc)
   : usteel a pre post req ens
   =
     let r : repr a SH.KSteel (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags)) LocationP
@@ -1051,8 +1051,9 @@ let to_steel_a
       (#[apply (`[])] flags : list flag)
       (#a : Type) (#opened : Mem.inames)
       (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
+      (#loc : location_p)
       (r : unit ->
-           MRepr a (SH.KAtomic opened) (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags)) LocationP)
+           MRepr a (SH.KAtomic opened) (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags)) loc)
   : usteel_atomic a opened pre post req ens
   =
     let r : repr a (SH.KAtomic opened) (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags)) LocationP
@@ -1063,8 +1064,9 @@ let to_steel_g
       (#[apply (`[])] flags : list flag)
       (#a : Type) (#opened : Mem.inames)
       (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
+      (#loc : location_p)
       (r : unit ->
-           MReprGhost a opened (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags)) LocationP)
+           MReprGhost a opened (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags)) loc)
   : usteel_ghost a opened pre post req ens
   =
     let r : repr a (SH.KGhost opened) (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags)) LocationP

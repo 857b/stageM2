@@ -202,9 +202,9 @@ let __build_LCret
 /// By independence of [g_csm], we mean that the consumption of a [vprop'] cannot depend on [x], the [vprop']
 /// themselves are necessarily independent of [x] since they are from [env].
 /// We use a [LCsub] on [g] to force the consumption of [f_prd]. The independence is ensured by [eqs].
-/// We declare [g_csm] with type [list bool] instead of [csm_t (filter_mask (mask_not f_csm) env)] so that
+/// We declare [g_csm1] with type [list bool] instead of [csm_t (filter_mask (mask_not f_csm) env)] so that
 /// we can check by tactic (using [g_csm_len] that it has the correct length). Otherwise this proof obligation
-/// could be sent to the SMT.
+/// would be sent to the SMT.
 [@@ __cond_solver__]
 let __build_LCbind
       (env : vprop_list)
@@ -213,17 +213,19 @@ let __build_LCbind
       (cf : lin_cond env f f_csm f_prd)
       (g_csm0 : (x : a) -> csm_t (res_env env f_csm (f_prd x))) (g_prd0 : (x : a) -> prd_t b)
       (cg : (x : a) -> lin_cond (res_env env f_csm (f_prd x)) (g x) (g_csm0 x) (g_prd0 x))
-      (g_csm : list bool) (g_prd : prd_t b)
+      (g_csm1 : list bool) (g_prd : prd_t b)
       (eqs : (x : a) -> squash (
             let n0 = L.length (f_prd x) in
             (**) L.splitAt_length n0 (g_csm0 x);
             let g_csm0_f_prd : Ll.vec n0 bool = (L.splitAt n0 (g_csm0 x))._1 in
-            eq2 #(list bool) g_csm (L.splitAt (L.length (f_prd x)) (g_csm0 x))._2 /\
+            eq2 #(list bool) g_csm1 (L.splitAt (L.length (f_prd x)) (g_csm0 x))._2 /\
             g_prd == (fun (y : b) -> L.(g_prd0 x y @ filter_mask (mask_not g_csm0_f_prd) (f_prd x)))))
-      (g_csm_len : squash (L.length g_csm == mask_len (mask_not f_csm)))
+      (g_csm_len : squash (L.length g_csm1 == mask_len (mask_not f_csm)))
+      // This indirection is necessary for separately checking [g_csm1 : list bool] and [g_csm_len]
+      (g_csm : csm_t (filter_mask (mask_not f_csm) env))
+      (g_csm_eq : squash (eq2 #(csm_t (filter_mask (mask_not f_csm) env)) g_csm g_csm1))
   : lin_cond u#a u#p env (M.Tbind a b f g) (bind_csm env f_csm g_csm) g_prd
   =
-    let g_csm : csm_t (filter_mask (mask_not f_csm) env) = g_csm in
     LCbind env #a #b #f #g
       f_csm f_prd cf
       g_csm g_prd
@@ -285,11 +287,13 @@ let __build_LCbindP
       (a : Type) (b : Type) (wp : pure_wp a) (g : a -> M.prog_tree b)
       (csm0 : (x : a) -> csm_t env) (prd0 : (x : a) -> prd_t b)
       (cg : (x : a) -> lin_cond env (g x) (csm0 x) (prd0 x))
-      (csm : list bool) (prd : prd_t b)
+      (csm1 : list bool) (prd : prd_t b)
       // Since we use [__defer_sig_unification], it is probably not necessary to do this indirection,
       // but it allows to point the dependency on x in the failure message
-      (eqs : (x : a) -> squash (eq2 #(list bool) csm (csm0 x) /\ prd == prd0 x))
-      (csm_len : squash (L.length csm == L.length env))
+      (eqs : (x : a) -> squash (eq2 #(list bool) csm1 (csm0 x) /\ prd == prd0 x))
+      (csm_len : squash (L.length csm1 == L.length env))
+      (csm : csm_t env)
+      (csm_eq : squash (eq2 #(csm_t env) csm csm1))
   : lin_cond u#a u#p env (M.TbindP a b wp g) csm prd
   =
     LCbindP env #a #b #wp #g csm prd (fun x -> eqs x; cg x)
@@ -390,7 +394,7 @@ let rec build_LCbind fr ctx prd_hint_b : Tac unit
     let x = intro () in
     norm_lc ();
     build_lin_cond fr (ctx_path_node ctx 1) prd_hint_b;
-    // [g_csm <- ...], [g_prd <- ...]
+    // [g_csm1 <- ...], [g_prd <- ...]
     let x = intro () in
     norm_lc ();
     split ();
@@ -400,6 +404,10 @@ let rec build_LCbind fr ctx prd_hint_b : Tac unit
       cs_try (fun () -> unify_recheck SMT) fr ctx (fun m -> fail (m (Fail_dependency "prd" x) []));
     // [g_csm_len]
     norm_lc ();
+    trefl ();
+    // [g_csm <- g_csm1]
+    //   [g_csm1] has already been checked with type [list bool] in the context of [g_csm] and [g_csm_len]
+    //   ensures that it has the correct length. We should not need to retypecheck g_csm.
     trefl ()
 
 and build_LCbindP fr ctx prd_hint_b : Tac unit
@@ -408,15 +416,17 @@ and build_LCbindP fr ctx prd_hint_b : Tac unit
     // cg
     let x = intro () in
     build_lin_cond fr (ctx_path_node ctx 0) prd_hint_b;
-    // [csm <- ...], [prd <- ...]
+    // [csm1 <- ...], [prd <- ...]
     let x = intro () in
     norm_lc ();
     split ();
       let ctx = ctx_set_loc ctx "in the bindP statement" in
       cs_try (fun () -> unify_recheck SMT) fr ctx (fun m -> fail (m (Fail_dependency "csm" x) []));
       cs_try (fun () -> unify_recheck SMT) fr ctx (fun m -> fail (m (Fail_dependency "prd" x) []));
-    // csm_len
+    // [csm_len]
     norm_lc ();
+    trefl ();
+    // [csm <- csm1]
     trefl ()
 
 and build_LCif fr ctx prd_hint_b : Tac unit

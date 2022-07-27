@@ -614,3 +614,7 @@ let test_for_loop_1 (r0 r1 : ref U32.t)
 // time SF2Fun    : 12ms
 // time Fun_wp    : 1473ms
 // total time : 14654ms
+
+
+// in batch mode, F* raise a warning 340:
+// Unfolding name which is marked as a plugin: frame_vc_norm

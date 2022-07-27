@@ -266,6 +266,35 @@ val __build_to_repr_t_lem
   : squash (SE.reveal_equiv p (vprop_of_list r_p);
            (SE.mk_rmem p h) v == vprop_of_list_sel r_p h i)
 
+private
+let rec m_length (#a : Type) (l : list a) : n : nat {n == L.length l}
+  = match l with
+  | []    -> 0
+  | _ :: l -> 1 + m_length l
+
+private
+let rec m_index (#a : Type) (l : list a) (i : Ll.dom l) : x : a {x == L.index l i}
+  = let hd :: tl = l in
+    if i = 0 then hd else m_index tl (i-1)
+
+let sl_get
+      (#vs : vprop_list) (sl : sl_f vs) (i : int { 0 <= i /\ i < m_length vs }) (t : Type { (m_index vs i).t == t })
+  : t
+  = sl i
+
+private
+let sl_get_wrap (#vs : vprop_list) (sl : sl_f vs) (i : Ll.dom vs)
+  : (L.index vs i).t
+  = sl_get sl i (m_index vs i).t
+
+private
+let __normal_sl_get : list norm_step = [
+  delta_only [`%sl_get_wrap; `%m_length; `%m_index; `%SE.Mkvprop'?.t];
+  delta_attr [`%SE.__steel_reduce__];
+  delta_qualifier ["unfold"];
+  iota; zeta; primops
+]
+
 // p : SE.rmem v -> GTot t ?
 let hpred_to_vpl_p
       (v : SE.vprop) (vs : vprop_list {v `SE.equiv` vprop_of_list vs})
@@ -288,7 +317,7 @@ let __build_hpred_to_vpl
                (sl_eq : ((u : SE.vprop{SE.can_be_split v u}) -> squash (SE.VUnit? u) ->
                         (i : elem_index (SE.VUnit?._0 u) vs) ->
                         (i' : int) -> (_ : squash (i' == i)) ->
-                        squash (h u == sl i'))) ->
+                        squash (h u == sl_get_wrap sl i'))) ->
                squash (p' sl == p h))
   : hpred_to_vpl v vs p
   =
@@ -316,7 +345,7 @@ let __build_to_repr_t
                              (i : elem_index (SE.VUnit?._0 v) r_pre) ->
                              // This indirection is needed so that [apply_raw] presents a goal for [i]
                              (i' : int) -> (_ : squash (i' == i)) ->
-                             squash (h0 v == sl0 i'))) ->
+                             squash (h0 v == sl_get_wrap sl0 i'))) ->
                     squash (r_req sl0 == req h0))
 
       (#r_ens  : M.ens_t r_pre a r_post)
@@ -326,11 +355,11 @@ let __build_to_repr_t
                    (sl0_eq : ((v : SE.vprop{SE.can_be_split pre v}) -> squash (SE.VUnit? v) ->
                              (i : elem_index (SE.VUnit?._0 v) r_pre) ->
                              (i' : int) -> (_ : squash (i' == i)) ->
-                             squash (h0 v == sl0 i'))) ->
+                             squash (h0 v == sl_get_wrap sl0 i'))) ->
                    (sl1_eq : ((v : SE.vprop{SE.can_be_split (post x) v}) -> squash (SE.VUnit? v) ->
                              (i : elem_index (SE.VUnit?._0 v) (r_post x)) ->
                              (i' : int) -> (_ : squash (i' == i)) ->
-                             squash (h1 v == sl1 i'))) ->
+                             squash (h1 v == sl_get_wrap sl1 i'))) ->
                    squash (r_ens sl0 x sl1 == ens h0 x h1))
 
   : M.to_repr_t a pre post req ens
@@ -401,9 +430,24 @@ let apply_rew fr ctx (eq_lem : term)
     norm [delta_attr [`%__cond_solver__; `%__tac_helper__]];
     trefl ()
 
+/// Solves the goal [?p' sl == p h] by unifying [?p'] and recheck the solution.
+/// Rechecking the solution is needed because the existence of a [sl_f vs] does not imply the existence of
+/// a [rmem v] (with [v `equiv` vprop_of_list vs]) because [SE.rmem] gives a selector value for any [vprop] that is
+/// implied ([Mem.slimp]) by [v] whereas [sl_f vs] only gives the selector values of the (syntactic) atomic
+/// vprop in [vs].
+private
+let unify_recheck_spec () : Tac unit
+  =
+    focus (fun () ->
+      norm __normal_sl_get;
+      unify_recheck Goal;
+      iterAll (fun () -> norm __normal_sl_get; try trivial () with _ -> smt ())
+    )
+
 /// Solves a goal [hpred_to_vpl v vs p]
 let build_hpred_to_vpl fr ctx : Tac unit
   =
+    build_then_norm_by begin fun () ->
     apply (`__build_hpred_to_vpl);
     // p'_eq
     let h  = intro () in let sl = intro () in
@@ -414,14 +458,15 @@ let build_hpred_to_vpl fr ctx : Tac unit
     ctrl_rewrite TopDown ctrl
     begin fun () ->
       try apply_rew fr ctx eq
-      with _ -> trefl () // if we reach this, there will be an error in the [trefl] after the [ctrl_rewrite],
-                        // but waiting to be there can give a better error dump
+      with _ -> trefl ()
     end;
-    cs_try trefl fr ctx (fun m -> fail (m Fail_to_repr_t []))
+    cs_try unify_recheck_spec fr ctx (fun m -> fail (m Fail_to_repr_t []))
+    end (fun () -> norm [delta_only [`%__build_hpred_to_vpl; `%sl_get]])
 
 /// Solves a goal [to_repr_t a pre post req ens]
 let build_to_repr_t fr ctx : Tac unit
   =
+    build_then_norm_by begin fun () ->
     let u_r_pre  = fresh_uvar None in
     let u_r_post = fresh_uvar None in
     let u_r_req  = fresh_uvar None in
@@ -457,10 +502,10 @@ let build_to_repr_t fr ctx : Tac unit
       ctrl_rewrite TopDown ctrl
       begin fun () ->
         try apply_rew fr ctx_req eq0
-        with _ -> trefl () // if we reach this, there will be an error in the [trefl] after the [ctrl_rewrite],
+        with _ -> trefl () // if we reach this, there will be an error in the unification after the [ctrl_rewrite],
                           // but waiting to be there can give a better error dump
       end;
-      cs_try trefl fr ctx_req (fun m -> fail (m Fail_to_repr_t []));
+      cs_try unify_recheck_spec fr ctx_req (fun m -> fail (m Fail_to_repr_t []));
 
     (* [r_ens] *)
     let ctx_ens = ctx_app_loc ctx "in the ensures" in
@@ -479,7 +524,8 @@ let build_to_repr_t fr ctx : Tac unit
         try apply_rew fr ctx_ens eq1 with | _ ->
         trefl ()
       end;
-      cs_try trefl fr ctx_ens (fun m -> fail (m Fail_to_repr_t []))
+      cs_try unify_recheck_spec fr ctx_ens (fun m -> fail (m Fail_to_repr_t []))
+    end (fun () -> norm [delta_only [`%__build_to_repr_t; `%sl_get]])
 
 #pop-options
 (**) private val __end_opt_1 : unit
@@ -1260,24 +1306,7 @@ let __build_spec_find_ro
             g_eq x;
             ograph_of_sl_eqs_spec (ens_r_es x) i j
           end
-      )
-
-[@@ __tac_helper__]
-let __build_then_norm (#a : Type) (x : a) (y : a) (#_ : squash (y == x))
-  : a
-  = y
-
-let build_then_norm_by #a #b (t : unit -> Tac a) (n : a -> Tac b) : Tac b
-  =
-    apply_raw (`__build_then_norm);
-    // x
-    let xa = t () in
-    // y <- x
-    dismiss ();
-    let xb = n xa in
-    trefl ();
-    xb
-    
+      )    
 
 /// Solves a goal [M.spec_find_ro a pre post req ens]
 let build_spec_find_ro () : Tac unit
