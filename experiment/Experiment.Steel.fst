@@ -154,7 +154,7 @@ let __normal_M : list norm_step = [
               `%L.map; `%SE.Mkvprop'?.t; `%UV.lift_dom];
   delta_attr [`%__tac_helper__; `%__repr_M__; `%SE.__reduce__];
   delta_qualifier ["unfold"];
-  iota; zeta
+  iota; zeta; unascribe
 ]
 
 let __normal_lc_sub_push : list norm_step = [
@@ -165,7 +165,7 @@ let __normal_lc_sub_push : list norm_step = [
               `%Perm.perm_f_cons_snoc]);
   delta_attr [`%LV.__lin_cond__; `%Msk.__mask__; `%__tac_helper__];
   delta_qualifier ["unfold"];
-  iota; zeta; primops
+  iota; zeta; primops; unascribe
 ]
 
 let __normal_LV2SF : list norm_step = [
@@ -179,14 +179,14 @@ let __normal_LV2SF : list norm_step = [
               `%Mktuple2?._1; `%Mktuple2?._2];
   delta_attr [`%__LV2SF__; `%LV.__lin_cond__; `%Msk.__mask__; `%__tac_helper__; `%SE.__reduce__];
   delta_qualifier ["unfold"];
-  iota; zeta; primops
+  iota; zeta; primops; unascribe
 ]
 
 let __normal_Fun : list norm_step = [
   delta_only [`%SF2Fun.repr_Fun_of_SF;
               `%SF2Fun.shape_Fun_of_SF; `%SF.Mkprog_shape?.post_len; `%SF.Mkprog_shape?.shp];
   delta_qualifier ["unfold"];
-  iota; zeta; primops
+  iota; zeta; primops; unascribe
 ]
 
 let __normal_Fun_elim_returns_0 : list norm_step = [
@@ -203,7 +203,7 @@ let __normal_Fun_elim_returns_0 : list norm_step = [
               `%L.length; `%L.index; `%L.hd; `%L.tl; `%L.tail; `%Ll.initi
               ];
   delta_qualifier ["unfold"];
-  iota; zeta; primops
+  iota; zeta; primops; unascribe
 ]
 
 let __normal_Fun_elim_returns_1 : list norm_step = [
@@ -223,7 +223,7 @@ let __normal_Fun_spec : list norm_step = [
               `%Vpl.vprop_of_list; `%Vpl.vprop_of_list'];
   delta_qualifier ["unfold"];
   delta_attr [`%SE.__steel_reduce__; `%Msk.__mask__; `%UV.__universe__];
-  iota; zeta; primops
+  iota; zeta; primops; unascribe
 ]
 
 let __normal_vprop_list : list norm_step = [
@@ -232,12 +232,12 @@ let __normal_vprop_list : list norm_step = [
               `%Dl.index; `%Dl.initi_g;
               `%L.length; `%L.index; `%L.map; `%L.hd; `%L.tl; `%L.tail];
   delta_attr [`%SE.__reduce__];
-  iota; zeta; primops
+  iota; zeta; primops; unascribe
 ]
 
 let __normal_extract : list norm_step = [
   delta_qualifier ["inline_for_extraction"; "unfold"];
-  iota; zeta; primops
+  iota; zeta; primops; unascribe
 ]
 
 
