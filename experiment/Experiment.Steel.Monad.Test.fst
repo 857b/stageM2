@@ -21,6 +21,7 @@ module Fun    = Experiment.Repr.Fun
 module Vpl    = Experiment.Steel.VPropList
 module Veq    = Experiment.Steel.VEquiv
 module GCb    = Experiment.Steel.GCombinators
+module Itf    = Experiment.Steel.Interface
 module ST2SF  = Experiment.Steel.Repr.ST_to_SF.Spec
 module SF2Fun = Experiment.Steel.Repr.SF_to_Fun
 
@@ -59,14 +60,14 @@ let test3_LV' (r0 r1 : ref U32.t)
       x <-- call read r0;
       call (write r1) U32.(x +%^ 1ul)
     ) #(_ by (mk_steel [Timer; Extract])) ())
-// time specs     : 84ms
-// time lin_cond  : 230ms
-// time sub_push  : 46ms
-// time LV2SF     : 14ms
-// time SF2Fun    : 3ms
-// time Fun_wp    : 16ms
-// time extract   : 156ms
-// total time : 549ms [450ms-700ms]
+// time specs     : 122ms
+// time lin_cond  : 242ms
+// time sub_push  : 42ms
+// time LV2SF     : 15ms
+// time SF2Fun    : 2ms
+// time Fun_wp    : 18ms
+// time extract   : 59ms
+// total time : 500ms [450ms-700ms]
 
 
 ////////// test_flatten //////////
@@ -153,7 +154,7 @@ let steel_read #a (r : ref a) () :
     (**) Vpl.intro_vpl_cons (vptr' r full_perm) [];
     Steel.Effect.Atomic.return x
 
-[@@ __test__; __reduce__]
+[@@ __test__; __reduce__; Itf.__repr_M__]
 inline_for_extraction
 let r_read (#a : Type0) (r : ref a) : M.repr SH.KSteel a =
   MC.repr_of_steel_r (M.Mkspec_r read_pre read_post (read_ro r) (read_req r) (read_ens r))
@@ -170,7 +171,7 @@ let steel_write #a (r : ref a) (x : a) ()
     write r x;
     (**) Vpl.intro_vpl_cons (vptr' r full_perm) []
 
-[@@ __test__; __reduce__]
+[@@ __test__; __reduce__; Itf.__repr_M__]
 inline_for_extraction
 let r_write #a (r : ref a) (x : a) : M.repr SH.KSteel unit =
   MC.repr_of_steel_r (M.Mkspec_r [vptr' r full_perm] (fun _ -> [vptr' r full_perm]) []
@@ -284,7 +285,7 @@ let _ =
 
 ////////// test3 //////////
 
-[@@ __reduce__]
+[@@ __reduce__; Itf.__repr_M__]
 inline_for_extraction
 let test3_M (r0 r1 : ref U32.t) : M.repr SH.KSteel unit = MC.(
   x <-- r_read r0;
@@ -568,8 +569,15 @@ let test_with_invariant_g (r0 : ghost_ref U32.t) (r1 : ref U32.t) (i : inv (ghos
       call_g ghost_read r0
     ))
     ) #(_ by (mk_steel [Timer; Extract])) ())
-// time extract : 2651ms
-// total time   : 3124ms
+// time specs     : 65ms
+// time lin_cond  : 233ms
+// time sub_push  : 162ms
+// time LV2SF     : 168ms
+// time SF2Fun    : 5ms
+// time Fun_wp    : 26ms
+// time extract   : 1419ms
+// total time : 2078ms
+
 
 
 inline_for_extraction
@@ -582,15 +590,15 @@ let test_for_loop_0 (r0 : ref U32.t)
       begin fun i ->
         return U.Unit'
       end
-    ) #(_ by (mk_steel [Timer; Extract])) ())
-// time specs     : 18ms
-// time lin_cond  : 42ms
-// time sub_push  : 43ms
-// time LV2SF     : 38ms
-// time SF2Fun    : 3ms
+    ) #(_ by (mk_steel [Timer; Extract; Dump Stage_Extract])) ())
+// time specs     : 54ms
+// time lin_cond  : 60ms
+// time sub_push  : 46ms
+// time LV2SF     : 45ms
+// time SF2Fun    : 4ms
 // time Fun_wp    : 10ms
-// time extract   : 252ms
-// total time : 406ms
+// time extract   : 174ms
+// total time : 393ms
 
 inline_for_extraction
 let test_for_loop_1 (r0 r1 : ref U32.t)
@@ -607,13 +615,14 @@ let test_for_loop_1 (r0 r1 : ref U32.t)
         return U.Unit'
       end
     ) #(_ by (mk_steel [Timer])) ())
-// time specs     : 83ms
-// time lin_cond  : 560ms
-// time sub_push  : 5147ms
-// time LV2SF     : 7379ms
-// time SF2Fun    : 12ms
-// time Fun_wp    : 1473ms
-// total time : 14654ms
+// time specs     : 133ms
+// time lin_cond  : 710ms
+//
+// time sub_push  : 2745ms
+// time LV2SF     : 2877ms
+// time SF2Fun    : 8ms
+// time Fun_wp    : 973ms
+// total time : 7446ms
 
 
 // in batch mode, F* raise a warning 340:

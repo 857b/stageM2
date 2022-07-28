@@ -7,6 +7,7 @@ module M    = Experiment.Steel.Repr.M
 module Ll   = Learn.List
 module Fl   = Learn.FList
 module Veq  = Experiment.Steel.VEquiv
+module Itf  = Experiment.Steel.Interface
 module Perm = Learn.Permutation
 
 open Learn.List.Mask
@@ -242,7 +243,7 @@ val inv_lcsub_at_leaves__LCsub
 #push-options "--ifuel 1 --fuel 1 --z3rlimit 30"
 (**) private val __begin_opt_1 : unit
 
-[@@ strict_on_arguments [5]] (* strict on [lc] *)
+[@@ Itf.__extraction__; strict_on_arguments [5]] (* strict on [lc] *)
 inline_for_extraction
 let rec repr_M_of_LV
       (#env : vprop_list) (#a : Type) (#t : M.prog_tree a)
@@ -294,6 +295,7 @@ let rec repr_M_of_LV
 (**) private val __end_opt_1 : unit
 
 #push-options "--ifuel 0 --fuel 0"
+[@@ Itf.__extraction__]
 inline_for_extraction
 let repr_M_of_LV_top
       (#a : Type) (#t : M.prog_tree a) (#pre : M.pre_t) (#post : M.post_t a)

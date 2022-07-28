@@ -1,6 +1,9 @@
 module Experiment.Steel.GCombinators
 
+// TODO? split fsti/fst
+
 module U      = Learn.Util
+module G      = FStar.Ghost
 module L      = FStar.List.Pure
 module M      = Experiment.Steel.Repr.M
 module LV     = Experiment.Steel.Repr.LV
@@ -782,7 +785,7 @@ let for_loop_steel_body
       (finish : U32.t)
       (inv  : (i : nat { i <= U32.v finish }) -> vprop_list)
       (invp : (i : nat { i <= U32.v finish }) -> sl_f (inv i) -> Type0)
-      (ro   : vprop_list)
+      (ro   : G.erased vprop_list)
       (req  : (i : U32.t { U32.v i < U32.v finish }) -> sl_f (inv (U32.v i)) -> sl_f ro -> Type0)
       (ens  : ((i : U32.t { U32.v i < U32.v finish }) -> sl_f (inv (U32.v i)) -> sl_f (inv (U32.v i + 1)) ->
                sl_f ro -> Type0))
@@ -790,7 +793,7 @@ let for_loop_steel_body
                M.spc_steel_t u#a SH.KSteel #U.unit'
                  (M.Mkspec_r (inv (U32.v i)) (fun _ -> inv (U32.v i + 1)) ro
                              (req i) (fun sl0 _ sl1 sl_ro -> ens i sl0 sl1 sl_ro)))
-      (ro0 : Ghost.erased (sl_f ro))
+      (ro0 : G.erased (sl_f ro))
       (_ : squash (for_loop_preserve finish inv invp ro req ens ro0))
       (i : U32.t { U32.v i < U32.v finish })
   : Steel unit
@@ -817,7 +820,7 @@ let for_loop_steel
       (start : U32.t) (finish : U32.t { U32.v start <= U32.v finish })
       (inv  : (i : nat { i <= U32.v finish }) -> vprop_list)
       (invp : (i : nat { i <= U32.v finish }) -> sl_f (inv i) -> Type0)
-      (ro   : vprop_list)
+      (ro   : G.erased vprop_list)
       (req  : (i : U32.t { U32.v i < U32.v finish }) -> sl_f (inv (U32.v i)) -> sl_f ro -> Type0)
       (ens  : ((i : U32.t { U32.v i < U32.v finish }) -> sl_f (inv (U32.v i)) -> sl_f (inv (U32.v i + 1)) ->
                sl_f ro -> Type0))

@@ -87,7 +87,7 @@ let prog_LV_to_Fun_equiv_M
             let _ = mintros () in apply_lemma (``@lem_ens))
 #pop-options
 
-
+[@@ __extraction__]
 inline_for_extraction
 let prog_LV_to_Fun_extract
       (#ek : SH.effect_kind) (#a : Type) (t : M.repr ek a)
@@ -103,7 +103,7 @@ let prog_LV_to_Fun_extract
   =
     let tr = t.repr_tree in
     let mc = LV2M.repr_M_of_LV_top lc in
-    U.cast _ (M.repr_steel_subcomp ek _ _ req ens
+    U.cast _ (M.repr_steel_subcomp ek #a #pre #post (M.tree_req _ mc) (M.tree_ens _ mc) req ens
       (fun sl0       -> let _ =
         let f = prog_LV_to_Fun t.repr_tree lc sl0 in
         sub sl0;
@@ -128,6 +128,7 @@ let prog_LV_to_Fun_extract
       (t.repr_steel pre (U.eta post) mc))
 
 #push-options "--ifuel 0 --fuel 0"
+[@@ __extraction__]
 inline_for_extraction
 let prog_LV_to_Fun_extract_wp
       (#ek : SH.effect_kind) (#a : Type) (t : M.repr ek a)
@@ -209,7 +210,7 @@ let __normal_Fun_elim_returns_0 : list norm_step = [
 let __normal_Fun_elim_returns_1 : list norm_step = [
   delta_only [`%SF2Fun.delayed_sl_uncurrify];
   delta_qualifier ["unfold"];
-  iota; zeta; primops
+  iota; zeta; primops; unascribe
 ]
 
 let __normal_Fun_spec : list norm_step = [
@@ -236,7 +237,8 @@ let __normal_vprop_list : list norm_step = [
 ]
 
 let __normal_extract : list norm_step = [
-  delta_qualifier ["inline_for_extraction"; "unfold"];
+  delta_attr [`%__repr_M__; `%__extraction__];
+  delta_qualifier ["unfold"];
   iota; zeta; primops; unascribe
 ]
 
@@ -249,7 +251,7 @@ let extract (a : Type) (pre : M.pre_t) (post : M.post_t a) (req : M.req_t pre) (
   : Type
   = M.repr_steel_t SH.KSteel a pre post req ens
 
-[@@ __tac_helper__]
+[@@ __tac_helper__; __extraction__]
 inline_for_extraction
 let __solve_by_wp_LV
       (#a : Type) (t : M.repr SH.KSteel a)

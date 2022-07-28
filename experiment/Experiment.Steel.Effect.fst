@@ -264,21 +264,29 @@ inline_for_extraction noextract
 let ite_steel_thn
       (a : Type) (ek : SH.effect_kind) (guard : bool) (thn : M.prog_tree a) (els : M.prog_tree a)
       (pre : M.pre_t) (post : M.post_t a) (cthn : M.tree_cond thn pre post) (cels : M.tree_cond els pre post)
-      ($rthn : M.repr_steel_t ek a pre post (M.tree_req thn cthn) (M.tree_ens thn cthn))
+      ($rthn : C.repr_steel_tc ek cthn)
       (_ : squash guard)
-  : (let c = M.TCif #a #guard #thn #els pre post cthn cels in
-     M.repr_steel_t ek a pre post (M.tree_req _ c) (M.tree_ens _ c))
-  = M.repr_steel_subcomp ek _ _ _ _ (fun _ -> ()) (fun _ _ _ -> ()) rthn
+  : C.repr_steel_tc ek (M.TCif #a #guard #thn #els pre post cthn cels)
+  =
+    let cif = M.TCif #a #guard #thn #els pre post cthn cels in
+    M.repr_steel_subcomp ek #a #pre #post
+       (M.tree_req _ cthn) (M.tree_ens _ cthn)
+       (M.tree_req _  cif) (M.tree_ens _  cif)
+       (fun _ -> ()) (fun _ _ _ -> ()) rthn
 
 inline_for_extraction noextract
 let ite_steel_els
       (a : Type) (ek : SH.effect_kind) (guard : bool) (thn : M.prog_tree a) (els : M.prog_tree a)
       (pre : M.pre_t) (post : M.post_t a) (cthn : M.tree_cond thn pre post) (cels : M.tree_cond els pre post)
-      ($rels : M.repr_steel_t ek a pre post (M.tree_req els cels) (M.tree_ens els cels))
+      ($rels : C.repr_steel_tc ek cels)
       (_ : squash (~ guard))
-  : (let c = M.TCif #a #guard #thn #els pre post cthn cels in
-     M.repr_steel_t ek a pre post (M.tree_req _ c) (M.tree_ens _ c))
-  = M.repr_steel_subcomp ek _ _ _ _ (fun _ -> ()) (fun _ _ _ -> ()) rels
+  : C.repr_steel_tc ek (M.TCif #a #guard #thn #els pre post cthn cels)
+  =
+    let cif = M.TCif #a #guard #thn #els pre post cthn cels in
+    M.repr_steel_subcomp ek #a #pre #post
+       (M.tree_req _ cels) (M.tree_ens _ cels)
+       (M.tree_req _  cif) (M.tree_ens _  cif)
+       (fun _ -> ()) (fun _ _ _ -> ()) rels
 
 
 let ite_combine_thn
@@ -709,23 +717,17 @@ let combinable_bind_steel (a0 a1 : Type u#a)
 let combinable_bind_ghostI (a0 a1 : Type u#a) (opened : Mem.inames)
   : combinable_bind_repr a0 a1 (SH.KGhostI opened) (SH.KGhostI opened) (SH.KGhostI opened)
   by (norm [delta_attr [`%__repr_M__]])
-  = fun f g -> C.bind_ek (SH.KGhostI opened) (SH.KGhostI opened) (SH.KGhostI opened)
-      (fun a b f g pre itm post cf cg rf rg -> C.bind_ghostI_steel a b opened f g pre itm post cf cg rf rg)
-      f g
+  = fun f g -> C.bind_ek _ _ _ (C.bind_steel__ghostI  opened) f g
 
 let combinable_bind_atomicL (a0 a1 : Type u#a) (opened : Mem.inames)
   : combinable_bind_repr a0 a1 (SH.KAtomic opened) (SH.KGhostI opened) (SH.KAtomic opened)
   by (norm [delta_attr [`%__repr_M__]])
-  = fun f g -> C.bind_ek (SH.KAtomic opened) (SH.KGhostI opened) (SH.KAtomic opened)
-      (fun a b f g pre itm post cf cg rf rg -> C.bind_atomic_ghost_steel a b opened f g pre itm post cf cg rf rg)
-      f g
+  = fun f g -> C.bind_ek _ _ _ (C.bind_steel__atomic_ghost opened) f g
 
 let combinable_bind_atomicR (a0 a1 : Type u#a) (opened : Mem.inames)
   : combinable_bind_repr a0 a1 (SH.KGhostI opened) (SH.KAtomic opened) (SH.KAtomic opened)
   by (norm [delta_attr [`%__repr_M__]])
-  = fun f g -> C.bind_ek (SH.KGhostI opened) (SH.KAtomic opened) (SH.KAtomic opened)
-      (fun a b f g pre itm post cf cg rf rg -> C.bind_ghost_atomic_steel a b opened f g pre itm post cf cg rf rg)
-      f g
+  = fun f g -> C.bind_ek _ _ _ (C.bind_steel__ghost_atomic opened) f g
 
 let combinable_bind_ghost (a0 a1 : Type u#a) (opened : Mem.inames)
   : combinable_bind_repr a0 a1 (SH.KGhost opened) (SH.KGhost opened) (SH.KGhost opened)

@@ -16,6 +16,8 @@ irreducible let __cond_solver__ : unit = ()
 /// Normalized during the LV2SF phase.
 irreducible let __LV2SF__ : unit = ()
 
+/// Normalized for the extraction
+irreducible let __extraction__ : unit = ()
 
 (**** Options *)
 
