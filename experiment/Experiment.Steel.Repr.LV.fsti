@@ -272,6 +272,15 @@ let gen_sf (#a : Type u#a) (s : M.spec_r a) : Type
       (forall (x : a) (sl1 : sl_f (s.spc_post x)) .
         SF.tree_ens t x sl1 <==> s.spc_ens sl0 x sl1 sl_ro) }
 
+/// Functions generating [lc_gen_cond] and the [lcg_s] field must be marked [inline_for_extraction] and [__LV2SF__].
+/// Functions generating [lcg_sf] field must be marked [__LV2SF__].
+noeq
+type lc_gen_cond (a : Type u#a) (gen_c : (M.spec_r a -> Type u#(max a p 2))) = {
+  lcg_s  : M.spec_r a;
+  lcg_sh : gen_c lcg_s;
+  lcg_sf : gen_sf u#a u#p lcg_s;
+}
+
 (**) private val __begin_lin_cond : unit
 
 noeq
@@ -319,10 +328,9 @@ type lin_cond :
       (env : vprop_list) ->
       (#a : Type u#a) -> (#gen_tac : M.gen_tac_t) ->
       (#gen_c : (M.spec_r a -> Type u#(max a p 2))) ->
-      (s : M.spec_r a) -> (sh : gen_c s) ->
-      (pre_f : Perm.pequiv_list env (M.spc_pre1 s)) ->
-      (sf : gen_sf u#a u#p s) ->
-      lin_cond env (M.Tgen a gen_tac gen_c) (gen_csm pre_f) s.spc_post
+      (c : lc_gen_cond u#a u#p a gen_c) ->
+      (pre_f : Perm.pequiv_list env (M.spc_pre1 c.lcg_s)) ->
+      lin_cond env (M.Tgen a gen_tac gen_c) (gen_csm pre_f) c.lcg_s.spc_post
   | LCsub :
       (env : vprop_list) -> (#a : Type u#a) -> (#f : M.prog_tree a) ->
       (csm : csm_t env) -> (prd : prd_t a) ->
@@ -388,14 +396,13 @@ let match_lin_cond
                        (ensures fun _ -> True))
       (c_LCgen  : (a : Type u#a) -> (gen_tac : M.gen_tac_t) ->
                   (gen_c : (M.spec_r a -> Type u#(max a p 2))) ->
-                  (s : M.spec_r a) -> (sh : gen_c s) ->
-                  (pre_f : Perm.pequiv_list env (M.spc_pre1 s)) ->
-                  (sf : gen_sf s) ->
+                  (c : lc_gen_cond u#a u#p a gen_c) ->
+                  (pre_f : Perm.pequiv_list env (M.spc_pre1 c.lcg_s)) ->
 
-                  Pure (r _ _ _ _ (LCgen env #a #gen_tac #gen_c s sh pre_f sf))
+                  Pure (r _ _ _ _ (LCgen env #a #gen_tac #gen_c c pre_f))
                        (requires a0 == a /\ t0 == M.Tgen a gen_tac gen_c /\
-                                 csm0 == gen_csm pre_f /\ prd0 == s.spc_post /\
-                                 ct0 == LCgen env #a #gen_tac #gen_c s sh pre_f sf)
+                                 csm0 == gen_csm pre_f /\ prd0 == c.lcg_s.spc_post /\
+                                 ct0 == LCgen env #a #gen_tac #gen_c c pre_f)
                        (ensures fun _ -> True))
       (c_LCsub  : (a : Type u#a) -> (f : M.prog_tree a) ->
                   (csm : csm_t env) -> (prd : prd_t a) ->
@@ -414,7 +421,7 @@ let match_lin_cond
   | LCbind  env #a #b #f #g f_csm f_prd cf g_csm g_prd cg -> c_LCbind  a b f g f_csm f_prd cf g_csm g_prd cg
   | LCbindP env #a #b #wp #g csm prd cg                   -> c_LCbindP a b wp g csm prd cg
   | LCif    env #a #guard #thn #els csm prd cthn cels     -> c_LCif    a guard thn els csm prd cthn cels
-  | LCgen   env #a #gen_tac #gen_c s sh pre_f sf          -> c_LCgen   a gen_tac gen_c s sh pre_f sf
+  | LCgen   env #a #gen_tac #gen_c c pre_f                -> c_LCgen   a gen_tac gen_c c pre_f
   | LCsub   env #a #f csm prd cf csm' prd' prd_f          -> c_LCsub   a f csm prd cf csm' prd' prd_f
 
 
@@ -449,7 +456,8 @@ let rec tree_req
       wp (fun x -> tree_req (cg x) sl0)
   | LCif   env #a #guard csm prd cthn cels ->
       if guard then tree_req cthn sl0 else tree_req cels sl0
-  | LCgen env s _ pre_f _ ->
+  | LCgen env c pre_f ->
+      let s = c.lcg_s in
       let pre_sl = split_vars s.spc_pre s.spc_ro (extract_vars (Perm.perm_f_of_list pre_f) sl0) in
       s.spc_req pre_sl._1 pre_sl._2
   | LCsub  env #a #f csm prd cf csm' prd' prd_f ->
@@ -475,7 +483,8 @@ and tree_ens
       (exists (x:a) . as_ensures wp x /\ tree_ens (cg x) sl0 res sl1)
   | LCif   env #a #guard csm prd cthn cels ->
       if guard then tree_ens cthn sl0 res sl1 else tree_ens cels sl0 res sl1
-  | LCgen env s _ pre_f _ ->
+  | LCgen env c pre_f ->
+      let s = c.lcg_s in
       let pre_sl = split_vars s.spc_pre s.spc_ro (extract_vars (Perm.perm_f_of_list pre_f) sl0) in
       s.spc_ens pre_sl._1 res sl1 pre_sl._2
   | LCsub  env #a #f csm prd cf csm' prd' prd_f ->
@@ -505,8 +514,8 @@ let rec lcsub_at_leaves
       (ct : lin_cond u#a u#p env t csm prd)
   : Tot prop (decreases ct)
   = match ct with
-  | LCspec _ _ _ _ | LCret _ _ _ | LCgen _ _ _ _ _
-  | LCsub  _ _ _ (LCspec  _ _ _ _) _ _ _ | LCsub  _ _ _ (LCgen _ _ _ _ _) _ _ _ ->
+  | LCspec _ _ _ _ | LCret _ _ _ | LCgen _ _ _
+  | LCsub  _ _ _ (LCspec  _ _ _ _) _ _ _ | LCsub  _ _ _ (LCgen _ _ _) _ _ _ ->
            True
   | LCbind _ #a _ _ cf _ _ cg ->
            lcsub_at_leaves cf /\ (forall (x : a) . lcsub_at_leaves (cg x))
@@ -804,7 +813,7 @@ let rec lc_sub_push
       (ct : lin_cond u#a u#b env t csm prd)
   : Tot (lcsubp_tr ct) (decreases %[ct; 1])
   = match ct with
-  | LCspec _ _ _ _ | LCret  _ _ _ | LCgen _ _ _ _ _ -> ct
+  | LCspec _ _ _ _ | LCret  _ _ _ | LCgen _ _ _ -> ct
   | LCbind env f_csm f_prd cf g_csm g_prd cg ->
       LCbind env f_csm f_prd (lc_sub_push cf) g_csm g_prd (fun x -> lc_sub_push (cg x))
   | LCbindP env #a #b #wp csm0 prd0 cg ->
@@ -821,7 +830,7 @@ and lc_sub_push_aux
       (prd_f : ((x : a) -> Perm.pequiv_list (sub_prd env csm (prd x) csm') (prd' x)))
   : Tot (lcsubp_tr (LCsub env _ _ ct csm' prd' prd_f)) (decreases %[ct; 0])
   = match ct with
-  | LCspec _ _ _ _ | LCgen _ _ _ _ _ ->
+  | LCspec _ _ _ _ | LCgen _ _ _ ->
       LCsub _ _ _ ct csm' prd' prd_f
   | LCret  _ #a #x #sl_hint prd0 csm_f0 ->
       lcsubp_LCret env a x sl_hint prd0 csm_f0 csm' prd'

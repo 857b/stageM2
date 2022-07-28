@@ -87,7 +87,7 @@ let __build_slrewrite
         Ll.splitAt_index (L.length env) (LV.eij_of_perm_l pre_f));
       L.lemma_index_memP pre_f' i
     );
-    LV.LCgen env s (SlRewrite env env' [] ()) pre_f sf
+    LV.LCgen env (LV.Mklc_gen_cond s (SlRewrite env env' [] ()) sf) pre_f
 #pop-options
 
 let build_slrewrite (fr : flags_record) : Tac unit
@@ -238,7 +238,8 @@ let with_invariant_inner_spec_r
   : M.spec_r a
   = M.Mkspec_r L.(p @ pre) L.(fun x -> p @ post x) ro req ens
 
-[@@ __cond_solver__]
+[@@ __LV2SF__]
+inline_for_extraction
 let with_invariant_spec_r
      (#a : Type u#a) (p : vprop_list)
      (pre : M.pre_t) (post : M.post_t a) (ro : vprop_list)
@@ -312,7 +313,8 @@ let with_invariant_g_steel
   )
 #pop-options
 
-[@@ __cond_solver__]
+[@@ __LV2SF__]
+inline_for_extraction
 let with_invariant_spec_r_lc
      (#a : Type) (p : vprop_list) (#f : M.prog_tree a)
      (#env : vprop_list) (csm : LV.csm_t env) (#prd : LV.prd_t a)
@@ -411,6 +413,33 @@ let with_invariant_sf
 
       t
 
+[@@ __LV2SF__]
+inline_for_extraction
+let with_invariant_cond
+      (env : vprop_list)
+      (#a : Type) (#ek : SH.effect_kind) (f : M.repr ek a) (p : vprop)
+      (p' : vprop_list) (tp : vprop_to_list p p')
+      (csm : LV.csm_t env) (prd : LV.prd_t a)
+      (cf : (Msk.filter_mask_split_l p' env;
+             lin_cond_st u#a u#p L.(p' @ env) f.repr_tree
+               (Msk.mask_split_l (L.length p') (L.length env)) (fun _ -> p')
+               csm prd))
+  : LV.lc_gen_cond a (with_invariant_gen_c a ek f p)
+  =
+    let n_p'  = L.length p'                 in
+    let n_env = L.length env                in
+    let csm0  = Msk.mask_split_l n_p' n_env in
+    (**) LV.filter_csm_bind_g_csm' p' csm;
+    (**) LV.filter_bind_g_csm'     p' csm;
+    U.assert_by (Msk.mask_comp_or csm0 csm == LV.bind_g_csm' p' csm) (fun () ->
+      LV.bind_g_csm'_as_comp_or p' csm);
+    let pre = Msk.(filter_mask csm env)            in
+    let ro  = Msk.(filter_mask (mask_not csm) env) in
+    {
+      lcg_s  = with_invariant_spec_r_lc p' csm cf;
+      lcg_sh = WithInvariant p' tp pre prd ro (lc_req cf) (lc_ens cf) (lc_to_spc_steel_t f cf);
+      lcg_sf = with_invariant_sf       p' csm cf;
+    }
 
 [@@ __cond_solver__]
 let __build_with_invariant
@@ -431,19 +460,12 @@ let __build_with_invariant
     (**) LV.filter_bind_g_csm'     p' csm;
     U.assert_by (Msk.mask_comp_or csm0 csm == LV.bind_g_csm' p' csm) (fun () ->
       LV.bind_g_csm'_as_comp_or p' csm);
-    let pre = Msk.(filter_mask csm env)            in
-    let ro  = Msk.(filter_mask (mask_not csm) env) in
-    assert (lc_pre cf == L.(p' @ pre));
-    assert (lc_ro  cf == ro);
     let s  = with_invariant_spec_r_lc p' csm cf    in
-    let sf = with_invariant_sf        p' csm cf    in
     let pre_f : Perm.pequiv_list env (M.spc_pre1 s)
       = Perm.perm_f_to_list (Msk.mask_pequiv_append csm env)  in
     LV.gen_csm_pequiv_append env csm;
     assert (LV.gen_csm pre_f == csm);
-    LV.LCgen env s
-      (WithInvariant p' tp pre prd ro (lc_req cf) (lc_ens cf) (lc_to_spc_steel_t f cf))
-      pre_f sf
+    LV.LCgen env (with_invariant_cond env f p p' tp csm prd cf) pre_f
 
 let build_with_invariant_g (fr : flags_record) : Tac unit
   =
@@ -715,7 +737,40 @@ let for_loop_preserve_sf_sound
 
 
 #push-options "--z3rlimit 20"
-[@@ LV.__lin_cond__]
+[@@ __LV2SF__; __extraction__]
+inline_for_extraction
+let for_loop_cond
+      (env : vprop_list)
+      (start : U32.t) (finish : U32.t { U32.v start <= U32.v finish })
+      (inv  : (i : nat { i <= U32.v finish }) -> vprop_list)
+      (invp : (i : nat { i <= U32.v finish }) -> sl_f (inv i) -> Type0)
+      (body : (i : U32.t { U32.v i < U32.v finish }) -> M.repr u#a u#p SH.KSteel U.unit')
+      (ro : vprop_list)
+      (lc_body : (i : U32.t { U32.v i < U32.v finish }) ->
+                 (lc : for_loop_body_lc finish inv ro i (body i).repr_tree
+                  { LV.lcsub_at_leaves lc}))
+  : LV.lc_gen_cond u#a u#p U.unit' (for_loop_gen_c start finish inv invp body)
+  =
+    let req  = for_loop_body_req lc_body                  in
+    let ens  = for_loop_body_ens lc_body                  in
+    let lreq (sl_ro : sl_f ro)
+      : rq : Type0 { rq ==> for_loop_preserve finish inv invp ro req ens sl_ro }
+      = FStar.Classical.move_requires (for_loop_preserve_sf_sound invp lc_body) sl_ro;
+        for_loop_preserve_sf invp lc_body sl_ro           in
+    let s = for_loop_spec_r start finish inv invp ro lreq in
+    let body' (i : U32.t { U32.v i < U32.v finish })
+      : M.spc_steel_t u#a SH.KSteel #U.unit'
+                 (M.Mkspec_r (inv (U32.v i)) (fun _ -> inv (U32.v i + 1)) ro
+                             (req i) (fun sl0 _ sl1 sl_ro -> ens i sl0 sl1 sl_ro))
+      = for_loop_body_lem (lc_body i);
+        lc_to_spc_steel_t (body i) (lc_body i)            in
+    {
+      lcg_s  = s;
+      lcg_sh = ForLoop ro req ens lreq body';
+      lcg_sf = gen_sf_Tspec s
+    }
+
+[@@ __cond_solver__]
 let __build_for_loop
       (env : vprop_list)
       (start : U32.t) (finish : U32.t { U32.v start <= U32.v finish })
@@ -734,22 +789,8 @@ let __build_for_loop
   : LV.lin_cond u#a u#p env (M.Tgen U.unit' gen_tac (for_loop_gen_c start finish inv invp body))
                 (LV.eij_trg_mask pre_f) (fun _ -> inv (U32.v finish))
   =
-    let req  = for_loop_body_req lc_body                   in
-    let ens  = for_loop_body_ens lc_body                   in
-    let lreq (sl_ro : sl_f ro)
-      : rq : Type0 { rq ==> for_loop_preserve finish inv invp ro req ens sl_ro }
-      = FStar.Classical.move_requires (for_loop_preserve_sf_sound invp lc_body) sl_ro;
-        for_loop_preserve_sf invp lc_body sl_ro                 in
-    let s = for_loop_spec_r start finish inv invp ro lreq  in
-    let body' (i : U32.t { U32.v i < U32.v finish })
-      : M.spc_steel_t u#a SH.KSteel #U.unit'
-                 (M.Mkspec_r (inv (U32.v i)) (fun _ -> inv (U32.v i + 1)) ro
-                             (req i) (fun sl0 _ sl1 sl_ro -> ens i sl0 sl1 sl_ro))
-      = for_loop_body_lem (lc_body i);
-        lc_to_spc_steel_t (body i) (lc_body i)             in
-    let sf : LV.gen_sf s = gen_sf_Tspec s                  in
     (**) build_for_loop_pre_f_csm env (inv (U32.v start)) pre_f;
-    LV.LCgen env s (ForLoop ro req ens lreq body') pre_f' sf
+    LV.LCgen env (for_loop_cond env start finish inv invp body ro lc_body) pre_f'
 #pop-options
 
 let build_for_loop (fr : flags_record) : Tac unit

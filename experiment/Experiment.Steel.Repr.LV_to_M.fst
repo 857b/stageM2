@@ -295,7 +295,7 @@ let inv_lcsub_at_leaves__LCsub
       (fun (*LCbind*)  a b f g f_csm f_prd cf g_csm g_prd cg -> fun csm' prd' prd_f -> ())
       (fun (*LCbindP*) a b wp g csm0 prd0 cg -> fun csm1 prd1 prd_f -> ())
       (fun (*LCif*)    a guard thn els csm0 prd0 cthn cels -> fun csm1 prd1 prd_f -> ())
-      (fun (*LCgen*)   a gen_tac gen_c s sh pre_f sf -> fun csm2 prd2 prd_f2 -> ())
+      (fun (*LCgen*)   a gen_tac gen_c c pre_f -> fun csm2 prd2 prd_f2 -> ())
       (fun (*LCsub*)   a f csm0 prd0 cf csm1 prd1 prd_f1 -> fun csm2 prd2 prd_f2 -> ())
       csm' prd' prd_f
 #pop-options
@@ -392,7 +392,7 @@ let norm_sound_LV2M () : Tac unit =
                     `%M.tree_ens; `%M.spec_ens; `%M.return_ens; `%M.bind_ens; `%M.gen_ens;
                     `%Veq.vequiv_of_perm; `%Veq.vequiv_refl;
                     `%Veq.Mkvequiv?.veq_req; `%Veq.Mkvequiv?.veq_ens; `%Veq.Mkvequiv?.veq_eq; `%Veq.veq_ens1;
-                    `%tree_req; `%tree_ens;
+                    `%tree_req; `%tree_ens; `%Mklc_gen_cond?.lcg_s;
                     `%res_env_app; `%res_env_f; `%res_env; `%sub_prd_sl];
         delta_attr [`%Learn.Tactics.Util.__tac_helper__];
         iota; zeta]
@@ -575,7 +575,7 @@ let sound_repr_M_of_LV__LCgen
       (sh : gen_c (M.Mkspec_r pre post ro req ens))
       (pre_f : Perm.pequiv_list env L.(pre @ ro))
       (sf : gen_sf (M.Mkspec_r pre post ro req ens))
-  : squash (sound_repr_M_of_LV (LCgen env #a #gen_tac #gen_c (M.Mkspec_r pre post ro req ens) sh pre_f sf))
+  : squash (sound_repr_M_of_LV (LCgen env #a #gen_tac #gen_c (Mklc_gen_cond (M.Mkspec_r pre post ro req ens) sh sf) pre_f))
   =
     intro_sound_M_of_LV _ _
       (fun sl0 ->
@@ -736,7 +736,7 @@ let sound_repr_M_of_LV__LCsub_LCgen
                 (sub_prd env (eij_trg_mask (eij_split pre ro (eij_of_perm_l pre_f))._1) (post x) csm1)
                 (prd1 x))
   : (let lc = LCsub env ((eij_trg_mask (eij_split pre ro (eij_of_perm_l pre_f))._1)) post
-                    (LCgen env #a #gen_tac #gen_c (M.Mkspec_r pre post ro req ens) sh pre_f sf)
+                    (LCgen env #a #gen_tac #gen_c (Mklc_gen_cond (M.Mkspec_r pre post ro req ens) sh sf) pre_f)
                     csm1 prd1 prd_f1
      in squash (lcsub_at_leaves lc /\ sound_repr_M_of_LV lc))
   = introduce _ /\ _
@@ -824,8 +824,7 @@ let rec repr_M_of_LV_sound
         (repr_M_of_LV_sound cthn)
         (repr_M_of_LV_sound cels)
     end
-    begin fun (*LCgen*)   a gen_tac gen_c s sh pre_f sf -> fun _ ->
-      let M.Mkspec_r pre post ro req ens = s in
+    begin fun (*LCgen*)   a gen_tac gen_c (Mklc_gen_cond (M.Mkspec_r pre post ro req ens) sh sf) pre_f -> fun _ ->
       sound_repr_M_of_LV__LCgen env a gen_tac gen_c pre post ro req ens sh pre_f sf
     end
     begin fun (*LCsub*)  a0 f0 csm0 prd0 cf csm1 prd1 prd_f1 -> fun _ ->
@@ -845,8 +844,8 @@ let rec repr_M_of_LV_sound
       (fun (*LCbind*)  a b f g f_csm f_prd cf g_csm g_prd cg -> fun _ _ _ _ -> false_elim ())
       (fun (*LCbindP*) a b wp g csm prd cg -> fun _ _ _ _ -> false_elim ())
       (fun (*LCif*)    a guard thn els csm prd cthn cels -> fun _ _ _ _ -> false_elim ())
-      begin fun (*LCgen*)   a gen_tac gen_c s sh pre_f sf -> fun csm1 prd1 prd_f1 _ ->
-        let M.Mkspec_r pre post ro req ens = s in
+      begin fun (*LCgen*) a gen_tac gen_c (Mklc_gen_cond (M.Mkspec_r pre post ro req ens) sh sf) pre_f ->
+            fun csm1 prd1 prd_f1 _ ->
         sound_repr_M_of_LV__LCsub_LCgen env a gen_tac gen_c pre post ro req ens sh pre_f sf csm1 prd1 prd_f1
       end
       (fun (*LCsub*)   a0 f0 csm0 prd0 cf csm1 prd1 prd_f1 -> fun _ _ _ _ -> false_elim ())

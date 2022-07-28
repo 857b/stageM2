@@ -49,7 +49,7 @@ let rec repr_SF_of_LV_sound
       repr_SF_of_LV_sound cthn sl0;
       repr_SF_of_LV_sound cels sl0
     end
-    (fun (*LCgen*)  a gen_tac gen_c s sh pre_f sf -> fun sl0 -> ())
+    (fun (*LCgen*)  a gen_tac gen_c {lcg_s; lcg_sf} pre_f -> fun sl0 -> ())
     begin fun (*LCsub*)  a f csm0 prd0 cf csm1 prd1 prd_f1 -> fun sl0 ->
       repr_SF_of_LV_sound cf sl0
     end sl0

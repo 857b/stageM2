@@ -150,8 +150,9 @@ let rec repr_SF_of_LV
       SF.Tif   a guard (M.post_sl_t prd)
                (repr_SF_of_LV cthn sl0)
                (repr_SF_of_LV cels sl0)
-  | LCgen env #a #sp s sh pre_f sf ->
-      let sl0s = split_vars_l s.spc_pre s.spc_ro (extract_vars_l pre_f sl0) in
+  | LCgen env #a #sp {lcg_s = s; lcg_sf = sf} pre_f ->
+      // We explicit [M.spc_pre1 s], otherwise it would have been inferred to [M.spc_pre1 (...).lcg_s]
+      let sl0s = split_vars_l s.spc_pre s.spc_ro (extract_vars_l #env #(M.spc_pre1 s) pre_f sl0) in
       sf sl0s._1 sl0s._2
   | LCsub  env csm0 prd0 cf csm1 prd1 prd_f ->
       SF.Tbind a a (M.post_sl_t prd0) (M.post_sl_t prd1)

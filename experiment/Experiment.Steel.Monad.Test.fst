@@ -34,6 +34,20 @@ open Experiment.Steel
 
 #push-options "--ide_id_info_off"
 
+inline_for_extraction
+let test_for_loop_00 (r0 : ref U32.t)
+  : F.steel (U.unit') (vptr r0) (fun _ -> vptr r0)
+            (requires fun h0 -> True)
+            (ensures  fun h0 _ h1 -> True)
+  = F.(to_steel (
+      GCb.for_loop 0ul 10ul (fun _ -> [vptr' r0 full_perm]) (fun i v -> True)
+      begin fun i ->
+        return U.Unit'
+      end
+    ) #(_ by (mk_steel [Timer; Extract; Dump Stage_Extract])) ())
+// Failure("Universe variable not found: u@15") on a norm
+
+
 irreducible let __test__ : unit = ()
 let norm_test () = T.norm [delta_qualifier ["unfold"]; delta_attr [`%__test__]]
 
@@ -567,17 +581,7 @@ let test_with_invariant_g (r0 : ghost_ref U32.t) (r1 : ref U32.t) (i : inv (ghos
   = F.(to_steel (
     MC.ghost_to_steel (GCb.with_invariant_g i (
       call_g ghost_read r0
-    ))
-    ) #(_ by (mk_steel [Timer; Extract])) ())
-// time specs     : 65ms
-// time lin_cond  : 233ms
-// time sub_push  : 162ms
-// time LV2SF     : 168ms
-// time SF2Fun    : 5ms
-// time Fun_wp    : 26ms
-// time extract   : 1419ms
-// total time : 2078ms
-
+    ))) #(_ by (mk_steel [Timer; Extract])) ())
 
 
 inline_for_extraction
@@ -590,15 +594,7 @@ let test_for_loop_0 (r0 : ref U32.t)
       begin fun i ->
         return U.Unit'
       end
-    ) #(_ by (mk_steel [Timer; Extract; Dump Stage_Extract])) ())
-// time specs     : 54ms
-// time lin_cond  : 60ms
-// time sub_push  : 46ms
-// time LV2SF     : 45ms
-// time SF2Fun    : 4ms
-// time Fun_wp    : 10ms
-// time extract   : 174ms
-// total time : 393ms
+    ) #(_ by (mk_steel [Timer; Extract])) ())
 
 inline_for_extraction
 let test_for_loop_1 (r0 r1 : ref U32.t)
@@ -614,15 +610,7 @@ let test_for_loop_1 (r0 r1 : ref U32.t)
         call (write r0) U32.(x +%^ 1ul);;
         return U.Unit'
       end
-    ) #(_ by (mk_steel [Timer])) ())
-// time specs     : 133ms
-// time lin_cond  : 710ms
-//
-// time sub_push  : 2745ms
-// time LV2SF     : 2877ms
-// time SF2Fun    : 8ms
-// time Fun_wp    : 973ms
-// total time : 7446ms
+    ) #(_ by (mk_steel [Timer; Extract])) ())
 
 
 // in batch mode, F* raise a warning 340:

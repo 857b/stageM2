@@ -269,7 +269,7 @@ let rec repr_M_of_LV
       M.TCif #a #guard #thn #els env (res_env_f env csm prd)
           (repr_M_of_LV cthn)
           (repr_M_of_LV cels)
-  | LCgen env #a #gen_tac #gen_c s sh pre_f sf ->
+  | LCgen env #a #gen_tac #gen_c {lcg_s = s; lcg_sh = sh} pre_f ->
       M.TCgen #a #gen_tac #gen_c s sh
           env (Veq.vequiv_of_perm (Perm.perm_f_of_list pre_f))
           (res_env_f env (gen_csm pre_f) s.spc_post)
@@ -282,7 +282,7 @@ let rec repr_M_of_LV
                      = U.cast _ (prd_f1 x)
           in
           M.TCspec #a #sp s sh (repr_M_of_LV__tcs_sub env a s pre_f csm1 prd1 prd_f1)
-      | LCgen env #a #gen_tac #gen_c s sh pre_f sf ->
+      | LCgen env #a #gen_tac #gen_c {lcg_s = s; lcg_sh = sh} pre_f ->
           let prd_f1 (x : a) : Perm.pequiv_list (sub_prd env (gen_csm pre_f) (s.spc_post x) csm1) (prd1 x)
                      = U.cast _ (prd_f1 x)
           in
