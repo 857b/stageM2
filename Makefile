@@ -49,9 +49,9 @@ FSTAR_ROOTS = $(wildcard $(addsuffix /*.fsti,$(SOURCE_DIRS))) \
 ifndef MAKE_RESTARTS
 .versions: .FORCE
 	@echo -n "F*   : " > .versions
-	@(cd $(FSTAR_HOME) && git rev-parse --verify HEAD) >> .versions
+	@(cd $(FSTAR_HOME) && { git branch --show-current | tr "\n" " " ; } && git rev-parse --verify HEAD) >> .versions
 	@echo -n "KRML : " >> .versions
-	@(cd $(KRML_HOME) && git rev-parse --verify HEAD) >> .versions
+	@(cd $(KRML_HOME)  && { git branch --show-current | tr "\n" " " ; } && git rev-parse --verify HEAD) >> .versions
 
 .depend: .FORCE .versions
 	@echo DEPENDS

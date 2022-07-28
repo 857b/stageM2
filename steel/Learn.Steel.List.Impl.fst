@@ -84,7 +84,7 @@ let insert (#a : Type) (i : U32.t) (x : ref (cell a))
 
 (* alternative version using aptr *)
 
-inline_for_extraction
+noextract inline_for_extraction
 let insert2_ty (#a : Type) (i : U32.t) (x : ref (cell a)) (r : aptr (ref (cell a))) : Type =
   (entry : G.erased (ref (cell a))) -> (len : G.erased nat) -> (exit : G.erased (ref (cell a))) ->
   Steel (G.erased (ref (cell a)))

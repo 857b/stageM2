@@ -216,6 +216,7 @@ type st_loc =
   | LWtd of bool
 
 #push-options "--ifuel 1"
+noextract
 let st_compat (gl : st_glb) (lc : bool -> st_loc) (rs : bool -> U32.t) : prop =
   (forall (p : bool) . match lc p with
                  | LIni   -> gl <> GFirst p
@@ -229,6 +230,7 @@ unfold let entry_CS_inv_vp (r0 r1 : ref U32.t) (gl : ghost_ref st_glb) (lc0 lc1 
    ghost_vptr gl `star`
   (ghost_vptrp lc0 half `star` ghost_vptrp lc1 half)
 
+noextract
 let entry_CS_inv_rfn (((f0, f1), gl), (lc0, lc1) : ((U32.t & U32.t) & st_glb) & (st_loc & st_loc)) : prop =
   st_compat gl (fun b -> if b then lc0 else lc1) (fun b -> if b then  f0  else  f1 )
 
@@ -314,6 +316,7 @@ let entry_CS_p1_with_inv r0 r1 gl lc0 lc1 (iv : DInv.inv (entry_CS_inv r0 r1 gl 
     elim_vrefine (entry_CS_p_vp r0 lc0) (ens res);
     return res
 
+noextract
 let entry_CS_proc_ens (res : bool) (_,lc : U32.t & st_loc) : prop
   = res ==> lc == LWtd true
 

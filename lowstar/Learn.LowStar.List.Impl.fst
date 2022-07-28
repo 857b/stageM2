@@ -84,6 +84,7 @@ let free #a (p : t a) (sg0 : G.erased (list_nil a))
 
 (* [reverse] *)
 
+noextract
 let reverse_ct_hyps #a
       (sg : list_nil a) (lloc : M.loc)
       (it_f it_r : B.pointer (t a)) (sgs : B.pointer (G.erased (list_nil a & list_nil a)))
@@ -96,6 +97,7 @@ let reverse_ct_hyps #a
     loc_disjoint b_it_r b_sgs /\
     M.loc_disjoint lloc (loc_seg sg))
 
+noextract
 let reverse_ct_inv #a
       (sg : list_nil a) (lloc : M.loc)
       (it_f it_r : B.pointer (t a)) (sgs : B.pointer (G.erased (list_nil a & list_nil a)))
@@ -113,6 +115,7 @@ let reverse_ct_inv #a
        loc_disjoint (loc_union lloc (loc_seg sg_f)) (loc_seg sg_r) /\
        wf_seg sg_f))
 
+noextract
 let reverse_ct_inv_test #a sg lloc it_f it_r
        (sgs : B.pointer (G.erased (list_nil a & list_nil a))) h0 (b:bool) h
   = reverse_ct_inv #a sg lloc it_f it_r sgs h0 h /\
@@ -203,6 +206,7 @@ let reverse (#a : Type) (p : t a) (sg : G.erased (list_nil a))
 
 (* --- length --- *)
 
+noextract
 let length_inv (a : Type0) (l : nat) (h0 : HS.mem) (r : HS.rid)
         (p     : B.pointer (t a))
         (seg   : B.pointer (G.erased (list_nil a)))
@@ -217,6 +221,7 @@ let length_inv (a : Type0) (l : nat) (h0 : HS.mem) (r : HS.rid)
     p == entry seg /\
     l = U32.v count + sg_length seg)
 
+noextract
 let length_test_inv a l h0 r p (seg : B.pointer (G.erased (list_nil a))) count (b : bool) h : GTot prop
   = length_inv a l h0 r p seg count h
   /\ (Cons? (B.deref h seg).segment  <==> b)
@@ -362,6 +367,7 @@ let index_loop (#a : Type0) (p : t a) (sg : G.erased (list_seg a){p == entry sg}
 
 (* version fonctionnelle *)
 
+noextract
 let insert_pre (#a : Type) (r : HS.rid) (i : nat) (h0 : HS.mem) (p : t a) (sg : list_seg a)
   : Tot prop
   = ST.is_eternal_region r /\
@@ -369,6 +375,7 @@ let insert_pre (#a : Type) (r : HS.rid) (i : nat) (h0 : HS.mem) (p : t a) (sg : 
     p == entry sg /\
     i <= sg_length sg
 
+noextract
 let insert_post (#a : Type) (r : HS.rid) (i : nat) (x : a) (sg : list_seg a)
                 (h0 : HS.mem) (mod : M.loc) (p1 : t a) (p_f : B.pointer (cell a)) (h1 : HS.mem)
   : Pure prop (requires i <= sg_length sg) (ensures fun _ -> True)
@@ -423,6 +430,7 @@ let insert (#a : Type) (r : HS.rid) (i : U32.t) (x : a) (p : t a) (sg : G.erased
 
 (* version itérative *)
 
+noextract
 let insert_loop_pre (#a : Type) (r : HS.rid) (x : a)
                     (l_p : B.pointer (t a)) (l_sg : B.pointer (G.erased (list_seg a)))
                     (i : nat) (h0 : HS.mem) : Tot prop
@@ -431,6 +439,7 @@ let insert_loop_pre (#a : Type) (r : HS.rid) (x : a)
     M.(loc_disjoint (loc_union (loc_buffer l_p) (loc_buffer l_sg)) (loc_seg sg)) /\
     insert_pre r i h0 p sg)
 
+noextract
 let insert_loop_post (#a : Type) (r : HS.rid) (x : a)
                      (l_p : B.pointer (t a)) (l_sg : B.pointer (G.erased (list_seg a)))
                      (i : nat) (h0 : HS.mem) () (h1 : HS.mem)
@@ -583,6 +592,7 @@ let insert_loop (#a : Type) (r : HS.rid) (i : U32.t) (x : a) (p : t a) (sg : G.e
 
 (* [forward] *)
 
+noextract
 let forward_inv (#a : Type) (sg : list_seg a) (h0 : HS.mem)
                             (i : nat)  (p : t a) (h1 : HS.mem)
   : Tot prop
@@ -642,11 +652,13 @@ let last_ct_locals #a (l_it : B.pointer (B.pointer (cell a))) (l_k  : B.pointer 
   : GTot M.loc =
   M.(loc_union (loc_buffer l_it) (loc_buffer l_k))
 
+noextract
 let last_ct_hyps #a (sg : list_nil a) c_h0 l_it l_k : prop =
   M.(loc_disjoint (last_ct_locals l_it l_k) (loc_seg sg) /\
      loc_disjoint (loc_buffer l_it) (loc_buffer l_k)) /\
   live_seg c_h0 sg
 
+noextract
 let last_loop_inv #a sg c_h0 (l_it : B.pointer (B.pointer (cell a))) (l_k  : B.pointer (G.erased nat))
                   (h : HS.mem) : prop =
   M.(modifies (loc_union (loc_buffer l_it) (loc_buffer l_k)) c_h0 h /\

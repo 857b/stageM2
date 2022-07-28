@@ -11,6 +11,7 @@ module U32 = FStar.UInt32
 open LowStar.BufferOps
 open FStar.HyperStack.ST
 
+noextract
 let buffer_copy_inv (#a : Type)
      (src dst : B.buffer a) (l : U32.t {B.length src = U32.v l /\ B.length dst = U32.v l})
      h0 h1 (i : nat) =
