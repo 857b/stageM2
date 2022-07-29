@@ -182,6 +182,11 @@ type combine_subcomp_t
     cba_subc : repr a ek0 f None LocationP -> repr a ek1 g cvi LocationP;
   }
 
+let combine_subcomp_refl
+      (a : Type u#a) (ek : SH.effect_kind) (f0 f1 : prog_tree a) (_ : squash (f0 == f1)) (loc : location_p)
+  : combine_subcomp_t a ek ek f0 f1 None loc
+  = Mkcombine_subcomp_t (fun rf -> rf)
+
 noeq
 type mrepr_to_steel_t
        (flags : list flag)
@@ -951,22 +956,26 @@ let move_to_location (entry_uvar : term) (pth : list nat) : Tac unit
     ()
 
 
-/// Solves a goal [combine_subcomp_t a ek0 ek1 (ReprIM t) (ReprIS pre post req ens flag) loc]
-let solve_conversion_subcomp flags fr : Tac unit
+/// Solves a goal [combine_subcomp_t a ek0 ek1 t cvi loc].
+let solve_subcomp flags fr : Tac unit
   =
-    let args = (collect_app (cur_goal ()))._2 in
-    guard (L.length args = 7);
-    let entry_loc_uv = try Some (collect_loc_uvar (L.index args 6)._1) with _ -> None in
-
-    apply (`combine_subcomp_convert);
-    // lt
-    build_steel_liftable fr (root_ctx ["In the top-level subcomp"]);
-    // cv
-    let ctx = root_ctx_with_move_to [] (fun pth ->
-      match entry_loc_uv with
-      | None    -> ()
-      | Some uv -> try move_to_location uv (L.rev pth) with _ -> ()) in
-    build_mrepr_to_steel flags fr ctx
+    match catch (fun () -> apply (`combine_subcomp_refl)) with
+    | Inr () -> // this case is needed to define the auxiliary converted call using [convert_steel]...
+      trefl ()
+    | Inl _ ->  // this case convert our representation to a Steel function
+      let args = (collect_app (cur_goal ()))._2 in
+      guard (L.length args = 7);
+      let entry_loc_uv = try Some (collect_loc_uvar (L.index args 6)._1) with _ -> None in
+      
+      apply (`combine_subcomp_convert);
+      // lt
+      build_steel_liftable fr (root_ctx ["In the top-level subcomp"]);
+      // cv
+      let ctx = root_ctx_with_move_to [] (fun pth ->
+        match entry_loc_uv with
+        | None    -> ()
+        | Some uv -> try move_to_location uv (L.rev pth) with _ -> ()) in
+      build_mrepr_to_steel flags fr ctx
 
 (***** entry *)
 
@@ -1023,7 +1032,7 @@ let mrepr_implicits_tac () : Tac unit
 
     // Solve the [combine_subcomp_t] goals by building the conversion to Steel ([mrepr_to_steel_t])
     set_goals fgoals.fgoals_subc;
-    iterAll (fun () -> solve_conversion_subcomp flags fr);
+    iterAll (fun () -> solve_subcomp flags fr);
 
     // clean location goals
     set_goals fgoals.fgoals_loca;
@@ -1074,3 +1083,34 @@ let to_steel_g
     let r : repr a (SH.KGhost opened) (dummy_prog_tree a) (Some (Mkconv_index pre post req ens flags)) LocationP
       = reify (r ()) in
     U.cast _ (SH.ghost_u (ISome?.v r.repr_cv))
+
+
+let convert_steel (#b : Type u#b)
+      (#a : b -> Type u#a) (#pre : b -> SE.pre_t) (#post : (x : b) -> SE.post_t (a x))
+      (#req : (x : b) -> SE.req_t (pre x)) (#ens : (x : b) -> SE.ens_t (pre x) (a x) (post x))
+      ($f : (x : b) -> SE.Steel (a x) (pre x) (post x) (req x) (ens x))
+      (#[@@@ __mrepr_implicit__] loc : location_goal []) (x : b)
+  : MRepr (a x) SH.KSteel
+      (M.Tspec (a x) (M.spec_r_steel u#a u#8 (pre x) (post x) (req x) (ens x)))
+      None (locm loc)
+  = call #b #a #pre #post #req #ens #LocationP f x
+
+let convert_steel_atomic (#b : Type u#b)
+      (#a : b -> Type u#a) (#opened : b -> Mem.inames) (#pre : b -> SE.pre_t) (#post : (x : b) -> SE.post_t (a x))
+      (#req : (x : b) -> SE.req_t (pre x)) (#ens : (x : b) -> SE.ens_t (pre x) (a x) (post x))
+      ($f : (x : b) -> SA.SteelAtomic (a x) (opened x) (pre x) (post x) (req x) (ens x))
+      (#[@@@ __mrepr_implicit__] loc : location_goal []) (x : b)
+  : MRepr (a x) (SH.KAtomic (opened x))
+      (M.Tspec (a x) (M.spec_r_steel u#a u#8 (pre x) (post x) (req x) (ens x)))
+      None (locm loc)
+  = call_a #b #a #opened #pre #post #req #ens #LocationP f x
+
+let convert_steel_ghost (#b : Type u#b)
+      (#a : b -> Type u#a) (#opened : b -> Mem.inames) (#pre : b -> SE.pre_t) (#post : (x : b) -> SE.post_t (a x))
+      (#req : (x : b) -> SE.req_t (pre x)) (#ens : (x : b) -> SE.ens_t (pre x) (a x) (post x))
+      ($f : (x : b) -> SA.SteelGhost (a x) (opened x) (pre x) (post x) (req x) (ens x))
+      (#[@@@ __mrepr_implicit__] loc : location_goal []) (x : b)
+  : MReprGhost (a x) (opened x)
+      (M.Tspec (a x) (M.spec_r_steel u#a u#8 (pre x) (post x) (req x) (ens x)))
+      None (locm loc)
+  = call_g #b #a #opened #pre #post #req #ens #LocationP f x
