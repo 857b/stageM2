@@ -737,7 +737,7 @@ let for_loop_preserve_sf_sound
 
 
 #push-options "--z3rlimit 20"
-[@@ __LV2SF__; __extraction__]
+[@@ __LV2SF__; __extraction_fix__]
 inline_for_extraction
 let for_loop_cond
       (env : vprop_list)

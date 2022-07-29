@@ -18,6 +18,7 @@ irreducible let __LV2SF__ : unit = ()
 
 /// Normalized for the extraction
 irreducible let __extraction__ : unit = ()
+irreducible let __extraction_fix__ : unit = ()
 
 (**** Options *)
 

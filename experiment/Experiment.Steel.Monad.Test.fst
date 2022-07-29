@@ -34,20 +34,6 @@ open Experiment.Steel
 
 #push-options "--ide_id_info_off"
 
-inline_for_extraction
-let test_for_loop_00 (r0 : ref U32.t)
-  : F.steel (U.unit') (vptr r0) (fun _ -> vptr r0)
-            (requires fun h0 -> True)
-            (ensures  fun h0 _ h1 -> True)
-  = F.(to_steel (
-      GCb.for_loop 0ul 10ul (fun _ -> [vptr' r0 full_perm]) (fun i v -> True)
-      begin fun i ->
-        return U.Unit'
-      end
-    ) #(_ by (mk_steel [Timer; Extract; Dump Stage_Extract])) ())
-// Failure("Universe variable not found: u@15") on a norm
-
-
 irreducible let __test__ : unit = ()
 let norm_test () = T.norm [delta_qualifier ["unfold"]; delta_attr [`%__test__]]
 
@@ -573,6 +559,14 @@ let test_slrewrite (r0 r1 r2 : ref U32.t)
       MC.ghost_to_steel_ct (GCb.slrewrite r0 r2) (fun _ -> U.Unit');;
       return ()
     ) #(_ by (mk_steel [Timer; Extract])) ())
+// time specs     : 103ms
+// time lin_cond  : 68ms
+// time sub_push  : 30ms
+// time LV2SF     : 5ms
+// time SF2Fun    : 2ms
+// time Fun_wp    : 9ms
+// time extract   : 58ms
+// total time : 275ms
 
 inline_for_extraction
 let test_with_invariant_g (r0 : ghost_ref U32.t) (r1 : ref U32.t) (i : inv (ghost_vptr r0))
@@ -581,7 +575,15 @@ let test_with_invariant_g (r0 : ghost_ref U32.t) (r1 : ref U32.t) (i : inv (ghos
   = F.(to_steel (
     MC.ghost_to_steel (GCb.with_invariant_g i (
       call_g ghost_read r0
-    ))) #(_ by (mk_steel [Timer; Extract])) ())
+    ))) #(_ by (mk_steel [Timer; Extract; Dump Stage_Extract])) ())
+// time specs     : 94ms
+// time lin_cond  : 297ms
+// time sub_push  : 72ms
+// time LV2SF     : 242ms
+// time SF2Fun    : 4ms
+// time Fun_wp    : 23ms
+// time extract   : 431ms
+// total time : 1163ms
 
 
 inline_for_extraction
@@ -595,6 +597,15 @@ let test_for_loop_0 (r0 : ref U32.t)
         return U.Unit'
       end
     ) #(_ by (mk_steel [Timer; Extract])) ())
+// time specs     : 38ms
+// time lin_cond  : 41ms
+// time sub_push  : 6ms
+// time LV2SF     : 39ms
+// time SF2Fun    : 3ms
+// time Fun_wp    : 7ms
+// time extract   : 160ms
+// total time : 294ms
+
 
 inline_for_extraction
 let test_for_loop_1 (r0 r1 : ref U32.t)
@@ -610,8 +621,19 @@ let test_for_loop_1 (r0 r1 : ref U32.t)
         call (write r0) U32.(x +%^ 1ul);;
         return U.Unit'
       end
-    ) #(_ by (mk_steel [Timer; Extract])) ())
+    ) #(_ by (mk_steel [Timer(*; Extract; Dump Stage_Extract*)])) ())
+// time specs     : 171ms
+// time lin_cond  : 932ms
+// time sub_push  : 244ms
+// time LV2SF     : 3255ms
+// time SF2Fun    : 8ms
+// time Fun_wp    : 284ms
+// total time : 4894ms
 
+// Extract succeeds in ~25s but F* then take several minutes and a lot of
+// memory to finish processing the definition
+// The term resulting from the normalisation is quite big because of the (ghost) tree_cond
+// used for the specifications on our Steel combinators.
 
 // in batch mode, F* raise a warning 340:
 // Unfolding name which is marked as a plugin: frame_vc_norm

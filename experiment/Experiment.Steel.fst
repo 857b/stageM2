@@ -321,6 +321,10 @@ let solve_by_wp (fr : flags_record) (t : timer) : Tac unit
       // We normalize the resulting Steel program so that it can be extracted
       let t = timer_enter t "extract   " in
       norm __normal_extract;
+      // FIXME: [test_for_loop0] fails if one tries to include this in __normal_extract
+      // it is only used by [GCombinators.for_loop_cond]
+      norm [delta_attr [`%__extraction_fix__]];
+      norm __normal_extract;
       t
     end else t in
     if fr.f_dump Stage_Extract then dump1 "at stage Extract";
