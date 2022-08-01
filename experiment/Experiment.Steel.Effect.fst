@@ -2,7 +2,7 @@ module Experiment.Steel.Effect
 
 module U   = Learn.Util
 module M   = Experiment.Steel.Repr.M
-module C   = Experiment.Steel.Combinators
+module C   = Experiment.Steel.Combinators.Tac
 module T   = FStar.Tactics
 module L   = FStar.List.Pure
 module UV  = Learn.Universe
@@ -102,32 +102,12 @@ type combine_bind_t
                  repr' b ek cb_bind_repr
 }
 
-type combinable_bind_repr (a0 a1 : Type u#a) (ek0 ek1 ek2 : SH.effect_kind)
-  = (f : M.repr u#a u#8 ek0 a0) -> (g : ((x : a0) -> M.repr u#a u#8 ek1 a1)) ->
-    repr_eq a1 ek2 (M.Tbind a0 a1 f.repr_tree (fun x -> (g x).repr_tree))
-
-let repr_tree_eq #a #ek #t (r : repr_eq a ek t) : squash (r.repr_tree == t)
-  = ()
-
-noeq inline_for_extraction
-type combinable_bind_t (a0 a1 : Type u#a) (ek0 ek1 ek2 : SH.effect_kind) = {
-  cba_bind_ek0'  : SH.effect_kind;
-  cba_bind_ek1'  : SH.effect_kind;
-  // Sometime ek2 has already been resolved (for instance in test9', maybe because the effect_kind
-  // are not marked as [__repr_implicit__])
-  cba_bind_ek2'  : SH.effect_kind;
-  cba_bind_repr  : combinable_bind_repr a0 a1 cba_bind_ek0' cba_bind_ek1' cba_bind_ek2';
-  cba_bind_lift0 : C.steel_liftable a0 ek0 cba_bind_ek0';
-  cba_bind_lift1 : C.steel_liftable a1 ek1 cba_bind_ek1';
-  cba_bind_lift2 : C.steel_liftable a1 cba_bind_ek2' ek2;
-}
-
 [@@ __repr_M__]
 inline_for_extraction
 let combine_bind
       (a : Type u#b) (b : Type u#b)
       (ek0 ek1 ek2 : SH.effect_kind)
-      (cba : combinable_bind_t a b ek0 ek1 ek2)
+      (cba : C.bind_combinable u#b u#8 a b ek0 ek1 ek2)
       (f : prog_tree a) (g : a -> prog_tree b)
   : combine_bind_t a b ek0 ek1 ek2 f g
   =
@@ -135,19 +115,16 @@ let combine_bind
   {
     cb_bind_repr = t;
     cb_bind_impl = (fun rf rg ->
-                      let rf' = C.repr_lift cba.cba_bind_lift0 rf                        in
-                      let rg' (x : a) = C.repr_lift cba.cba_bind_lift1 (rg x)            in
-                      let r = C.repr_lift cba.cba_bind_lift2 (cba.cba_bind_repr rf' rg') in
-                      U.funext_eta (fun x -> g x) (fun x -> (rg' x).repr_tree)
-                        (U.by_refl ()) (U.by_refl ())
-                        (fun x -> ());
+                      let rf' = C.repr_lift cba.cba_bind_lift0 rf             in
+                      let rg' (x : a) = C.repr_lift cba.cba_bind_lift1 (rg x) in
+                      let r   = C.bind_combinable_repr cba rf rg              in
                       calc (==) {
                         r.repr_tree;
-                      == { }
-                        (cba.cba_bind_repr rf' rg').repr_tree;
-                      == { _ by T.(apply (`repr_tree_eq)) }
+                      == { U.by_refl () }
                         M.Tbind a b rf'.repr_tree (fun x -> (rg' x).repr_tree);
-                      == { }
+                      == { U.funext_eta (fun x -> g x) (fun x -> (rg' x).repr_tree)
+                                        (U.by_refl ()) (U.by_refl ())
+                                        (fun x -> ()) }
                         t;
                       };
                       r);
@@ -240,29 +217,17 @@ let subcomp
 
 (***** if then else *)
 
-// We match the restriction of SteelAtomic, but we do not need it
-type cba_ite_effect_kind_t =
-  ek : SH.effect_kind { ~ (SH.KAtomic? ek) }
-
-noeq
-type combinable_ite_t (a : Type) (ek0 ek1 ek2 : SH.effect_kind) = {
-  cba_ite_ek2'  : cba_ite_effect_kind_t;
-  cba_ite_lift0 : C.steel_liftable a ek0 cba_ite_ek2';
-  cba_ite_lift1 : C.steel_liftable a ek1 cba_ite_ek2';
-  cba_ite_lift2 : C.steel_liftable a cba_ite_ek2' ek2;
-}
-
 let if_then_else
       (a : Type)
       (#ek0 #ek1 #ek2 : SH.effect_kind)
       (#thn : prog_tree a) (#els : prog_tree a)
-      (#[@@@ __mrepr_implicit__] cb : combinable_ite_t a ek0 ek1 ek2)
+      (#[@@@ __mrepr_implicit__] cb : C.ite_combinable u#a a ek0 ek1 ek2)
       (#loc_f #loc_g : location_p)
       (#[@@@ __mrepr_implicit__] loc : location_goal [loc_f; loc_g])
       (rthn : repr a ek0 thn None loc_f) (rels : repr a ek1 els None loc_g)
       (guard : bool)
   : Type
-  = repr a ek2 (M.Tif a guard thn els) None (locm loc)
+  = repr u#a a ek2 (M.Tif a guard thn els) None (locm loc)
 
 
 inline_for_extraction noextract
@@ -335,10 +300,10 @@ let ite_soundness_tac () : T.Tac unit
     first [(fun () -> apply (`ite_combine_thn)); (fun () -> apply (`ite_combine_els))];
     smt ();
     first [
-      (fun () -> apply (`Mkcombinable_ite_t?.cba_ite_lift0); exact_hyp ());
-      (fun () -> apply (`Mkcombinable_ite_t?.cba_ite_lift1); exact_hyp ())
+      (fun () -> apply (`C.Mkite_combinable?.cba_ite_lift0); exact_hyp ());
+      (fun () -> apply (`C.Mkite_combinable?.cba_ite_lift1); exact_hyp ())
     ];
-    apply (`Mkcombinable_ite_t?.cba_ite_lift2)
+    apply (`C.Mkite_combinable?.cba_ite_lift2)
   )
 
 
@@ -473,7 +438,7 @@ let if_then_else_ghost
       (a : Type)
       (#o : Mem.inames)
       (#thn : prog_tree a) (#els : prog_tree a)
-      (#[@@@ __mrepr_implicit__] cb : combinable_ite_t a (SH.KGhost o) (SH.KGhost o) (SH.KGhost o))
+      (#[@@@ __mrepr_implicit__] cb : C.ite_combinable a (SH.KGhost o) (SH.KGhost o) (SH.KGhost o))
       (#loc_f #loc_g : location_p)
       (#[@@@ __mrepr_implicit__] loc : location_goal [loc_f; loc_g])
       (rthn : repr_ghost a o thn None loc_f) (rels : repr_ghost a o els None loc_g)
@@ -644,7 +609,7 @@ let rec mrepr_implicits_init (fr : flags_record) (gs : list goal) (r : filter_go
         end else if hd = (`%combine_bind_pure_t)
         then (apply (`combine_bind_pure); r)
 
-        else if hd = (`%combinable_ite_t)
+        else if hd = (`%C.ite_combinable)
         then {r with fgoals_comb = g :: r.fgoals_comb}
         else if hd = (`%C.steel_liftable)
         then {r with fgoals_lift = g :: r.fgoals_lift}
@@ -659,180 +624,6 @@ let rec mrepr_implicits_init (fr : flags_record) (gs : list goal) (r : filter_go
       in
       mrepr_implicits_init fr gs r
 
-(***** stage 2 *)
-
-/// Solves a goal [C.steel_liftable a ek0 ek1].
-/// Since we start by trying to apply [C.Rt1n_refl], if [ek0] or [ek1] is an uvar, we will choose a trivial lift.
-let rec build_steel_liftable_aux fr ctx : Tac unit
-  =
-    try apply (`C.Rt1n_refl)
-    with _ ->
-      apply (`C.Rt1n_trans);
-      // lift1
-      begin
-        match catch (fun () -> apply (`C.Lift_ghost_ghostI)) with
-        | Inr () -> C.build_erasable_t fr ctx
-        | Inl _ ->
-        try apply (`C.Lift_ghostI_atomic) with _ ->
-        try apply (`C.Lift_atomic_steel)  with _ ->
-        cs_raise fr ctx (fun m -> fail (m Fail_liftable []))
-      end;
-
-      build_steel_liftable_aux fr ctx
-
-let build_steel_liftable fr ctx : Tac unit
-  =
-    let goal = cur_goal () in
-    build_steel_liftable_aux fr (ctx_app_info ctx [Info_goal goal])
-
-
-private
-type effect_kind_enum = | ESteel | EAtomic | EGhostI | EGhost
-
-private
-let ek_ord (ek : effect_kind_enum) : int
-  = match ek with
-  | EGhost  -> 0
-  | EGhostI -> 1
-  | EAtomic -> 2
-  | ESteel  -> 3
-
-private
-let ek_le (ek0 ek1 : effect_kind_enum) : bool
-  = ek_ord ek0 <= ek_ord ek1
-
-let collect_effect_kind fr ctx (t : term) : Tac (option effect_kind_enum)
-  =
-    if Tv_Uvar? (inspect t) then None
-    else begin
-      let hd = cs_try (fun () -> collect_fvar (collect_app t)._1)
-                 fr ctx (fun m -> fail (m (Fail_goal_shape GShape_effect_kind) [])) in
-      Some (if hd = (`%SH.KSteel ) then ESteel
-       else if hd = (`%SH.KAtomic) then EAtomic
-       else if hd = (`%SH.KGhostI) then EGhostI
-       else if hd = (`%SH.KGhost ) then EGhost
-       else cs_raise fr ctx (fun m -> fail (m (Fail_goal_shape GShape_effect_kind) [])))
-    end
-
-let combinable_bind_steel (a0 a1 : Type u#a)
-  : combinable_bind_repr a0 a1 SH.KSteel SH.KSteel SH.KSteel
-  by (norm [delta_attr [`%__repr_M__]])
-  = fun f g -> C.bind f g
-
-let combinable_bind_ghostI (a0 a1 : Type u#a) (opened : Mem.inames)
-  : combinable_bind_repr a0 a1 (SH.KGhostI opened) (SH.KGhostI opened) (SH.KGhostI opened)
-  by (norm [delta_attr [`%__repr_M__]])
-  = fun f g -> C.bind_ek _ _ _ (C.bind_steel__ghostI  opened) f g
-
-let combinable_bind_atomicL (a0 a1 : Type u#a) (opened : Mem.inames)
-  : combinable_bind_repr a0 a1 (SH.KAtomic opened) (SH.KGhostI opened) (SH.KAtomic opened)
-  by (norm [delta_attr [`%__repr_M__]])
-  = fun f g -> C.bind_ek _ _ _ (C.bind_steel__atomic_ghost opened) f g
-
-let combinable_bind_atomicR (a0 a1 : Type u#a) (opened : Mem.inames)
-  : combinable_bind_repr a0 a1 (SH.KGhostI opened) (SH.KAtomic opened) (SH.KAtomic opened)
-  by (norm [delta_attr [`%__repr_M__]])
-  = fun f g -> C.bind_ek _ _ _ (C.bind_steel__ghost_atomic opened) f g
-
-let combinable_bind_ghost (a0 a1 : Type u#a) (opened : Mem.inames)
-  : combinable_bind_repr a0 a1 (SH.KGhost opened) (SH.KGhost opened) (SH.KGhost opened)
-  by (norm [delta_attr [`%__repr_M__]])
-  = fun f g -> C.bind_ghost f g
-
-let combinable_bind_op (ek0 ek1 : effect_kind_enum) : term
-  = match if ek0 `ek_le` ek1 then ek1 else ek0 with
-  | EGhost  -> (`combinable_bind_ghost)
-  | EGhostI -> (`combinable_bind_ghostI)
-  | EAtomic -> let ek' = if ek0 `ek_le` ek1 then ek1 else ek0 in
-              if ek' `ek_le` EGhostI
-              then (if ek0 = EAtomic then (`combinable_bind_atomicL) else (`combinable_bind_atomicR))
-              else (`combinable_bind_steel)
-  | ESteel  -> (`combinable_bind_steel)
-
-
-let combinable_ite_ghost  o : cba_ite_effect_kind_t =  SH.KGhost  o
-let combinable_ite_ghostI o : cba_ite_effect_kind_t = (SH.KGhostI o)
-let combinable_ite_steel    : cba_ite_effect_kind_t =  SH.KSteel
-
-let combinable_ite_kind (ek0 ek1 : effect_kind_enum) : term
-  = match if ek0 `ek_le` ek1 then ek1 else ek0 with
-  | EGhost  -> (`combinable_ite_ghost)
-  | EGhostI -> (`combinable_ite_ghostI)
-  | EAtomic | ESteel -> (`combinable_ite_steel)
-
-
-/// Try to solves a goal [combinable_bind_t a0 a1 ek0 ek1 ek2] or [combinable_ite_t a ek0 ek1 ek2]:
-/// - succeed and returns true if the heads of ek0 and ek1 are known.
-/// - otherwise, returns false.
-let build_combinable fr ctx : Tac bool
-  =
-    // there are some beta-redexes + aliases
-    norm [delta_only [`%combinable_ite_ghost; `%combinable_ite_ghostI; `%combinable_ite_steel]];
-    
-    let hd, args = collect_app (cur_goal ()) in
-    let hd = try collect_fvar hd with _ -> "unexpected shape" in
-    if hd = (`%combinable_bind_t)
-    then begin
-      guard (L.length args = 5);
-      let ek0 = collect_effect_kind fr ctx (L.index args 2)._1 in
-      let ek1 = collect_effect_kind fr ctx (L.index args 3)._1 in
-      match ek0, ek1 with
-      | Some ek0, Some ek1 ->
-             let op = combinable_bind_op ek0 ek1 in
-             apply (`Mkcombinable_bind_t);
-             // cba_bind_repr
-             seq (fun () -> apply op) dismiss;
-             // cba_bind_lift0
-             build_steel_liftable fr ctx;
-             // cba_bind_lift1
-             build_steel_liftable fr ctx;
-             // cba_bind_lift2
-             build_steel_liftable fr ctx;
-             true
-      | _ -> false
-    end else if hd = (`%combinable_ite_t)
-    then begin
-      guard (L.length args = 4);
-      let ek0 = collect_effect_kind fr ctx (L.index args 1)._1 in
-      let ek1 = collect_effect_kind fr ctx (L.index args 2)._1 in
-      match ek0, ek1 with
-      | Some ek0, Some ek1 ->
-             let ek = combinable_ite_kind ek0 ek1 in
-             apply_raw (`Mkcombinable_ite_t);
-             // cba_ite_ek2'
-             seq (fun () -> apply ek) dismiss;
-             // cba_ite_lift0
-             build_steel_liftable fr ctx;
-             // cba_ite_lift1
-             build_steel_liftable fr ctx;
-             // cba_ite_lift2
-             build_steel_liftable fr ctx;
-             true
-      | _ -> false
-    end else fail "build_combinable : goal_shape"
-
-let rec solve_combinables_round fr : Tac (bool & list goal)
-  = match goals () with
-    | [] -> false, []
-    | g :: _ ->
-        if build_combinable fr dummy_ctx
-        then
-          let _, gs = solve_combinables_round fr in
-          true, gs
-        else begin
-          dismiss ();
-          let b, gs = solve_combinables_round fr in
-          b, g :: gs
-        end
-
-let rec solve_combinables fr : Tac unit
-  = match goals () with
-  | [] -> ()
-  | _ :: _ ->
-    let b, gs = solve_combinables_round fr in
-    if not b then cs_raise fr dummy_ctx (fun m -> fail (m Fail_solve_combinables []));
-    set_goals gs;
-    solve_combinables fr
 
 (***** stage 3 *)
 
@@ -969,7 +760,7 @@ let solve_subcomp flags fr : Tac unit
       
       apply (`combine_subcomp_convert);
       // lt
-      build_steel_liftable fr (root_ctx ["In the top-level subcomp"]);
+      C.build_steel_liftable fr (root_ctx ["In the top-level subcomp"]);
       // cv
       let ctx = root_ctx_with_move_to [] (fun pth ->
         match entry_loc_uv with
@@ -1017,11 +808,11 @@ let mrepr_implicits_tac () : Tac unit
 
     // Solve the combinable_* goals
     set_goals fgoals.fgoals_comb;
-    solve_combinables fr;
+    C.solve_combinables fr;
 
     // Solve the [steel_liftable] goals (from the subcomps MReprGhost ~> MRepr)
     set_goals fgoals.fgoals_lift;
-    iterAll (fun () -> build_steel_liftable fr dummy_ctx);
+    iterAll (fun () -> C.build_steel_liftable fr dummy_ctx);
 
     //timer_stop t;
 

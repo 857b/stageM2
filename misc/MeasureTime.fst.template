@@ -3,6 +3,7 @@ module MeasureTime
 module F   = Experiment.Steel.Monad
 module T   = FStar.Tactics
 module M   = Experiment.Steel.Repr.M
+module C   = Experiment.Steel.Combinators
 module SH  = Experiment.Steel.Steel
 module U32 = FStar.UInt32
 
@@ -22,7 +23,7 @@ let steel_add_1 (r : ref U32.t)
 
 noextract
 let rec repeat_n (n : nat) (t : M.repr SH.KSteel unit) : M.repr SH.KSteel unit
-  = F.(if n = 0 then return () else (t;; repeat_n (n-1) t))
+  = F.(if n = 0 then C.return SH.KSteel () else (C.bind t (fun _ -> repeat_n (n-1) t)))
 
 #push-options "--query_stats"
 noextract inline_for_extraction

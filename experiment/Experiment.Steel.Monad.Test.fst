@@ -433,9 +433,9 @@ let test_ite_1 (r : ref U32.t)
 // ? because of a `pure_wp_monotonic`
 //[@@ handle_smt_goals ]
 //let tac () = T.dump "SMT query"
-#push-options "--silent"
-[@@ expect_failure [19]]
-let test_pure (x : U32.t)
+#push-options "--silent --no_smt"
+[@@ expect_failure [298; 298]]
+let test_pure0 (x : U32.t)
   : F.steel unit emp (fun () -> emp)
       (requires fun _ -> U32.v x <= 10) (ensures fun _ () _ -> True)
   = F.(to_steel begin
@@ -443,6 +443,18 @@ let test_pure (x : U32.t)
     return ()
   end #(_ by (mk_steel [Dump Stage_WP])) ())
 #pop-options
+
+// There is an SMT query to type-check the program. The condition [UInt.size (UInt32.v x + 1) 32] succeeds
+// thanks to the [squash (UInt32.v x <= 10)] introduced by [assert_sq].
+let test_pure1 (x : U32.t)
+  : F.steel U32.t emp (fun _ -> emp)
+      (requires fun _ -> U32.v x <= 10) (ensures fun _ _ _ -> True)
+    by T.(dump "test_pure1")
+  = F.(to_steel begin
+    _  <-- assert_sq (U32.v x <= 10);
+    return U32.(x +^ 1ul)
+  end #(_ by (mk_steel [Dump Stage_WP])) ())
+
 
 ////////// test failures //////////
 
@@ -470,37 +482,6 @@ let test_fail_to_repr_t (#a : Type) (r : ref a) (p : rmem (vptr r) -> prop)
 
 #pop-options
 
-////////// test time //////////
-
-let steel_id (#a : Type) (r : ref a)
-  : Steel unit (vptr r) (fun () -> vptr r)
-      (requires fun _ -> True) (ensures fun h0 () h1 -> frame_equalities (vptr r) h0 h1)
-  = Steel.Effect.Atomic.return ()
-
-[@@ __reduce__]
-let rec repeat_n (n : nat) (t : M.repr SH.KSteel unit) : M.repr SH.KSteel unit
-  = F.(if n = 0 then return () else (t;; repeat_n (n-1) t))
-
-(*
-#set-options "--query_stats"
-let test_time (#a : Type) (r : ref a)
-  : F.steel unit (vptr r) (fun () -> vptr r)
-      (requires fun _ -> True) (ensures fun h0 () h1 -> frame_equalities (vptr r) h0 h1)
-  = F.(to_steel (repeat_n 10 (call steel_id r))
-        #(_ by T.(
-          norm [
-             delta_only [`%M.Mkrepr?.repr_tree];
-             delta_attr [`%__tac_helper__; `%M.__repr_M__; `%__steel_reduce__; `%__reduce__];
-             delta_qualifier ["unfold"];
-             iota; zeta; primops];
-          print ("begin test n=10 at "^string_of_int (curms ()));
-          mk_steel [Timer]))
-         ())
-let _ : unit = _ by T.(
-          print ("end test at "^string_of_int (curms ()));
-          exact (`()))
-*)
-
 ////////// test ghost //////////
 
 let aux_ghost #opened (r : ref U32.t)
@@ -521,10 +502,14 @@ let test_ghost (r : ref U32.t)
   : F.steel U32.t (vptr r) (fun _ -> vptr r)
             (requires fun _ -> True) (ensures fun h0 _ h1 -> frame_equalities (vptr r) h0 h1)
   = F.(to_steel (
-    x <-- MC.ghost_to_steel (MC.bind_ghost (call_g aux_ghost r) (fun x ->
-                                         MC.return (SH.KGhost _) (Ghost.hide x)));
+    x <-- (x <-- call_g aux_ghost r;
+     return_g (Ghost.hide x));
     call (aux_steel r) x
   ) #(_ by (mk_steel [Extract])) ())
+// F* reported issues in other files: ["experimental/Steel.Effect.Common.fsti" 460 460 24 37]
+// "Unfolding name which is marked as a plugin: frame_vc_norm" 340
+
+
 
 ////////// test LV //////////
 
@@ -556,7 +541,7 @@ let test_slrewrite (r0 r1 r2 : ref U32.t)
       (requires fun _ -> r0 == r2)
       (ensures  fun h0 _ h1 -> sel r0 h0 == sel r2 h1 /\ sel r1 h0 == sel r1 h1)
   = F.(to_steel (
-      MC.ghost_to_steel_ct (GCb.slrewrite r0 r2) (fun _ -> U.Unit');;
+      GCb.slrewrite r0 r2;;
       return ()
     ) #(_ by (mk_steel [Timer; Extract])) ())
 // time specs     : 103ms
@@ -575,7 +560,7 @@ let test_with_invariant_g (r0 : ghost_ref U32.t) (r1 : ref U32.t) (i : inv (ghos
   = F.(to_steel (
     MC.ghost_to_steel (GCb.with_invariant_g i (
       call_g ghost_read r0
-    ))) #(_ by (mk_steel [Timer; Extract; Dump Stage_Extract])) ())
+    ))) #(_ by (mk_steel [Timer; Extract(*; Dump Stage_Extract*)])) ())
 // time specs     : 94ms
 // time lin_cond  : 297ms
 // time sub_push  : 72ms
@@ -594,7 +579,7 @@ let test_for_loop_0 (r0 : ref U32.t)
   = F.(to_steel (
       GCb.for_loop 0ul 10ul (fun _ -> [vptr' r0 full_perm]) (fun i v -> True)
       begin fun i ->
-        return U.Unit'
+        elift (return U.Unit')
       end
     ) #(_ by (mk_steel [Timer; Extract])) ())
 // time specs     : 38ms
@@ -634,6 +619,3 @@ let test_for_loop_1 (r0 r1 : ref U32.t)
 // memory to finish processing the definition
 // The term resulting from the normalisation is quite big because of the (ghost) tree_cond
 // used for the specifications on our Steel combinators.
-
-// in batch mode, F* raise a warning 340:
-// Unfolding name which is marked as a plugin: frame_vc_norm

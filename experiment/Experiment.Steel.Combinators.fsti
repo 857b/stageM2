@@ -3,13 +3,11 @@ module Experiment.Steel.Combinators
 module U   = Learn.Util
 module G   = FStar.Ghost
 module L   = FStar.List.Pure
-module T   = FStar.Tactics
 module SE  = Steel.Effect
 module SH  = Experiment.Steel.Steel
 module Fl  = Learn.FList
 module Mem = Steel.Memory
 module Veq = Experiment.Steel.VEquiv
-module TcS = Experiment.Steel.Tac
 
 open Steel.Effect
 open Steel.Effect.Atomic
@@ -114,12 +112,12 @@ let return (ek : SH.effect_kind) (#a : Type) (x : a) : repr ek a
 (****** Bind *)
 
 type bind_steel_t (ek0 ek1 ek2 : SH.effect_kind) =
-      (a : Type) ->  (b : Type) -> (f : G.erased (prog_tree a)) -> (g : G.erased (a -> prog_tree b)) ->
+      (a : Type u#a) ->  (b : Type u#a) -> (f : G.erased (prog_tree a)) -> (g : G.erased (a -> prog_tree b)) ->
       (pre : G.erased pre_t) -> (itm : G.erased (post_t a)) -> (post : G.erased (post_t b)) ->
       (cf : G.erased (tree_cond f pre itm)) ->
       (cg : G.erased ((x : a) -> tree_cond (G.reveal g x) (G.reveal itm x) post)) ->
       (rf : repr_steel_tc ek0 cf) ->
-      (rg : ((x : a) -> repr_steel_tc ek1 (G.reveal cg x))) ->
+      (rg : ((x : a) -> repr_steel_tc u#a u#p ek1 (G.reveal cg x))) ->
       repr_steel_tc ek2 (TCbind #a #b #f #g pre itm post cf cg)
 
 inline_for_extraction noextract
@@ -224,53 +222,32 @@ let bindP_ghost (#a #b : Type) (#opened : Mem.inames)
 
 (****** If-then-else *)
 
+/// We match the restriction of SteelAtomic, but it can be bypassed.
+type cba_ite_effect_kind_t =
+  ek : SH.effect_kind { ~ (SH.KAtomic? ek) }
+
 inline_for_extraction noextract
 val ite_steel
-      (a : Type) (guard : bool)
+      (a : Type) (ek : cba_ite_effect_kind_t) (guard : bool)
       (thn  : G.erased (prog_tree a)) (els : G.erased (prog_tree a))
       (pre  : G.erased pre_t) (post : G.erased (post_t a))
       (cthn : G.erased (tree_cond thn pre post))
       (cels : G.erased (tree_cond els pre post))
-      (rthn : repr_steel_tc SH.KSteel cthn)
-      (rels : repr_steel_tc SH.KSteel cels)
-  : repr_steel_tc SH.KSteel (TCif #a #guard #thn #els pre post cthn cels)
-
-inline_for_extraction noextract
-val ite_ghost_steel
-      (a : Type) (opened : Mem.inames) (guard : bool)
-      (thn  : G.erased (prog_tree a)) (els : G.erased (prog_tree a))
-      (pre  : G.erased pre_t) (post : G.erased (post_t a))
-      (cthn : G.erased (tree_cond thn pre post))
-      (cels : G.erased (tree_cond els pre post))
-      (rthn : repr_steel_tc (SH.KGhost opened) cthn)
-      (rels : repr_steel_tc (SH.KGhost opened) cels)
-  : repr_steel_tc (SH.KGhost opened) (TCif #a #guard #thn #els pre post cthn cels)
-
+      (rthn : repr_steel_tc ek cthn)
+      (rels : repr_steel_tc ek cels)
+  : repr_steel_tc ek (TCif #a #guard #thn #els pre post cthn cels)
 
 [@@ __repr_M__]
 inline_for_extraction noextract
-let ite (#a : Type) (guard : bool) (thn els : repr SH.KSteel a)
-  : repr SH.KSteel a
+let ite (#a : Type) (ek : cba_ite_effect_kind_t) (guard : bool) (thn els : repr ek a)
+  : repr ek a
   = {
     repr_tree  = Tif a guard thn.repr_tree els.repr_tree;
     repr_steel = (fun pre0 post0 c ->
                     let TCif pre post cthn cels = c in
-                    ite_steel a guard _ _ pre post cthn cels
+                    ite_steel a ek guard _ _ pre post cthn cels
                        (thn.repr_steel _ _ cthn) (els.repr_steel _ _ cels))
   }
-
-[@@ __repr_M__]
-inline_for_extraction noextract
-let ite_ghost (#a : Type) (#opened : Mem.inames) (guard : bool) (thn els : repr (SH.KGhost opened) a)
-  : repr (SH.KGhost opened) a
-  = {
-    repr_tree  = Tif a guard thn.repr_tree els.repr_tree;
-    repr_steel = (fun pre0 post0 c ->
-                    let (TCif pre post cthn cels) = c in
-                    ite_ghost_steel a opened guard _ _ pre post cthn cels
-                       (thn.repr_steel _ _ cthn) (els.repr_steel _ _ cels))
-  }
-
 
 
 (*** Lifts *)
@@ -286,60 +263,18 @@ type erasable_t (a : Type) = {
   erasable_rv : (x : Ghost.erased a) -> revealed_value x
 }
 
-private
-let __build_revealed_value (a : Type) : (x : Ghost.erased a) -> GTot (revealed_value x)
-  = fun x -> Ghost.reveal x
-
-/// Solves a goal [erasable_t a] if a is an erasable type.
-let build_erasable_t fr ctx : T.Tac unit
-  = T.(
-    let a : term
-      = match inspect (cur_goal ()) with
-        | Tv_App  _ arg -> arg._1
-        | _ -> fail "build_erasable_t : goal"
-    in
-    apply (`Mkerasable_t);
-    // The following requires a conversion from [_ -> GTot (revealed_value x)] to [_ -> Tot (revealed_value x)]
-    // which succeeds iff [revealed_value x] (i.e. [a]) is erasable.
-    // Since we use (`#a), this may generate some guards to retypecheck (`#a).
-    with_policy SMT (fun () -> TcS.cs_try (fun () ->
-      exact (`(__build_revealed_value (`#a) <: _ -> Tot _)))
-    fr ctx (fun m -> fail (m (Fail_not_erasable a) [])))
-  )
-
-private
-let test_erasable_unit : erasable_t unit
-  = _ by (build_erasable_t default_flags TcS.dummy_ctx)
-
-private
-let test_erasable_unit' : erasable_t U.unit'
-  = _ by (build_erasable_t default_flags TcS.dummy_ctx)
-
-#push-options "--silent"
-[@@ expect_failure [228]]
-private
-let test_erasable_int : erasable_t int
-  = _ by (build_erasable_t default_flags TcS.dummy_ctx)
-#pop-options
-
-[@@ erasable]
-private noeq
-type test_guard_type (_ : squash (forall (n : nat) . n >= 0)) =
-
-private
-let test_erasable_guard : erasable_t (test_guard_type ())
-  = _ by (build_erasable_t default_flags TcS.dummy_ctx)
-
 
 (***** [steel_liftable] *)
 
 // named as in Coq
+[@@ __extraction__]
 noeq
 type clos_refl_trans_1n (#a : Type) (r : a -> a -> Type) (x : a) : a -> Type =
   | Rt1n_refl  : clos_refl_trans_1n r x x
   | Rt1n_trans : (y : a) -> (z : a) ->
                  r x y -> clos_refl_trans_1n r y z -> clos_refl_trans_1n r x z
 
+[@@ __extraction__]
 noeq
 type steel_liftable1 (a : Type) : SH.effect_kind -> SH.effect_kind -> Type =
   | Lift_ghost_ghostI  : erasable_t a -> (opened : Mem.inames) ->

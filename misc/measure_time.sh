@@ -18,5 +18,5 @@ for i in $(seq 1 20)
 do
 	echo
 	sed -e 's/REPEAT/'$i'/g' < misc/MeasureTime.fst.template > misc/MeasureTime.fst
-	fstar misc/MeasureTime.fst && rm misc/MeasureTime.fst
+	{ fstar misc/MeasureTime.fst && rm misc/MeasureTime.fst ; } || { echo "error"; exit 1; }
 done

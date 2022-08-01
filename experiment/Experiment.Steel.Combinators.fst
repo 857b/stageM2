@@ -311,15 +311,41 @@ let bindP_steel
 
 (****** If-then-else *)
 
-inline_for_extraction noextract
-let ite_steel a guard thn els pre post cthn cels rthn rels
-  = SH.steel_f (fun () ->
+type ite_steel_t (ek : SH.effect_kind) =
+      (a : Type) -> (guard : bool) ->
+      (thn  : G.erased (prog_tree a)) -> (els : G.erased (prog_tree a)) ->
+      (pre  : G.erased pre_t) -> (post : G.erased (post_t a)) ->
+      (cthn : G.erased (tree_cond thn pre post)) -> 
+      (cels : G.erased (tree_cond els pre post)) -> 
+      (rthn : repr_steel_tc ek cthn) -> 
+      (rels : repr_steel_tc ek cels) ->
+      repr_steel_tc ek (TCif #a #guard #thn #els pre post cthn cels)
+
+inline_for_extraction
+let ite_steel__steel : ite_steel_t SH.KSteel
+  = fun a guard thn els pre post cthn cels rthn rels ->
+    SH.steel_f (fun () ->
     if guard then SH.steel_u rthn () else SH.steel_u rels ())
 
-inline_for_extraction noextract
-let ite_ghost_steel a opened guard thn els pre post cthn cels rthn rels
-  = SH.ghost_f (fun () ->
+inline_for_extraction
+let ite_steel__ghostI o : ite_steel_t (SH.KGhostI o)
+  = fun a guard thn els pre post cthn cels rthn rels ->
+    SH.ghostI_f (fun () ->
+    if guard then SH.ghostI_u rthn () else SH.ghostI_u rels ())
+
+inline_for_extraction
+let ite_steel__ghost o : ite_steel_t (SH.KGhost o)
+  = fun a guard thn els pre post cthn cels rthn rels ->
+    SH.ghost_f (fun () ->
     if guard then SH.ghost_u rthn () else SH.ghost_u rels ())
+
+
+inline_for_extraction noextract
+let ite_steel a ek guard thn els pre post cthn cels rthn rels
+  = match ek with
+  | SH.KSteel    -> ite_steel__steel    a guard thn els pre post cthn cels rthn rels
+  | SH.KGhostI o -> ite_steel__ghostI o a guard thn els pre post cthn cels rthn rels
+  | SH.KGhost  o -> ite_steel__ghost  o a guard thn els pre post cthn cels rthn rels
 
 (***** [steel_liftable] *)
 
