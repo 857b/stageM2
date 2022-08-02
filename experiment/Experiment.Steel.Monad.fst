@@ -74,14 +74,23 @@ let call_g (#b : Type)
   : M.repr (SH.KGhost (opened x)) (a x)
   = C.repr_of_steel (pre x) (post x) (req x) (ens x) (SH.ghost_fe (fun () -> f x))
 
-let __assert_sq (#opened : Mem.inames) (p : Type)
+
+private
+let assert_sq_steel (#opened : Mem.inames) (p : Type0)
   : SA.SteelGhost (squash p) opened SA.emp (fun _ -> SA.emp) (requires fun _ -> p) (ensures fun _ _ _ -> True)
   = SA.noop ()
 
 [@@ __repr_M__]
 let assert_sq (#opened : Mem.inames) (p : Type)
   : M.repr (SH.KGhost opened) (squash p)
-  = call_g __assert_sq p // TODO use a spec_r_exact
+  = C.repr_of_steel_r ({
+    spc_pre  = [];
+    spc_post = (fun _ -> []);
+    spc_ro   = [];
+    spc_req  = (fun _ _ -> p);
+    spc_ens  = (fun _ _ _ _ -> True);
+  }) (SH.ghost_f (fun () -> assert_sq_steel p))
+
 
 /// Does not work because it requires to recheck the monotonicity of wp.
 [@@ __repr_M__]
@@ -89,14 +98,23 @@ let pure (#a : Type) (#wp : pure_wp a) ($f : unit -> PURE a wp)
   : M.repr SH.KSteel a
   = C.bindP SH.KSteel wp f (fun x -> C.return SH.KSteel x)
 
-let __ghost (#a : Type) (#opened : Mem.inames) (x : Ghost.erased a)
-  : SA.SteelGhost a opened SA.emp (fun _ -> SA.emp) (fun _ -> True) (fun _ _ _ -> True)
+
+private
+let ghost_steel (#a : Type) (#opened : Mem.inames) (x : Ghost.erased a)
+  : SA.SteelGhost a opened SA.emp (fun _ -> SA.emp) (requires fun _ -> True) (ensures fun _ x' _ -> x' == Ghost.reveal x)
   = SA.noop (); x
 
 [@@ __repr_M__]
 let ghost (#a : Type) (#opened : Mem.inames) (x : Ghost.erased a)
   : M.repr (SH.KGhost opened) a
-  = call_g __ghost x // TODO use a spec_r_exact
+  = C.repr_of_steel_r ({
+    spc_pre  = [];
+    spc_post = (fun _ -> []);
+    spc_ro   = [];
+    spc_req  = (fun _ _ -> True);
+    spc_ens  = (fun _ x' _ _ -> x' == Ghost.reveal x);
+  }) (SH.ghost_f (fun () -> ghost_steel x))
+
 
 /// Used when a combinator expect a specific effect. An alternative would be a bind with [noop] but this lift does
 /// not change the [repr_tree].
@@ -109,26 +127,55 @@ let elift
   = C.repr_lift lt f
 
 
-unfold
-let steel (a : Type) (pre : SE.pre_t) (post : SE.post_t a)
-          (req : SE.req_t pre) (ens : SE.ens_t pre a post)
-  : Type
-  = SH.unit_steel a pre post req ens
+unfold let usteel        = SH.unit_steel
+unfold let usteel_atomic = SH.unit_steel_atomic
+unfold let usteel_ghost  = SH.unit_steel_ghost
 
 let mk_steel (fs : list flag) : Tac unit
   = build_to_steel (make_flags_record fs)
 
 /// We use the workaround of [Issue#2485](https://github.com/FStarLang/FStar/issues/2485) to call [mk_steel]
 /// without retyping the generated term.
+/// NOTE: We are probably relying on [fs] being resolved before [g]. I'm not sure that F* will always call the tactics
+///       in this order.
 unfold
 let to_steel
-      (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
+      (#[apply (`[])] fs : list flag)
+      (#a : Type)
+      (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
       (#ek0 : SH.effect_kind) (#[@@@ __monad_implicit__] lt : C.steel_liftable a ek0 SH.KSteel)
       (t : M.repr ek0 a)
-      (#[exact (`(_ by (mk_steel [])))] g : __to_steel_goal a pre post req ens (C.repr_lift lt t)) ()
-  : steel a pre post req ens
-  = g
-// TODO: other effects
+      (#[exact (`(_ by (mk_steel (`@fs))))]
+        g : __to_steel_goal a pre post req ens SH.KSteel (C.repr_lift lt t))
+      ()
+  : usteel a pre post req ens
+  = SH.steel_u g
+
+unfold
+let to_steel_a
+      (#[apply (`[])] fs : list flag)
+      (#a : Type) (#opened : Mem.inames)
+      (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
+      (#ek0 : SH.effect_kind) (#[@@@ __monad_implicit__] lt : C.steel_liftable a ek0 (SH.KAtomic opened))
+      (t : M.repr ek0 a)
+      (#[exact (`(_ by (mk_steel (`@fs))))]
+        g : __to_steel_goal a pre post req ens (SH.KAtomic opened) (C.repr_lift lt t))
+      ()
+  : usteel_atomic a opened pre post req ens
+  = SH.atomic_u g
+
+unfold
+let to_steel_g
+      (#[apply (`[])] fs : list flag)
+      (#a : Type) (#opened : Mem.inames)
+      (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
+      (#ek0 : SH.effect_kind) (#[@@@ __monad_implicit__] lt : C.steel_liftable a ek0 (SH.KGhost opened))
+      (t : M.repr ek0 a)
+      (#[exact (`(_ by (mk_steel (`@fs))))]
+        g : __to_steel_goal a pre post req ens (SH.KGhost opened) (C.repr_lift lt t))
+      ()
+  : usteel_ghost a opened pre post req ens
+  = SH.ghost_u g
 
 
 [@@ resolve_implicits; __monad_implicit__]

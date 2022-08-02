@@ -247,14 +247,14 @@ let __normal_extract : list norm_step = [
 
 /// We mention [t] so that it is specified by the goal, but this type is just a synonym for [M.repr_steel_t].
 let extract (a : Type) (pre : M.pre_t) (post : M.post_t a) (req : M.req_t pre) (ens : M.ens_t pre a post)
-            (t : M.repr SH.KSteel a)
+            (ek : SH.effect_kind) (t : M.repr ek a)
   : Type
-  = M.repr_steel_t SH.KSteel a pre post req ens
+  = M.repr_steel_t ek a pre post req ens
 
 [@@ __tac_helper__; __extraction__]
 inline_for_extraction
 let __solve_by_wp_LV
-      (#a : Type) (t : M.repr SH.KSteel a)
+      (#ek : SH.effect_kind) (#a : Type) (t : M.repr ek a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (#req : M.req_t pre) (#ens : M.ens_t pre a post)
       (lc0 : LV.top_lin_cond t.repr_tree pre post)
@@ -265,9 +265,9 @@ let __solve_by_wp_LV
       (wp : squash (Fl.forall_flist (Vpl.vprop_list_sels_t pre) (fun sl0 ->
                req sl0 ==>
                Fun.tree_wp (t_Fun sl0) (fun res -> ens sl0 res.val_v res.sel_v))))
-      (ext : M.repr_steel_t SH.KSteel a pre post req ens)
+      (ext : M.repr_steel_t ek a pre post req ens)
       (ext_eq : ext == prog_LV_to_Fun_extract_wp t lc0 lc1 lc1_eq req ens (fun sl0 -> ()))
-  : extract a pre post req ens t
+  : extract a pre post req ens ek t
   =
     ext
 
@@ -338,18 +338,18 @@ let solve_by_wp (fr : flags_record) (t : timer) : Tac unit
 /// Similarly to [extract], [t] is only mentioned so that it can be retrieved by the tactic
 type __to_steel_goal
       (a : Type) (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t pre) (ens : SE.ens_t pre a post)
-      (t : M.repr SH.KSteel a)
-  = SH.unit_steel a pre post req ens
+      (ek : SH.effect_kind) (t : M.repr ek a)
+  = SH.steel a pre post req ens ek
 
 [@@ __tac_helper__]
 inline_for_extraction
 let __build_to_steel
       (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
-      (#t : M.repr SH.KSteel a)
+      (#ek : SH.effect_kind) (#t : M.repr ek a)
       (goal_tr : M.to_repr_t a pre post req ens)
-      (goal_f  : extract a goal_tr.r_pre goal_tr.r_post goal_tr.r_req goal_tr.r_ens t)
-  : __to_steel_goal a pre post req ens t
-  = SH.steel_u (M.steel_of_repr goal_tr goal_f)
+      (goal_f  : extract a goal_tr.r_pre goal_tr.r_post goal_tr.r_req goal_tr.r_ens ek t)
+  : __to_steel_goal a pre post req ens ek t
+  = M.steel_of_repr goal_tr goal_f
 
 /// Solves a goal [__to_steel_goal]
 let build_to_steel (fr : flags_record) : Tac unit
@@ -370,16 +370,6 @@ let build_to_steel (fr : flags_record) : Tac unit
     norm [delta_attr [`%__tac_helper__]; iota];
     solve_by_wp fr t
     )
-
-
-[@@ __tac_helper__]
-inline_for_extraction
-let to_steel
-      (#a : Type) (#pre : SE.pre_t) (#post : SE.post_t a) (#req : SE.req_t pre) (#ens : SE.ens_t pre a post)
-      (t : M.repr SH.KSteel a)
-      (g : __to_steel_goal a pre post req ens t)
-  : SH.unit_steel a pre post req ens
-  = g
 
 
 (***** Using a [rewrite_with_tactic] *)

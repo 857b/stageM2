@@ -36,7 +36,7 @@ open Experiment.Steel.GCombinators.Lib
 /// [slrewrite x0 x1] will replace any occurrence of [x0] by [x1] in the current environment (using [l_to_r]).
 /// Requires [x0 == x1].
 
-[@@ __cond_solver__]
+[@@ __cond_solver__; __reduce__]
 let slrewrite_spec_r (#t : Type u#t) (x0 x1 : t) (v0 v1 frame : vprop_list) (veq : squash (x0 == x1 ==> v0 == v1))
   : M.spec_r (U.unit' u#a)
   = M.Mkspec_r
@@ -229,7 +229,7 @@ let with_invariant_g_sl_list
 
 #pop-options
 
-
+[@@ __reduce__]
 let with_invariant_inner_spec_r
      (#a : Type u#a) (p : vprop_list)
      (pre : M.pre_t) (post : M.post_t a) (ro : vprop_list)
@@ -238,7 +238,7 @@ let with_invariant_inner_spec_r
   : M.spec_r a
   = M.Mkspec_r L.(p @ pre) L.(fun x -> p @ post x) ro req ens
 
-[@@ __LV2SF__]
+[@@ __LV2SF__; __reduce__]
 inline_for_extraction
 let with_invariant_spec_r
      (#a : Type u#a) (p : vprop_list)
@@ -559,7 +559,7 @@ let elim_for_loop_preserve
                     ens i sl_inv0 sl_inv1 sl_ro ==> invp (U32.v i + 1) sl_inv1))
   = ()
 
-[@@ __LV2SF__]
+[@@ __LV2SF__; __reduce__]
 inline_for_extraction
 let for_loop_spec_r
       (start : U32.t) (finish : U32.t { U32.v start <= U32.v finish })

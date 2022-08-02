@@ -49,7 +49,7 @@ let test_steel_func
 
 noextract
 let test_steel' (r0 r1 : ref int)
-  : F.steel unit (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
+  : F.usteel unit (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
       (requires fun h0      -> sel r1 h0 <= 20)
       (ensures  fun h0 _ h1 -> sel r0 h1 <= 30)
   = F.(to_steel (

@@ -52,22 +52,22 @@ let clean () : Tactics.Tac unit =
 
 inline_for_extraction
 let test3_LV' (r0 r1 : ref U32.t)
-  : F.steel unit
+  : F.usteel unit
       (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
       (requires fun h0 -> U32.v (sel r0 h0) < 42)
       (ensures fun h0 () h1 -> U32.v (sel r1 h1) == U32.v (sel r0 h0) + 1)
-  = F.(to_steel (
+  = F.(to_steel #[Timer; Extract; Dump Stage_Extract] (
       x <-- call read r0;
       call (write r1) U32.(x +%^ 1ul)
-    ) #(_ by (mk_steel [Timer; Extract])) ())
-// time specs     : 122ms
-// time lin_cond  : 242ms
-// time sub_push  : 42ms
-// time LV2SF     : 15ms
-// time SF2Fun    : 2ms
-// time Fun_wp    : 18ms
-// time extract   : 59ms
-// total time : 500ms [450ms-700ms]
+    ) ())
+// time specs     : 95ms
+// time lin_cond  : 276ms
+// time sub_push  : 52ms
+// time LV2SF     : 19ms
+// time SF2Fun    : 4ms
+// time Fun_wp    : 15ms
+// time extract   : 186ms
+// total time : 647ms [450ms-750ms]
 
 
 ////////// test_flatten //////////
@@ -308,7 +308,7 @@ let test3_steel (r0 r1 : ref U32.t)
       (test3_mem r0 r1) (fun _ -> test3_mem r0 r1)
       (requires fun sl0 -> U32.v (sl0 0) < 42)
       (ensures fun sl0 () sl1 -> U32.v (sl1 1) == U32.v (sl0 0) + 1)
-      (test3_M r0 r1)
+      _ (test3_M r0 r1)
   = _ by (solve_by_wp F.(make_flags_record [Dump Stage_SF]) (timer_start "" true))
 
 (*let _ = fun r0 r1 ->
@@ -319,22 +319,22 @@ let test3_steel (r0 r1 : ref U32.t)
 // This only generates 1 SMT query: the WP
 inline_for_extraction
 let test3_steel' (r0 r1 : ref U32.t)
-  : F.steel unit
+  : F.usteel unit
       (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
       (requires fun h0 -> U32.v (sel r0 h0) < 42)
       (ensures fun h0 () h1 -> U32.v (sel r1 h1) == U32.v (sel r0 h0) + 1)
-  = F.(to_steel (
+  = F.(to_steel #[Extract; Timer(*; O_ST2SF; Dump Stage_ST*)] (
       x <-- call read r0;
       call (write r1) U32.(x +%^ 1ul)
-    ) #(_ by (mk_steel [Extract; Timer(*; O_ST2SF; Dump Stage_ST*)])) ())
+    ) ())
 
 inline_for_extraction
 let test3_steel'' (r0 r1 : ref U32.t)
-  : F.steel unit
+  : F.usteel unit
       (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
       (requires fun h0 -> U32.v (sel r0 h0) < 42)
       (ensures fun h0 () h1 -> U32.v (sel r1 h1) == U32.v (sel r0 h0) + 1)
-  = F.(to_steel (test3_M r0 r1) #(_ by (mk_steel [Timer; (*; O_ST2SF; Dump Stage_ST*)])) ())
+  = F.(to_steel #[Timer; (*; O_ST2SF; Dump Stage_ST*)] (test3_M r0 r1) ())
 
 
 let test3_steel'_caller (r0 r1 : ref U32.t)
@@ -349,7 +349,7 @@ let test3_steel'_caller (r0 r1 : ref U32.t)
 ////////// test4 //////////
 
 let test4 (#a : Type) (r : ref a)
-  : F.steel (ref a)
+  : F.usteel (ref a)
       (vptr r) (fun r' -> vptr r')
       (requires fun h0 -> True)
       (ensures  fun h0 r' h1 -> sel r' h1 == sel r h0)
@@ -358,19 +358,19 @@ let test4 (#a : Type) (r : ref a)
 ////////// test emp //////////
 
 let test_emp_0
-  : F.steel unit
+  : F.usteel unit
       emp (fun () -> emp)
       (fun _ -> True) (fun _ _ _ -> True)
   = F.(to_steel (return ()) ())
 
 let test_emp_1 (#a : Type) (r : ref a)
-  : F.steel unit
+  : F.usteel unit
       (emp `star` vptr r) (fun () -> vptr r)
       (fun _ -> True) (fun _ _ _ -> True)
   = F.(to_steel (return ()) ())
 
 let test_emp_2 (#a : Type) (r : ref a)
-  : F.steel unit
+  : F.usteel unit
       (vptr r) (fun () -> emp `star` vptr r)
       (fun _ -> True) (fun _ _ _ -> True)
   = F.(to_steel (return ()) ())
@@ -382,14 +382,14 @@ let test_emp_2 (#a : Type) (r : ref a)
 /// However, [Tactics.Effect.rewrite_with_tactic frame_vc_norm] remains in the WP.
 
 let test_frame_equalities_0 (#a : Type) (r0 : ref a)
-  : F.steel unit (vptr r0) (fun () -> vptr r0)
+  : F.usteel unit (vptr r0) (fun () -> vptr r0)
       (requires fun _ -> True) (ensures fun h0 () h1 -> frame_equalities (vptr r0) h0 h1)
-  = F.(to_steel (return ()) #(_ by (mk_steel [Dump Stage_WP])) ())
+  = F.(to_steel #[Dump Stage_WP] (return ()) ())
 
 let test_frame_equalities_1 (#a : Type) (r0 r1 r2 : ref a)
-  : F.steel unit (vptr r0 `star` vptr r1 `star` vptr r2) (fun () -> vptr r0 `star` vptr r1 `star` vptr r2)
+  : F.usteel unit (vptr r0 `star` vptr r1 `star` vptr r2) (fun () -> vptr r0 `star` vptr r1 `star` vptr r2)
       (requires fun _ -> True) (ensures fun h0 () h1 -> frame_equalities (vptr r0 `star` vptr r1 `star` vptr r2) h0 h1)
-  = F.(to_steel (return ()) #(_ by (mk_steel [Dump Stage_WP])) ())
+  = F.(to_steel #[Dump Stage_WP] (return ()) ())
 
 let test_steel_with_frame_equality (#a : Type) (r0 r1 : ref a)
   : Steel unit (vptr r0 `star` vptr r1) (fun () -> vptr r0 `star` vptr r1)
@@ -397,26 +397,26 @@ let test_steel_with_frame_equality (#a : Type) (r0 r1 : ref a)
   = Steel.Effect.Atomic.return ()
 
 let test_frame_equalities_2 (#a : Type) (r0 r1 : ref a)
-  : F.steel unit (vptr r0 `star` vptr r1) (fun () -> vptr r0 `star` vptr r1)
+  : F.usteel unit (vptr r0 `star` vptr r1) (fun () -> vptr r0 `star` vptr r1)
       (requires fun h0 -> sel r0 h0 == sel r1 h0) (ensures fun h0 () h1 -> sel r0 h1 == sel r1 h1)
-  = F.(to_steel (call (test_steel_with_frame_equality r0) r1) #(_ by (mk_steel [Dump Stage_WP])) ())
+  = F.(to_steel #[Dump Stage_WP] (call (test_steel_with_frame_equality r0) r1) ())
 
 ////////// test if-then-else //////////
 
 let test_ite_0 (r : ref U32.t)
-  : F.steel unit (vptr r) (fun () -> vptr r)
+  : F.usteel unit (vptr r) (fun () -> vptr r)
       (requires fun _ -> True) (ensures fun _ () h1 -> U32.v (sel r h1) <= 10)
-  = F.(to_steel begin
+  = F.(to_steel #[Dump Stage_WP]  begin
     x <-- call read r;
     ite U32.(x >=^ 10ul) (
       call (write r) 0ul
     ) (
       call (write r) (U32.(x +%^ 1ul))
     )
-  end #(_ by (mk_steel [Dump Stage_WP])) ())
+  end ())
 
 let test_ite_1 (r : ref U32.t)
-  : F.steel (ref U32.t) (vptr r) (fun r' -> vptr r')
+  : F.usteel (ref U32.t) (vptr r) (fun r' -> vptr r')
       (requires fun _ -> True) (ensures fun h0 r' h1 -> sel r' h1 == sel r h0)
   = F.(to_steel begin
     ite true (
@@ -436,24 +436,24 @@ let test_ite_1 (r : ref U32.t)
 #push-options "--silent --no_smt"
 [@@ expect_failure [298; 298]]
 let test_pure0 (x : U32.t)
-  : F.steel unit emp (fun () -> emp)
+  : F.usteel unit emp (fun () -> emp)
       (requires fun _ -> U32.v x <= 10) (ensures fun _ () _ -> True)
-  = F.(to_steel begin
+  = F.(to_steel #[Dump Stage_WP]  begin
     x' <-- pure (fun () -> U32.(x +^ 1ul));
     return ()
-  end #(_ by (mk_steel [Dump Stage_WP])) ())
+  end ())
 #pop-options
 
 // There is an SMT query to type-check the program. The condition [UInt.size (UInt32.v x + 1) 32] succeeds
 // thanks to the [squash (UInt32.v x <= 10)] introduced by [assert_sq].
 let test_pure1 (x : U32.t)
-  : F.steel U32.t emp (fun _ -> emp)
+  : F.usteel U32.t emp (fun _ -> emp)
       (requires fun _ -> U32.v x <= 10) (ensures fun _ _ _ -> True)
     by T.(dump "test_pure1")
-  = F.(to_steel begin
+  = F.(to_steel #[Dump Stage_WP] begin
     _  <-- assert_sq (U32.v x <= 10);
     return U32.(x +^ 1ul)
-  end #(_ by (mk_steel [Dump Stage_WP])) ())
+  end ())
 
 
 ////////// test failures //////////
@@ -462,22 +462,22 @@ let test_pure1 (x : U32.t)
 
 [@@ expect_failure [228]]
 let test_fail_spec (v : vprop)
-  : F.steel unit v (fun () -> v) (fun _ -> True) (fun _ _ _ -> True)
+  : F.usteel unit v (fun () -> v) (fun _ -> True) (fun _ _ _ -> True)
   = F.(to_steel (return ()) ())
 
 [@@ expect_failure [228]]
 let test_fail_slcond_0 (#a : Type) (r : ref a)
-  : F.steel a emp (fun () -> emp) (fun _ -> True) (fun _ _ _ -> True)
+  : F.usteel a emp (fun () -> emp) (fun _ -> True) (fun _ _ _ -> True)
   = F.(to_steel (call read r) ())
 
 [@@ expect_failure [228]]
 let test_fail_slcond_1 (#a : Type) (r : ref a)
-  : F.steel a (vptr r) (fun () -> emp) (fun _ -> True) (fun _ _ _ -> True)
+  : F.usteel a (vptr r) (fun () -> emp) (fun _ -> True) (fun _ _ _ -> True)
   = F.(to_steel (call read r) ())
 
 [@@ expect_failure [228]]
 let test_fail_to_repr_t (#a : Type) (r : ref a) (p : rmem (vptr r) -> prop)
-  : F.steel unit (vptr r) (fun () -> vptr r) (fun h0 -> p h0) (fun _ _ _ -> True)
+  : F.usteel unit (vptr r) (fun () -> vptr r) (fun h0 -> p h0) (fun _ _ _ -> True)
   = F.(to_steel (return ()) ())
 
 #pop-options
@@ -498,17 +498,24 @@ let aux_steel (r : ref U32.t) (x : Ghost.erased int)
   = read r
 
 inline_for_extraction
-let test_ghost (r : ref U32.t)
-  : F.steel U32.t (vptr r) (fun _ -> vptr r)
+let test_ghost0 (r : ref U32.t)
+  : F.usteel U32.t (vptr r) (fun _ -> vptr r)
             (requires fun _ -> True) (ensures fun h0 _ h1 -> frame_equalities (vptr r) h0 h1)
-  = F.(to_steel (
+  = F.(to_steel #[Extract] (
     x <-- (x <-- call_g aux_ghost r;
      return_g (Ghost.hide x));
     call (aux_steel r) x
-  ) #(_ by (mk_steel [Extract])) ())
+  ) ())
 // F* reported issues in other files: ["experimental/Steel.Effect.Common.fsti" 460 460 24 37]
 // "Unfolding name which is marked as a plugin: frame_vc_norm" 340
 
+let test_ghost1 #opened (r : ghost_ref U32.t)
+  : F.usteel_ghost U32.t opened (ghost_vptr r) (fun _ -> ghost_vptr r)
+       (requires fun _ -> True) (ensures fun h0 x h1 -> frame_equalities (ghost_vptr r) h0 h1 /\ x == ghost_sel r h0)
+  = F.(to_steel_g (
+    x  <-- call_g ghost_read r;
+    ghost x
+  ) ())
 
 
 ////////// test LV //////////
@@ -518,11 +525,11 @@ let test_ghost (r : ref U32.t)
 
 inline_for_extraction
 let test3_LV (r0 r1 : ref U32.t)
-  : F.steel unit
+  : F.usteel unit
       (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
       (requires fun h0 -> U32.v (sel r0 h0) < 42)
       (ensures fun h0 () h1 -> U32.v (sel r1 h1) == U32.v (sel r0 h0) + 1)
-  = F.(to_steel (test3_M r0 r1) #(_ by (mk_steel [Timer; Extract])) ())
+  = F.(to_steel #[Timer; Extract] (test3_M r0 r1) ())
 // time specs     : 86ms
 // time lin_cond  : 96ms
 // time sub_push  : 30ms
@@ -536,14 +543,14 @@ let test3_LV (r0 r1 : ref U32.t)
 
 inline_for_extraction
 let test_slrewrite (r0 r1 r2 : ref U32.t)
-  : F.steel unit
+  : F.usteel unit
       (vptr r0 `star` vptr r1) (fun _ -> vptr r2 `star` vptr r1)
       (requires fun _ -> r0 == r2)
       (ensures  fun h0 _ h1 -> sel r0 h0 == sel r2 h1 /\ sel r1 h0 == sel r1 h1)
-  = F.(to_steel (
+  = F.(to_steel #[Timer; Extract] (
       GCb.slrewrite r0 r2;;
       return ()
-    ) #(_ by (mk_steel [Timer; Extract])) ())
+    ) ())
 // time specs     : 103ms
 // time lin_cond  : 68ms
 // time sub_push  : 30ms
@@ -554,34 +561,33 @@ let test_slrewrite (r0 r1 r2 : ref U32.t)
 // total time : 275ms
 
 inline_for_extraction
-let test_with_invariant_g (r0 : ghost_ref U32.t) (r1 : ref U32.t) (i : inv (ghost_vptr r0))
-  : F.steel (Ghost.erased U32.t) (vptr r1) (fun _ -> vptr r1)
-            (requires fun _ -> True) (ensures fun h0 _ h1 -> frame_equalities (vptr r1) h0 h1)
-  = F.(to_steel (
-    MC.ghost_to_steel (GCb.with_invariant_g i (
+let test_with_invariant_g #opened (r0 : ghost_ref U32.t) (r1 : ref U32.t) (i : inv (ghost_vptr r0))
+  : F.usteel_ghost (Ghost.erased U32.t) opened (vptr r1) (fun _ -> vptr r1)
+      (requires fun _ -> not (mem_inv opened i)) (ensures fun h0 _ h1 -> frame_equalities (vptr r1) h0 h1)
+  = F.(to_steel_g #[Timer; Extract(*; Dump Stage_Extract*)] (
+    _ <-- assert_sq (not (mem_inv opened i));
+    GCb.with_invariant_g i (
       call_g ghost_read r0
-    ))) #(_ by (mk_steel [Timer; Extract(*; Dump Stage_Extract*)])) ())
-// time specs     : 94ms
-// time lin_cond  : 297ms
-// time sub_push  : 72ms
-// time LV2SF     : 242ms
+    )) ())
+// time specs     : 117ms
+// time lin_cond  : 445ms
+// time sub_push  : 181ms
+// time LV2SF     : 297ms
 // time SF2Fun    : 4ms
 // time Fun_wp    : 23ms
-// time extract   : 431ms
-// total time : 1163ms
-
+// time extract   : 776ms
+// total time : 1843ms
 
 inline_for_extraction
 let test_for_loop_0 (r0 : ref U32.t)
-  : F.steel (U.unit') (vptr r0) (fun _ -> vptr r0)
-            (requires fun h0 -> True)
-            (ensures  fun h0 _ h1 -> True)
-  = F.(to_steel (
+  : F.usteel (U.unit') (vptr r0) (fun _ -> vptr r0)
+      (requires fun h0 -> True) (ensures  fun h0 _ h1 -> True)
+  = F.(to_steel #[Timer; Extract] (
       GCb.for_loop 0ul 10ul (fun _ -> [vptr' r0 full_perm]) (fun i v -> True)
       begin fun i ->
         elift (return U.Unit')
       end
-    ) #(_ by (mk_steel [Timer; Extract])) ())
+    ) ())
 // time specs     : 38ms
 // time lin_cond  : 41ms
 // time sub_push  : 6ms
@@ -594,10 +600,10 @@ let test_for_loop_0 (r0 : ref U32.t)
 
 inline_for_extraction
 let test_for_loop_1 (r0 r1 : ref U32.t)
-  : F.steel (U.unit') (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
+  : F.usteel (U.unit') (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
             (requires fun h0 -> U32.v (sel r0 h0) <= 100)
             (ensures  fun h0 _ h1 -> U32.v (sel r0 h1) = U32.v (sel r0 h0) + 10 /\ sel r1 h1 == sel r1 h0)
-  = F.(to_steel (
+  = F.(to_steel #[Timer(*; Extract; Dump Stage_Extract*)] (
       v0 <-- MC.ghost_to_steel (call_g gget (vptr r0));
       GCb.for_loop 0ul 10ul (fun _ -> [vptr' r0 full_perm]) (fun i v -> U32.v (v 0) = U32.v v0 + i)
       begin fun i ->
@@ -606,7 +612,7 @@ let test_for_loop_1 (r0 r1 : ref U32.t)
         call (write r0) U32.(x +%^ 1ul);;
         return U.Unit'
       end
-    ) #(_ by (mk_steel [Timer(*; Extract; Dump Stage_Extract*)])) ())
+    ) ())
 // time specs     : 171ms
 // time lin_cond  : 932ms
 // time sub_push  : 244ms
@@ -615,7 +621,7 @@ let test_for_loop_1 (r0 r1 : ref U32.t)
 // time Fun_wp    : 284ms
 // total time : 4894ms
 
-// Extract succeeds in ~25s but F* then take several minutes and a lot of
-// memory to finish processing the definition
+// Extract succeeds in ~25s but F* then takes several minutes and a lot of
+// memory to finish processing the definition.
 // The term resulting from the normalisation is quite big because of the (ghost) tree_cond
 // used for the specifications on our Steel combinators.

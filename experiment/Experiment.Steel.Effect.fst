@@ -631,12 +631,12 @@ private
 let __build_mrepr_to_steel_norew
       (flags : list flag)
       (a : Type) (pre : SE.pre_t) (post : SE.post_t a) (req : SE.req_t pre) (ens : SE.ens_t pre a post)
-      (t : prog_tree a)
+      (ek : SH.effect_kind) (t : prog_tree a)
       (goal : (impl : ((pre : M.pre_t) -> (post : M.post_t a) -> (c : M.tree_cond t pre post) ->
-                          M.repr_steel_t SH.KSteel a pre post (M.tree_req t c) (M.tree_ens t c))) ->
-              ES.__to_steel_goal a pre post req ens M.({repr_tree = t; repr_steel = impl}))
-  : mrepr_to_steel_t flags a SH.KSteel pre post req ens t
-  = MReprToSteel (fun r -> SH.steel_f (goal r.repr_steel))
+                          M.repr_steel_t ek a pre post (M.tree_req t c) (M.tree_ens t c))) ->
+              ES.__to_steel_goal a pre post req ens ek M.({repr_tree = t; repr_steel = impl}))
+  : mrepr_to_steel_t flags a ek pre post req ens t
+  = MReprToSteel (fun r -> goal r.repr_steel)
 
 /// Solves a goal [mrepr_to_steel_t flags a ek pre post req ens t] using [ES.build_to_steel].
 let build_mrepr_to_steel_norew (fr : flags_record) : Tac unit

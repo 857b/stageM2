@@ -31,7 +31,7 @@ let test3_LV' (r0 r1 : ref U32.t)
 let test_ghost (r : ref U32.t)
   : Steel U32.t (vptr r) (fun _ -> vptr r)
       (requires fun _ -> True) (ensures fun h0 _ h1 -> frame_equalities (vptr r) h0 h1)
-  = Test.test_ghost r ()
+  = Test.test_ghost0 r ()
 
 
 let test_slrewrite (r0 r1 r2 : ref U32.t)

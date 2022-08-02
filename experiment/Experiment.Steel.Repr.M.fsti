@@ -98,7 +98,7 @@ val repr_of_steel
 
 (*** [spec_r] *)
 
-[@@ Learn.Tactics.Util.__tac_helper__; Itf.__extraction__]
+[@@ Learn.Tactics.Util.__tac_helper__; Itf.__extraction__; SE.__reduce__]
 noeq inline_for_extraction
 type spec_r (a : Type u#a) = {
   spc_pre  : pre_t;
