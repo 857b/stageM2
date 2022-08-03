@@ -11,7 +11,19 @@ type post_v (#a : Type) (post : post_t a) (x : a) = Fl.flist (post x)
 type req_t = Type0
 type ens_t (a : Type) (post : post_t a) = (x : a) -> post_v post x -> Type0
 
-// TODO? Twp with a WP on the returned values and selectors
+noeq
+type sl_tys_t : Type u#(max a b + 1)= {
+  val_t : Type u#a;
+  sel_t : post_t u#a u#b val_t
+}
+
+noeq
+type sl_tys_v (ty : sl_tys_t u#a u#b) : Type u#(max a (b + 1)) = {
+  val_v : ty.val_t;
+  sel_v : Fl.flist (ty.sel_t val_v)
+}
+
+
 noeq
 type prog_tree : (a : Type u#a) -> (post : post_t u#a u#b a) -> Type u#(1 + max a b p) =
   | Tspec : (a : Type u#a) -> (post : post_t a) ->
@@ -31,6 +43,9 @@ type prog_tree : (a : Type u#a) -> (post : post_t u#a u#b a) -> Type u#(1 + max 
              (post : post_t a) ->
              (thn : prog_tree a post) -> (els : prog_tree a post) ->
              prog_tree a post
+  | Twp    : (a : Type u#a) -> (post : post_t u#a u#b a) ->
+             (wp : pure_wp (sl_tys_v ({val_t = a; sel_t = post}))) ->
+             prog_tree a post
 
 [@@ strict_on_arguments [2]] (* strict on t *)
 let rec tree_req (#a : Type) (#post : post_t a) (t : prog_tree a post)
@@ -47,6 +62,8 @@ let rec tree_req (#a : Type) (#post : post_t a) (t : prog_tree a post)
              wp (fun (x : a) -> tree_req (g x))
   | Tif a guard _ thn els ->
              tree_req (if guard then thn else els)
+  | Twp a post wp ->
+             as_requires wp
 
 and tree_ens (#a : Type) (#post : post_t a) (t : prog_tree a post)
   : Tot (ens_t a post) (decreases t)
@@ -64,6 +81,8 @@ and tree_ens (#a : Type) (#post : post_t a) (t : prog_tree a post)
                (exists (x : a) . as_ensures wp x /\ tree_ens (g x) y sl1))
   | Tif a guard _ thn els ->
              tree_ens (if guard then thn else els)
+  | Twp a post wp ->
+             (fun val_v sel_v -> as_ensures wp ({val_v; sel_v}))
 
 
 (***** Shape *)
@@ -81,6 +100,8 @@ type shape_tree : (post_n : nat) -> Type =
              shape_tree post_n
   | Sif    : (post_n : nat) ->
              (thn : shape_tree post_n) -> (els : shape_tree post_n) ->
+             shape_tree post_n
+  | Swp    : (post_n : nat) ->
              shape_tree post_n
 
 [@@ strict_on_arguments [2]] (* strict on t *)
@@ -110,6 +131,7 @@ let rec prog_has_shape (#a : Type u#a) (#post : post_t u#a u#b a)
                                 s == Sif _ s_thn s_els /\
                                 prog_has_shape thn s_thn /\
                                 prog_has_shape els s_els
+    | Twp  _ post _           -> s == Swp post_n
     )
 
 noeq

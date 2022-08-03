@@ -11,18 +11,6 @@ open Experiment.Steel.Repr.SF
 (*** [sl_tys] *)
 
 noeq
-type sl_tys_t : Type u#(max a b + 1)= {
-  val_t : Type u#a;
-  sel_t : post_t u#a u#b val_t
-}
-
-noeq
-type sl_tys_v (ty : sl_tys_t u#a u#b) : Type u#(max a (b + 1)) = {
-  val_v : ty.val_t;
-  sel_v : Fl.flist (ty.sel_t val_v)
-}
-
-noeq
 type sl_tys_r (ty : sl_tys_t u#a u#b) : Type u#(max a (b + 1)) = {
   vl : ty.val_t;
   sl : Dl.dlist (ty.sel_t vl)
@@ -153,6 +141,8 @@ let rec repr_Fun_of_SF
           Fun.TbindP a ({val_t = b; sel_t = post}) wp (fun (x : a) -> repr_Fun_of_SF (g x))
   | Tif a guard post thn els ->
           Fun.Tif ({val_t = a; sel_t = post}) guard (repr_Fun_of_SF thn) (repr_Fun_of_SF els)
+  | Twp a post wp ->
+          Fun.Twp ({val_t = a; sel_t = post}) wp
 
 [@@ strict_on_arguments [1]] (* strict on s *)
 let rec shape_Fun_of_SF (#post_n : nat) (s : shape_tree post_n)
@@ -163,6 +153,8 @@ let rec shape_Fun_of_SF (#post_n : nat) (s : shape_tree post_n)
   | Sbind _ _ s_f s_g -> Fun.Sbind  (shape_Fun_of_SF s_f) (shape_Fun_of_SF s_g)
   | SbindP  _ s_g     -> Fun.SbindP (shape_Fun_of_SF s_g)
   | Sif   _ thn els   -> Fun.Sif    (shape_Fun_of_SF thn) (shape_Fun_of_SF els)
+  | Swp   _           -> Fun.Swp
+  
 
 
 (*** Soundness *)

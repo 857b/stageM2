@@ -81,6 +81,8 @@ let rec tree_wp_sound (#s : tys) (#a : s.t) (t : prog_tree #s a) (post : pure_po
       if guard
       then tree_wp_sound thn post
       else tree_wp_sound els post
+  | Twp a wp ->
+      MP.elim_pure_wp_monotonicity wp
 
 
 (*** Returns elimination *)
@@ -139,7 +141,7 @@ and elim_returns_equiv_aux
     = Tbind a b f (lm.lam_tree g)
   in
   match t with
-  | Tnew _ | Tasrt _ | Tasum _ | Tspec _ _ _ -> ()
+  | Tnew _ | Tasrt _ | Tasum _ | Tspec _ _ _ | Twp _ _ -> ()
   | Tret _ _ -> ()
 
   | Tbind a b f g ->

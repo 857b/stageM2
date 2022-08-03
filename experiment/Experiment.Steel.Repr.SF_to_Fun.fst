@@ -1,5 +1,6 @@
 module Experiment.Steel.Repr.SF_to_Fun
 
+module U = Learn.Util
 module T = FStar.Tactics
 open FStar.Calc
 open Learn.Logic
@@ -40,13 +41,6 @@ let sl_tys_lam_id ()
   assert (Fun.tys_lam_id #s lm)
     by T.(norm [delta_only [`%Fun.tys_lam_id; `%sl_tys; `%Fun.Mktys'?.t; `%Fun.Mktys'?.v]])
 
-unfold
-let add_sl_to_wp (#a : Type u#a) (wp : pure_wp a) : pure_wp ((sl_tys u#a u#b).v ({val_t = a; sel_t = (fun _ -> [])}))
-  =
-    (**) FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp;
-    FStar.Monotonic.Pure.as_pure_wp (fun pt ->
-      wp (fun (x : a) -> pt ({val_v = x; sel_v = Fl.nil})))
-
 
 //FIXME this proof succeeds in interactive mode with --fuel 1 but not in batch mode
 //      (both wihout hints)
@@ -78,6 +72,8 @@ let rec repr_Fun_of_SF_req #val_t #sel_t (t : prog_tree val_t sel_t)
           if guard
           then repr_Fun_of_SF_req thn
           else repr_Fun_of_SF_req els
+  | Twp a post wp ->
+          FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp
 
 and repr_Fun_of_SF_ens #val_t #sel_t (t : prog_tree val_t sel_t)
                           (val_v : val_t) (sel_v : Fl.flist (sel_t val_v))
@@ -120,6 +116,8 @@ and repr_Fun_of_SF_ens #val_t #sel_t (t : prog_tree val_t sel_t)
           if guard
           then repr_Fun_of_SF_ens thn val_v sel_v
           else repr_Fun_of_SF_ens els val_v sel_v
+  | Twp a post wp ->
+          FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp
 
 #pop-options
 
@@ -130,7 +128,7 @@ let rec repr_Fun_of_SF_shape
   : Lemma (ensures Fun.prog_has_shape (repr_Fun_of_SF t) (shape_Fun_of_SF s.shp))
           (decreases t)
   = match t with
-  | Tspec _ _ _ _ | Tret _ _ _ _ -> ()
+  | Tspec _ _ _ _ | Tret _ _ _ _ | Twp _ _ _ -> ()
   | Tbind a b itm post f g ->
           let Sbind _ _ s_f s_g = s.shp in
           repr_Fun_of_SF_shape f (mk_prog_shape f s_f);

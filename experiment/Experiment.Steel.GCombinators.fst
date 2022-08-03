@@ -672,7 +672,7 @@ let for_loop_preserve_sf_sound
     begin
       for_loop_body_lem (lc i);
       let wp = lc_wp (lc i) sl_inv0 sl_ro in
-      let pt (sl_inv1 : SF2Fun.sl_tys_v ({val_t = U.unit'; sel_t = _})) = invp (U32.v i + 1) sl_inv1.sel_v in
+      let pt (sl_inv1 : SF.sl_tys_v ({val_t = U.unit'; sel_t = _})) = invp (U32.v i + 1) sl_inv1.sel_v in
       assert (wp pt);
       lc_wp_sound (lc i) sl_inv0 sl_ro pt
     end

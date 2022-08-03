@@ -105,6 +105,8 @@ type prog_tree (#s : tys u#t u#v u#r) : s.t -> Type u#(max t v r a + 1) =
   | Tif    : (a : s.t) -> (guard : bool) ->
              (thn : prog_tree #s a) -> (els : prog_tree #s a) ->
              prog_tree #s a
+  | Twp    : (a : s.t) -> (wp : pure_wp (s.v a)) ->
+             prog_tree #s a
 
 unfold
 let return (#s : tys) (#a : s.t) ($x : s.v a) : prog_tree #s a
@@ -118,7 +120,7 @@ let bind (#s : tys) (#a #b : s.t) (f : prog_tree #s a) (g : s.v a -> prog_tree #
 (***** Shape *)
 
 type shape_tree : Type0 =
-  | Snew | Sasrt | Sasum | Sspec
+  | Snew | Sasrt | Sasum | Sspec | Swp
   | Sret   : (smp_ret : bool) -> shape_tree
   | Sbind  : (f : shape_tree) -> (g : shape_tree) -> shape_tree
   | SbindP : (g : shape_tree) -> shape_tree
@@ -145,6 +147,7 @@ let rec prog_has_shape (#ts : tys) (#a : ts.t) (t : prog_tree u#t u#v u#r u#a #t
                       s == Sif s_thn s_els /\
                       prog_has_shape thn s_thn /\
                       prog_has_shape els s_els
+  | Twp _ _         -> s == Swp
 
 let rec prog_has_shape' (#ts : tys) (#a : ts.t) (t : prog_tree u#t u#v u#r u#a #ts a) (s : shape_tree)
   : Pure prop (requires True) (ensures fun p -> p <==> prog_has_shape t s) (decreases t)
@@ -170,6 +173,7 @@ let rec prog_has_shape' (#ts : tys) (#a : ts.t) (t : prog_tree u#t u#v u#r u#a #
                          prog_has_shape' thn s_thn /\
                          prog_has_shape' els s_els
                       | _ -> False)
+  | Twp _ _         -> s == Swp
 
 
 type prog_shape (#ts : tys) (#a : ts.t) (t : prog_tree #ts a) =
@@ -196,6 +200,7 @@ let rec tree_req (#s : tys) (#a : s.t) (t : prog_tree #s a)
   | Tbind  a b f g      -> tree_req f /\ s.all a (fun (x : s.v a) -> tree_ens f x ==> tree_req (g x))
   | TbindP a _ wp g     -> wp (fun x -> tree_req (g x))
   | Tif    a gd thn els -> if gd then tree_req thn else tree_req els
+  | Twp    a wp         -> as_requires wp
 
 and tree_ens (#s : tys) (#a : s.t) (t : prog_tree #s a)
   : Tot (pure_post (s.v a)) (decreases t)
@@ -208,6 +213,7 @@ and tree_ens (#s : tys) (#a : s.t) (t : prog_tree #s a)
   | Tbind  a _ f g      -> fun y  -> s.ex a (fun (x : s.v a) -> tree_ens f x /\ tree_ens (g x) y)
   | TbindP a _ wp g     -> fun y -> (exists (x : a) . as_ensures wp x /\ tree_ens (g x) y)
   | Tif    a gd thn els -> fun y -> if gd then tree_ens thn y else tree_ens els y
+  | Twp    a wp         -> as_ensures wp
 
 
 (***** Equivalence *)
@@ -273,6 +279,7 @@ let rec tree_wp (#s : tys) (#a : s.t) (t : prog_tree #s a)
   | Tif a gd thn els -> MP.elim_pure_wp_monotonicity_forall ();
                        MP.as_pure_wp (fun pt -> (  gd  ==> tree_wp thn pt) /\
                                              ((~gd) ==> tree_wp els pt))
+  | Twp a wp         -> wp
 
 val tree_wp_sound (#s : tys) (#a : s.t) (t : prog_tree #s a) (post : pure_post (s.v a))
   : Lemma (requires tree_wp t post)
@@ -321,7 +328,7 @@ and elim_returns_aux
     = Tbind a b f (lm.lam_tree g)
   in
   match t with
-  | Tnew _ | Tasrt _ | Tasum _ ->
+  | Tnew _ | Tasrt _ | Tasum _ | Twp _ _ ->
          bind t (elim_returns_k_trm k)
   | Tspec a pre post ->
          bind (Tspec a pre (lm.lam_prop post)) (elim_returns_k_trm k)

@@ -198,8 +198,8 @@ let __normal_Fun_elim_returns_0 : list norm_step = [
               `%SF2Fun.sl_tys; `%SF2Fun.sl_tys_lam;
               `%Fun.Mktys'?.v_of_r; `%Fun.Mktys'?.r_of_v;
               `%Fun.Mktys_lam'?.lam_prop; `%Fun.Mktys_lam'?.lam_tree;
-              `%SF2Fun.Mksl_tys_t?.val_t; `%SF2Fun.Mksl_tys_t?.sel_t;
-              `%SF2Fun.Mksl_tys_v?.val_v; `%SF2Fun.Mksl_tys_v?.sel_v;
+              `%SF.Mksl_tys_t?.val_t;     `%SF.Mksl_tys_t?.sel_t;
+              `%SF.Mksl_tys_v?.val_v;     `%SF.Mksl_tys_v?.sel_v;
               `%SF2Fun.Mksl_tys_r?.vl;    `%SF2Fun.Mksl_tys_r?.sl;
               `%Fun.Tret?.x;
               `%SF2Fun.sl_r_of_v; `%SF2Fun.sl_v_of_r;
@@ -221,9 +221,9 @@ let __normal_Fun_spec : list norm_step = [
               `%Fun.Mktys'?.all; `%SF2Fun.sl_tys; `%SF2Fun.sl_all; `%Fl.forall_flist;
               `%Fun.Mktys'?.v_of_r; `%SF2Fun.sl_v_of_r; `%Fl.flist_of_d';
               `%Fl.cons; `%Fl.nil;
-              `%SF2Fun.Mksl_tys_t?.val_t; `%SF2Fun.Mksl_tys_t?.sel_t;
-              `%SF2Fun.Mksl_tys_v?.val_v; `%SF2Fun.Mksl_tys_v?.sel_v;
-              `%SF2Fun.Mksl_tys_r?.vl;    `%SF2Fun.Mksl_tys_r?.sl;
+              `%SF.Mksl_tys_t?.val_t;  `%SF.Mksl_tys_t?.sel_t;
+              `%SF.Mksl_tys_v?.val_v;  `%SF.Mksl_tys_v?.sel_v;
+              `%SF2Fun.Mksl_tys_r?.vl; `%SF2Fun.Mksl_tys_r?.sl;
               `%Vpl.vprop_of_list; `%Vpl.vprop_of_list'];
   delta_qualifier ["unfold"];
   delta_attr [`%SE.__steel_reduce__; `%Msk.__mask__; `%UV.__universe__];

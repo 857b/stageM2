@@ -163,11 +163,11 @@ let lc_wp
       (#a : Type) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
       (lc : LV.lin_cond u#a u#p env t csm prd)
       (sl0 : sl_f (lc_pre lc)) (sl_ro : sl_f (lc_ro lc))
-  : GTot (pure_wp SF2Fun.(sl_tys_v ({val_t = a; sel_t = M.post_sl_t prd})))
+  : GTot (pure_wp SF.(sl_tys_v ({val_t = a; sel_t = M.post_sl_t prd})))
   =
     let sf : SF.prog_tree a (M.post_sl_t prd)
            = lc_sf lc sl0 sl_ro       in
-    let fn : Fun.prog_tree SF2Fun.({val_t = a; sel_t = M.post_sl_t prd})
+    let fn : Fun.prog_tree SF.({val_t = a; sel_t = M.post_sl_t prd})
            = SF2Fun.repr_Fun_of_SF sf in
     Fun.tree_wp fn
 
@@ -175,11 +175,11 @@ let lc_wp_sound
       (#a : Type) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
       (lc : LV.lin_cond u#a u#p env t csm prd)
       (sl0 : sl_f (lc_pre lc)) (sl_ro : sl_f (lc_ro lc))
-      (post : pure_post SF2Fun.(sl_tys_v ({val_t = a; sel_t = M.post_sl_t prd})))
+      (post : pure_post SF.(sl_tys_v ({val_t = a; sel_t = M.post_sl_t prd})))
   : Lemma (requires lc_wp lc sl0 sl_ro post)
           (ensures  lc_req lc sl0 sl_ro /\
                    (forall (x : a) (sl1 : sl_f (prd x)) .
-                    lc_ens lc sl0 x sl1 sl_ro ==> post SF2Fun.({val_v = x; sel_v = sl1})))
+                    lc_ens lc sl0 x sl1 sl_ro ==> post ({val_v = x; sel_v = sl1})))
   =
     let sl0' = LV2SF.append_vars_mask_l csm (Fl.dlist_of_f sl0) (Fl.dlist_of_f sl_ro) in
     let sf = LV2SF.repr_SF_of_LV lc sl0' in
@@ -189,7 +189,7 @@ let lc_wp_sound
     Fun.tree_wp_sound fn post;
     assert (lc_req lc sl0 sl_ro);
     introduce forall (x : a) (sl1 : sl_f (prd x)) .
-              lc_ens lc sl0 x sl1 sl_ro ==> post SF2Fun.({val_v = x; sel_v = sl1})
+              lc_ens lc sl0 x sl1 sl_ro ==> post ({val_v = x; sel_v = sl1})
       with SF2Fun.repr_Fun_of_SF_ens sf x sl1
 
 
