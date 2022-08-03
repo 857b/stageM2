@@ -169,6 +169,8 @@ let __normal_lc_sub_push : list norm_step = [
   iota; zeta; primops; unascribe
 ]
 
+module GCbL = Experiment.Steel.GCombinators.Lib
+
 let __normal_LV2SF : list norm_step = [
   delta_only [`%prog_LV_to_Fun; `%LV2SF.repr_SF_of_LV;
               `%Vpl.filter_sl;
@@ -177,6 +179,7 @@ let __normal_LV2SF : list norm_step = [
               `%Dl.initi; `%Dl.append; `%Dl.index; `%Dl.dlist_eq2; `%Msk.dl_append_on_mask;
               `%Fl.dlist_of_f; `%Fl.flist_eq2;
               `%Fl.append; `%Fl.splitAt_ty;
+              `%GCbL.lc_req; `%GCbL.lc_ens; `%LV.tree_req; `%LV.tree_ens; // TODO? RM
               `%Mktuple2?._1; `%Mktuple2?._2];
   delta_attr [`%__LV2SF__; `%LV.__lin_cond__; `%Msk.__mask__; `%__tac_helper__; `%SE.__reduce__];
   delta_qualifier ["unfold"];

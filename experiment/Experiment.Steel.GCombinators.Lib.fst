@@ -1,9 +1,11 @@
 module Experiment.Steel.GCombinators.Lib
 
-module L = FStar.List.Pure
-module M = Experiment.Steel.Repr.M
+module L   = FStar.List.Pure
+module M   = Experiment.Steel.Repr.M
+module LV  = Experiment.Steel.Repr.LV
+module Msk = Learn.List.Mask
 
-#set-options "--fuel 1 --ifuel 1"
+#set-options "--fuel 1 --ifuel 1 --ide_id_info_off"
 
 (**** [make_combinator_steel] *)
 
@@ -247,3 +249,31 @@ let lc_to_spc_steel_t_steel
     | SH.KAtomic o -> lc_to_spc_steel_t_steel__atomic o t lc f
     | SH.KGhost  o -> lc_to_spc_steel_t_steel__ghost  o t lc f
     | SH.KGhostI o -> lc_to_spc_steel_t_steel__ghostI o t lc f
+
+#push-options "--fuel 0 --ifuel 0 --z3rlimit 20"
+let pre_f_add_frame_split
+      (env : vprop_list) (pre : vprop_list) (pre_f : LV.eq_injection_l pre env)
+  : Lemma LV.((eij_split pre Msk.(filter_mask (mask_not (LV.eij_trg_mask pre_f)) env)
+                        (pre_f_add_frame env pre pre_f))._1
+           == pre_f)
+  =
+    let n0   = L.length pre                                             in
+    let flt1 = Msk.(filter_mask (mask_not (LV.eij_trg_mask pre_f)) env) in
+    let f    = pre_f_add_frame env pre pre_f                            in
+    let f0   = (LV.eij_split pre flt1 f)._1                             in
+    let csm0 = LV.eij_trg_mask pre_f                                    in
+    Ll.list_extensionality f0 pre_f (fun i ->
+      L.lemma_index_memP pre_f i;
+      calc (==) {
+        L.index f0 i;
+      == { Ll.splitAt_index n0 f }
+        L.index f i;
+      == {  }
+        Msk.mask_perm_append csm0 (Msk.mask_push csm0 (L.index pre_f i));
+      == { Msk.mask_perm_append_index csm0 (Msk.mask_push csm0 (L.index pre_f i)) }
+        Msk.mask_pull csm0 (Msk.mask_push csm0 (L.index pre_f i));
+      == { }
+        L.index pre_f i;
+      }
+    )
+#pop-options

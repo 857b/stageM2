@@ -594,64 +594,6 @@ type for_loop_gen_c
                              (req i) (fun sl0 _ sl1 sl_ro -> ens i sl0 sl1 sl_ro)))) ->
       for_loop_gen_c start finish inv invp body (for_loop_spec_r start finish inv invp ro lreq)
 
-// ALT? can be defined directly on inv using pre_f : inv -> env{trg}
-[@@ __cond_solver__]
-let build_for_loop_pre_f
-      (env : vprop_list) (inv : vprop_list) (pre_f : LV.eq_injection_l inv env)
-  : Perm.pequiv_list env L.(inv @ Msk.(filter_mask (mask_not (LV.eij_trg_mask pre_f)) env))
-  =
-    let flt0 = Msk.(filter_mask (          LV.eij_trg_mask pre_f ) env) in
-    let flt1 = Msk.(filter_mask (mask_not (LV.eij_trg_mask pre_f)) env) in
-    let f0 : Perm.pequiv env L.(flt0 @ flt1)
-        = Msk.mask_pequiv_append (LV.eij_trg_mask pre_f) env            in 
-    let f1 : Perm.pequiv flt0 inv
-        = LV.eij_equiv pre_f                                            in
-    let f  : Perm.pequiv env L.(inv @ flt1)
-        = Perm.(pequiv_trans f0 (pequiv_append f1 (pequiv_refl flt1)))  in
-    (**) Perm.pequiv_as_eq f;
-    Perm.perm_f_to_list f
-
-#push-options "--z3rlimit 20"
-let build_for_loop_pre_f_csm
-      (env : vprop_list) (inv : vprop_list) (pre_f : LV.eq_injection_l inv env)
-  : Lemma LV.(eij_trg_mask (eij_split inv Msk.(filter_mask (mask_not (LV.eij_trg_mask pre_f)) env)
-                                      (build_for_loop_pre_f env inv pre_f))._1
-           == eij_trg_mask pre_f)
-  =
-    let n0   = L.length inv                                             in
-    let flt0 = Msk.(filter_mask (          LV.eij_trg_mask pre_f ) env) in
-    let flt1 = Msk.(filter_mask (mask_not (LV.eij_trg_mask pre_f)) env) in
-    let f    = build_for_loop_pre_f env inv pre_f                       in
-    let f0   = (LV.eij_split inv flt1 f)._1                             in
-    let csm0 = LV.eij_trg_mask pre_f                                    in
-    let csm1 = LV.eij_trg_mask f0                                       in
-    Ll.list_extensionality csm1 csm0 (fun j ->
-      calc (<==>) {
-        b2t (L.index csm1 j);
-      <==> { Ll.memP_iff j f0 }
-        exists (i : Fin.fin n0) . L.index f0 i == j;
-      <==> { introduce forall (i : Fin.fin n0) . L.index f0 i == L.index pre_f i
-           with begin
-             L.lemma_index_memP pre_f i;
-             calc (==) {
-               L.index f0 i;
-             == { Ll.splitAt_index n0 f }
-               L.index f i;
-             == {  }
-               Msk.mask_perm_append csm0 (Msk.mask_push csm0 (L.index pre_f i));
-             == { Msk.mask_perm_append_index csm0 (Msk.mask_push csm0 (L.index pre_f i)) }
-               Msk.mask_pull csm0 (Msk.mask_push csm0 (L.index pre_f i));
-             == { }
-               L.index pre_f i;
-             }
-           end }
-        exists (i : Fin.fin n0) . L.index pre_f i  == j;
-      <==> { Ll.memP_iff j pre_f }
-        L.index csm0 j;
-      }
-    )
-#pop-options
-
 let for_loop_body_lc
       (finish : U32.t)
       (inv  : (i : nat { i <= U32.v finish }) -> vprop_list)
@@ -740,7 +682,6 @@ let for_loop_preserve_sf_sound
 [@@ __LV2SF__; __extraction_fix__]
 inline_for_extraction
 let for_loop_cond
-      (env : vprop_list)
       (start : U32.t) (finish : U32.t { U32.v start <= U32.v finish })
       (inv  : (i : nat { i <= U32.v finish }) -> vprop_list)
       (invp : (i : nat { i <= U32.v finish }) -> sl_f (inv i) -> Type0)
@@ -782,15 +723,15 @@ let __build_for_loop
       (ro : vprop_list)
       (ro_eq : squash (ro == Msk.(filter_mask (mask_not (LV.eij_trg_mask pre_f)) env)))
       (pre_f' : Perm.pequiv_list env L.(inv (U32.v start) @ ro))
-      (pre_f'_eq : squash (pre_f' == build_for_loop_pre_f env (inv (U32.v start)) pre_f))
+      (pre_f'_eq : squash (pre_f' == pre_f_add_frame env (inv (U32.v start)) pre_f))
       (lc_body : (i : U32.t { U32.v i < U32.v finish }) ->
                  (lc : for_loop_body_lc finish inv ro i (body i).repr_tree
                   { LV.lcsub_at_leaves lc}))
   : LV.lin_cond u#a u#p env (M.Tgen U.unit' gen_tac (for_loop_gen_c start finish inv invp body))
                 (LV.eij_trg_mask pre_f) (fun _ -> inv (U32.v finish))
   =
-    (**) build_for_loop_pre_f_csm env (inv (U32.v start)) pre_f;
-    LV.LCgen env (for_loop_cond env start finish inv invp body ro lc_body) pre_f'
+    (**) pre_f_add_frame_split env (inv (U32.v start)) pre_f;
+    LV.LCgen env (for_loop_cond start finish inv invp body ro lc_body) pre_f'
 #pop-options
 
 let build_for_loop (fr : flags_record) : Tac unit
@@ -924,4 +865,307 @@ let while_loop_sl
                               invp sl_inv /\ guard_ens sl_inv false (h1 (guard_post false)))
   = ...
 #pop-options
+*)
+
+
+(*** par *)
+
+[@@ __reduce__]
+let par_spec_r
+      (#a0 #a1 : Type u#a)
+      (sp0 : M.spec_r a0) (sp1 : M.spec_r a1)
+      (frame : vprop_list)
+  : M.spec_r (a0 & a1)
+  = {
+    spc_pre  = L.(sp0.spc_pre @ sp1.spc_pre);
+    spc_post = (fun (x : a0 & a1) -> L.(sp0.spc_post x._1 @ sp1.spc_post x._2)); // TODO? reduction of ._1, ._2
+    spc_ro   = L.((sp0.spc_ro @ sp1.spc_ro) @ frame);
+    spc_req  = (fun sl0 sl_ro ->
+                  let sl0s = split_vars sp0.spc_pre sp1.spc_pre sl0                 in
+                  let sl_ro0 = split_vars L.(sp0.spc_ro @ sp1.spc_ro) frame sl_ro   in
+                  let sl_ro1 = split_vars sp0.spc_ro sp1.spc_ro sl_ro0._1           in
+                  sp0.spc_req sl0s._1 sl_ro1._1 /\
+                  sp1.spc_req sl0s._2 sl_ro1._2);
+    spc_ens  = (fun sl0 x sl1 sl_ro ->
+                  let sl0s = split_vars sp0.spc_pre sp1.spc_pre sl0                 in
+                  let sl1s = split_vars (sp0.spc_post x._1) (sp1.spc_post x._2) sl1 in
+                  let sl_ro0 = split_vars L.(sp0.spc_ro @ sp1.spc_ro) frame sl_ro   in
+                  let sl_ro1 = split_vars sp0.spc_ro sp1.spc_ro sl_ro0._1           in
+                  sp0.spc_ens sl0s._1 x._1 sl1s._1 sl_ro1._1 /\
+                  sp1.spc_ens sl0s._2 x._2 sl1s._2 sl_ro1._2)
+  }
+
+noeq
+type par_gen_c
+       (a0 a1 : Type u#a)
+       (env0 env1 : vprop)
+       (f0 : M.repr u#a u#p SH.KSteel a0) (f1 : M.repr u#a u#p SH.KSteel a1)
+  : M.spec_r (a0 & a1) -> Type u#(max a p 2) =
+  | Par :
+      (sp0 : M.spec_r a0) -> (inner0 : M.spc_steel_t SH.KSteel sp0) ->
+      (sp1 : M.spec_r a1) -> (inner1 : M.spc_steel_t SH.KSteel sp1) ->
+      (frame : vprop_list) ->
+      par_gen_c a0 a1 env0 env1 f0 f1 (par_spec_r sp0 sp1 frame)
+
+#push-options "--ifuel 0"
+// TODO: gen_sf_Tspec_wp
+[@@ __LV2SF__]
+let par_sf
+      (#a0 #a1 : Type u#a)
+      (#env0 : vprop_list) (#f0 : M.prog_tree a0) (#csm0 : LV.csm_t env0) (#prd0 : LV.prd_t a0)
+      (c0 : LV.lin_cond u#a u#p env0 f0 csm0 prd0)
+      (#env1 : vprop_list) (#f1 : M.prog_tree a1) (#csm1 : LV.csm_t env1) (#prd1 : LV.prd_t a1)
+      (c1 : LV.lin_cond u#a u#p env1 f1 csm1 prd1)
+      (frame : vprop_list)
+  : LV.gen_sf u#a u#p (par_spec_r (lc_spec_r c0) (lc_spec_r c1) frame)
+  = gen_sf_Tspec ({
+      spc_pre  = L.(lc_pre c0 @ lc_pre c1);
+      spc_post = (fun (x : a0 & a1) -> L.(lc_post c0 x._1 @ lc_post c1 x._2));
+      spc_ro   = L.((lc_ro c0 @ lc_ro c1) @ frame);
+      spc_req  = (fun sl0 sl_ro ->
+                  let sl0s = split_vars (lc_pre c0) (lc_pre c1) sl0             in
+                  let sl_ro0 = split_vars L.(lc_ro c0 @ lc_ro c1) frame sl_ro   in
+                  let sl_ro1 = split_vars (lc_ro c0) (lc_ro c1) sl_ro0._1       in
+                  lc_req c0 sl0s._1 sl_ro1._1 /\
+                  lc_req c1 sl0s._2 sl_ro1._2);
+      spc_ens  = (fun sl0 x sl1 sl_ro ->
+                  let sl0s = split_vars (lc_pre c0) (lc_pre c1) sl0             in
+                  let sl1s = split_vars (lc_post c0 x._1) (lc_post c1 x._2) sl1 in
+                  let sl_ro0 = split_vars L.(lc_ro c0 @ lc_ro c1) frame sl_ro   in
+                  let sl_ro1 = split_vars (lc_ro c0) (lc_ro c1) sl_ro0._1       in
+                  lc_ens c0 sl0s._1 x._1 sl1s._1 sl_ro1._1 /\
+                  lc_ens c1 sl0s._2 x._2 sl1s._2 sl_ro1._2)
+    })
+
+[@@ __LV2SF__; __extraction__]
+inline_for_extraction
+let par_cond
+      (a0 a1 : Type u#a)
+      (env0 env1 : vprop)
+      (f0 : M.repr u#a u#p SH.KSteel a0) (f1 : M.repr u#a u#p SH.KSteel a1)
+      (env0' env1' : vprop_list)
+      (csm0 : LV.csm_t env0') (prd0 : LV.prd_t a0)
+      (c0 : LV.lin_cond env0' f0.repr_tree csm0 prd0 { LV.lcsub_at_leaves c0 })
+      (csm1 : LV.csm_t env1') (prd1 : LV.prd_t a1)
+      (c1 : LV.lin_cond env1' f1.repr_tree csm1 prd1 { LV.lcsub_at_leaves c1 })
+      (frame : vprop_list)
+  : LV.lc_gen_cond u#a u#p (a0 & a1) (par_gen_c a0 a1 env0 env1 f0 f1)
+  =
+    let sp0    = lc_spec_r c0             in
+    let inner0 = lc_to_spc_steel_t f0 c0  in
+    let sp1    = lc_spec_r c1             in
+    let inner1 = lc_to_spc_steel_t f1 c1  in
+    let s      = par_spec_r sp0 sp1 frame in
+    {
+      lcg_s  = par_spec_r sp0 sp1 frame;
+      lcg_sh = Par #a0 #a1 #env0 #env1 #f0 #f1 sp0 inner0 sp1 inner1 frame;
+      lcg_sf = par_sf c0 c1 frame;
+    }
+
+[@@ __cond_solver__]
+let __build_par
+      (env : vprop_list)
+      (a0 a1 : Type u#a)
+      (env0 env1 : vprop)
+      (f0 : M.repr u#a u#p SH.KSteel a0) (f1 : M.repr u#a u#p SH.KSteel a1)
+      (gen_tac : M.gen_tac_t)
+      (env0' : vprop_list) (tp0 : vprop_to_list env0 env0')
+      (env1' : vprop_list) (tp1 : vprop_to_list env1 env1')
+      (csm0 : LV.csm_t env0') (prd0 : LV.prd_t a0)
+      (c0 : LV.lin_cond env0' f0.repr_tree csm0 prd0 { LV.lcsub_at_leaves c0 })
+      (csm1 : LV.csm_t env1') (prd1 : LV.prd_t a1)
+      (c1 : LV.lin_cond env1' f1.repr_tree csm1 prd1 { LV.lcsub_at_leaves c1 })
+      // ALT: env0' @ env1' -> env
+      (pre_f : LV.eq_injection_l L.((lc_pre c0 @ lc_pre c1) @ (lc_ro c0 @ lc_ro c1)) env)
+      (frame : vprop_list)
+      (frame_eq : squash (frame == Msk.(filter_mask (mask_not (LV.eij_trg_mask pre_f)) env)))
+      (pre_f' : Perm.pequiv_list env L.(((lc_pre c0 @ lc_pre c1) @ (lc_ro c0 @ lc_ro c1)) @ frame))
+      (pre_f'_eq : squash (pre_f' == pre_f_add_frame env L.((lc_pre c0 @ lc_pre c1) @ (lc_ro c0 @ lc_ro c1)) pre_f))
+  : LV.lin_cond env (M.Tgen (a0 & a1) gen_tac (par_gen_c a0 a1 env0 env1 f0 f1))
+      LV.(eij_trg_mask (eij_split L.(lc_pre c0 @ lc_pre c1) L.(lc_ro c0 @ lc_ro c1) pre_f)._1)
+      L.(fun x -> prd0 x._1 @ prd1 x._2)
+  =
+    let sp0    = lc_spec_r c0                                             in
+    let sp1    = lc_spec_r c1                                             in
+    let s      = par_spec_r sp0 sp1 frame                                 in
+    let cond   = par_cond a0 a1 env0 env1 f0 f1 env0' env1'
+                          csm0 prd0 c0 csm1 prd1 c1 frame                 in
+    let pre01 = L.(lc_pre c0 @ lc_pre c1)                                 in
+    let ro01  = L.(lc_ro  c0 @ lc_ro  c1)                                 in
+    L.append_assoc pre01 ro01 frame;
+    assert (M.spc_pre1 cond.lcg_s == L.(pre01 @ (ro01 @ frame)))
+      by (norm [delta_only [`%par_cond; `%par_spec_r; `%lc_spec_r; `%M.spc_pre1;
+                            `%LV.Mklc_gen_cond?.lcg_s;
+                            `%M.Mkspec_r?.spc_pre; `%M.Mkspec_r?.spc_ro]; iota];
+          trefl ());
+    let pre_f'_ij = LV.eij_of_perm_l pre_f'                               in
+    assert (LV.gen_csm #_ #_ #s pre_f' == LV.eij_trg_mask (LV.eij_split s.spc_pre s.spc_ro pre_f'_ij)._1);
+    calc (==) {
+      (LV.eij_split s.spc_pre s.spc_ro pre_f'_ij)._1;
+    == { LV.eij_split_assoc_left pre01 ro01 frame env pre_f'_ij }
+      (LV.eij_split pre01 ro01 (LV.eij_split L.(pre01 @ ro01) frame pre_f'_ij)._1)._1;
+    == { pre_f_add_frame_split env L.(pre01 @ ro01) pre_f }
+      (LV.eij_split pre01 ro01 pre_f)._1;
+    };
+    assert (L.(fun (x: a0 & a1) -> prd0 x._1 @ prd1 x._2) == cond.lcg_s.spc_post)
+      by (trefl ());
+    LV.LCgen env cond pre_f'
+#pop-options
+
+let build_par (fr : flags_record) : Tac unit
+  =
+    let ctx = root_ctx ["in par"] in
+    apply_raw (`__build_par);
+    // env0'
+    dismiss ();
+    build_vprop_to_list fr ctx;
+    // env1'
+    dismiss ();
+    build_vprop_to_list fr ctx;
+    // c0
+    dismiss (); dismiss ();
+    apply (`build_lcsub_at_leaves_lc);
+    norm_lc ();
+    build_lin_cond fr ctx None;
+    // c1
+    dismiss (); dismiss ();
+    apply (`build_lcsub_at_leaves_lc);
+    norm_lc ();
+    build_lin_cond fr ctx None;
+    // pre_f
+    norm_lc ();
+    build_eq_injection_l fr ctx;
+    // frame
+    dismiss ();
+    norm_lc ();
+    trefl ();
+    // pre_f'
+    dismiss ();
+    // Reducing only [__cond_solver__] in a first step reduces the normalisation time (because we use lc_pre... ?)
+    norm [delta_attr [`%__cond_solver__]];
+    norm [delta_only (L.append __delta_list
+                     (L.append __delta_perm
+                     [`%Msk.mask_pequiv_append; `%Perm.perm_f_cons; `%Perm.perm_f_cons_snoc]));
+          delta_attr [`%__cond_solver__; `%Msk.__mask__; `%LV.__lin_cond__];
+          delta_qualifier ["unfold"];
+          iota; zeta; primops];
+    trefl ()
+
+
+#push-options "--ifuel 0"
+inline_for_extraction
+let par_steel_aux
+      (a0 : Type u#a) (pre0 : pre_t) (post0 : post_t a0)
+      (req0 : t_of pre0 -> Type0) (ens0 : t_of pre0 -> (x : a0) -> t_of (post0 x) -> Type0)
+      (f0 : unit -> Steel a0 pre0 post0 (fun h0 -> req0 (h0 pre0)) (fun h0 x h1 -> ens0 (h0 pre0) x (h1 (post0 x))))
+      (a1 : Type u#a) (pre1 : pre_t) (post1 : post_t a1)
+      (req1 : t_of pre1 -> Type0) (ens1 : t_of pre1 -> (x : a1) -> t_of (post1 x) -> Type0)
+      (f1 : unit -> Steel a1 pre1 post1 (fun h0 -> req1 (h0 pre1)) (fun h0 x h1 -> ens1 (h0 pre1) x (h1 (post1 x))))
+  : Steel (a0 & a1) (pre0 `star` pre1) (fun x -> post0 x._1 `star` post1 x._2)
+      (requires fun h0      -> req0 (h0 pre0) /\ req1 (h0 pre1))
+      (ensures  fun h0 x h1 -> ens0 (h0 pre0) x._1 (h1 (post0 x._1)) /\ ens1 (h0 pre1) x._2 (h1 (post1 x._2)))
+  =
+    let sl0_0 = gget pre0 in
+    let sl0_1 = gget pre1 in
+    let ref0_0 (sl : t_of pre0) : prop = sl == G.reveal sl0_0 in
+    let ref0_1 (sl : t_of pre1) : prop = sl == G.reveal sl0_1 in
+    let ref1_0 (x : a0) (sl : t_of (post0 x)) : prop = ens0 sl0_0 x sl /\ True in
+    let ref1_1 (x : a1) (sl : t_of (post1 x)) : prop = ens1 sl0_1 x sl /\ True in
+    intro_vrefine pre0 ref0_0;
+    intro_vrefine pre1 ref0_1;
+    let res = par #a0 #a1
+      #(vrefine pre0 ref0_0) #(fun x -> vrefine (post0 x) (ref1_0 x))
+      (fun () ->
+        (elim_vrefine pre0 ref0_0;
+        let x : a0 = f0 () in
+        intro_vrefine (post0 x) (ref1_0 x);
+        SA.return x) <: SteelT a0 (vrefine pre0 ref0_0) (fun x -> vrefine (post0 x) (ref1_0 x)))
+      #(vrefine pre1 ref0_1) #(fun x -> vrefine (post1 x) (ref1_1 x))
+      (fun () ->
+        (elim_vrefine pre1 ref0_1;
+        let x : a1 = f1 () in
+        intro_vrefine (post1 x) (ref1_1 x);
+        SA.return x) <: SteelT a1 (vrefine pre1 ref0_1) (fun x -> vrefine (post1 x) (ref1_1 x)))
+    in
+    elim_vrefine (post0 res._1) (ref1_0 res._1);
+    elim_vrefine (post1 res._2) (ref1_1 res._2);
+    SA.return res
+
+inline_for_extraction
+let par_steel
+      (a0 a1 : Type u#a)
+      (sp0 : M.spec_r a0) (inner0 : M.spc_steel_t SH.KSteel sp0)
+      (sp1 : M.spec_r a1) (inner1 : M.spc_steel_t SH.KSteel sp1)
+      (frame : vprop_list)
+  : M.spc_steel_t SH.KSteel (par_spec_r sp0 sp1 frame)
+  =
+    SH.steel_f (fun () ->
+    elim_vpl_append sp0.spc_pre sp1.spc_pre;
+    elim_vpl_append L.(sp0.spc_ro @ sp1.spc_ro) frame;
+    elim_vpl_append sp0.spc_ro  sp1.spc_ro;
+    let sl0_0    = gget_f sp0.spc_pre in
+    let sl0_1    = gget_f sp1.spc_pre in
+    let sl_ro_0  = gget_f sp0.spc_ro  in
+    let sl_ro_1  = gget_f sp1.spc_ro  in
+    let sl_frame = gget_f frame       in
+    append_split_vars _ _ sl0_0   sl0_1 ();
+    append_split_vars _ _ (append_vars sl_ro_0 sl_ro_1) sl_frame ();
+    append_split_vars _ _ sl_ro_0 sl_ro_1 ();
+    assert (sp0.spc_req sl0_0 sl_ro_0);
+    assert (sp1.spc_req sl0_1 sl_ro_1);
+
+    let res : a0 & a1 = par_steel_aux
+      a0 (vprop_of_list sp0.spc_pre `star` vprop_of_list sp0.spc_ro)
+      (fun x -> vprop_of_list (sp0.spc_post x) `star` vprop_of_list sp0.spc_ro)
+      (fun sl0 -> sp0.spc_req sl0._1 sl0._2) (fun sl0 x sl1 -> sp0.spc_ens sl0._1 x sl1._1 sl0._2 /\ sl1._2 == sl0._2)
+      (fun () -> SH.steel_u inner0 ())
+      a1 (vprop_of_list sp1.spc_pre `star` vprop_of_list sp1.spc_ro)
+      (fun x -> vprop_of_list (sp1.spc_post x) `star` vprop_of_list sp1.spc_ro)
+      (fun sl0 -> sp1.spc_req sl0._1 sl0._2) (fun sl0 x sl1 -> sp1.spc_ens sl0._1 x sl1._1 sl0._2 /\ sl1._2 == sl0._2)
+      (fun () -> SH.steel_u inner1 ())
+    in
+
+    let sl1_0    = gget_f (sp0.spc_post res._1) in
+    let sl1_1    = gget_f (sp1.spc_post res._2) in
+    assert (sp0.spc_ens sl0_0 res._1 sl1_0 sl_ro_0);
+    assert (sp1.spc_ens sl0_1 res._2 sl1_1 sl_ro_1);
+    append_split_vars _ _ sl1_0   sl1_1 ();
+    intro_vpl_append (sp0.spc_post res._1) (sp1.spc_post res._2);
+    intro_vpl_append sp0.spc_ro  sp1.spc_ro;
+    intro_vpl_append L.(sp0.spc_ro @ sp1.spc_ro) frame;
+    SA.return res
+  )
+#pop-options
+
+[@@ __repr_M__]
+inline_for_extraction
+let par
+      (#a0 #a1 : Type u#a)
+      (env0 env1 : vprop)
+      (f0 : M.repr u#a u#p SH.KSteel a0) (f1 : M.repr u#a u#p SH.KSteel a1)
+  : M.repr u#a u#p SH.KSteel (a0 & a1)
+  =
+    make_combinator (a0 & a1) SH.KSteel build_par (par_gen_c a0 a1 env0 env1 f0 f1)
+      (fun _ (Par sp0 inner0 sp1 inner1 frame) -> par_steel a0 a1 sp0 inner0 sp1 inner1 frame)
+
+(* TODO: RM
+noeq
+type lin_cond_r (env : vprop_list) (#a : Type) (t : M.prog_tree a) = {
+  lcr_csm : LV.csm_t env;
+  lcr_prd : LV.prd_t a;
+  lcr_lc  : LV.lin_cond env t lcr_csm lcr_prd
+}
+
+module C = Experiment.Steel.Combinators
+
+let test (v : int -> vprop')
+  : lin_cond_r [v 0; v 1; v 2]
+    (C.bind (par (VUnit (v 0)) (VUnit (v 1)) (C.return SH.KSteel 0) (C.return SH.KSteel true))
+            (fun x -> C.return SH.KSteel x._1)).repr_tree
+  = _ by (
+    apply (`Mklin_cond_r);
+    norm [delta_attr [`%__repr_M__]];
+    norm_lc ();
+    build_lin_cond default_flags dummy_ctx None
+  )
 *)

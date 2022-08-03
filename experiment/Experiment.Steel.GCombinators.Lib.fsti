@@ -430,7 +430,7 @@ let __build_lin_cond_st
     (**) LV.lc_sub_push_at_leaves env ct';
     LV.lc_sub_push ct'
 
-
+(*
 noeq
 type test_lin_cond_st env #a t must_csm must_prd =
   | TestLinCondSt : (csm1 : _) -> (prd1 : _) ->
@@ -459,6 +459,7 @@ let test_lin_cond_st_0 (v : int -> vprop')
     trefl ()
   )
 #pop-options
+*)
 
 [@@ __cond_solver__]
 let __normalize_lin_cond_st
@@ -508,4 +509,32 @@ let build_lin_cond_st (fr : flags_record) (ctx : cs_context) : Tac unit
     // csm2, prd2 <-
     norm_lc ();
     split (); trefl (); trefl ()
+#pop-options
+
+
+(*** [pre_f_add_frame] *)
+
+// ALT? can be defined directly on pre using pre_f : pre -> env{trg}
+[@@ __cond_solver__]
+let pre_f_add_frame
+      (env : vprop_list) (pre : vprop_list) (pre_f : LV.eq_injection_l pre env)
+  : Perm.pequiv_list env L.(pre @ Msk.(filter_mask (mask_not (LV.eij_trg_mask pre_f)) env))
+  =
+    let flt0 = Msk.(filter_mask (          LV.eij_trg_mask pre_f ) env) in
+    let flt1 = Msk.(filter_mask (mask_not (LV.eij_trg_mask pre_f)) env) in
+    let f0 : Perm.pequiv env L.(flt0 @ flt1)
+        = Msk.mask_pequiv_append (LV.eij_trg_mask pre_f) env            in 
+    let f1 : Perm.pequiv flt0 pre
+        = LV.eij_equiv pre_f                                            in
+    let f  : Perm.pequiv env L.(pre @ flt1)
+        = Perm.(pequiv_trans f0 (pequiv_append f1 (pequiv_refl flt1)))  in
+    (**) Perm.pequiv_as_eq f;
+    Perm.perm_f_to_list f
+
+#push-options "--ifuel 0"
+val pre_f_add_frame_split
+      (env : vprop_list) (pre : vprop_list) (pre_f : LV.eq_injection_l pre env)
+  : Lemma LV.((eij_split pre Msk.(filter_mask (mask_not (LV.eij_trg_mask pre_f)) env)
+                        (pre_f_add_frame env pre pre_f))._1
+           == pre_f)
 #pop-options

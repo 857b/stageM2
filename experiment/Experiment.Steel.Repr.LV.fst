@@ -55,6 +55,18 @@ let extract_eij_equiv
             by (trefl ()))
 #pop-options
 
+let eij_split_assoc_left (s0 s1 s2 : vprop_list) (t : vprop_list) (f : eq_injection_l L.(s0 @ s1 @ s2) t)
+  : Lemma (
+      (**) L.append_assoc s0 s1 s2;
+      (eij_split s0 s1 (eij_split L.(s0 @ s1) s2 f)._1)._1 == (eij_split s0 L.(s1 @ s2) f)._1)
+  =
+    L.append_assoc s0 s1 s2;
+    let f0 = (eij_split L.(s0 @ s1) s2 f)._1 in
+    Ll.list_extensionality (eij_split s0 s1 f0)._1 (eij_split s0 L.(s1 @ s2) f)._1
+      (fun i -> Ll.splitAt_index L.(length (s0 @ s1)) f;
+             Ll.splitAt_index L.(length s0) f0;
+             Ll.splitAt_index L.(length s0) f)
+
 #push-options "--ifuel 0 --fuel 0"
 let eij_split1_trg_mask (#a : Type) (src0 src1 #trg : list a) (eij : eq_injection_l L.(src0 @ src1) trg)
   : Lemma (eij_trg_mask eij == mask_comp_or (eij_trg_mask (eij_split  src0 src1 eij)._1)

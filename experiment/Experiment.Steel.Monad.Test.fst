@@ -34,6 +34,28 @@ open Experiment.Steel
 
 #push-options "--ide_id_info_off"
 
+(* TODO: LV -> SF is long
+   TODO: MV
+ *)
+inline_for_extraction
+let test_par0 (r0 r1 : ref U32.t)
+  : F.usteel unit (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
+      (requires fun _ -> True) (ensures fun _ _ h1 -> sel r0 h1 = 0ul /\ sel r1 h1 = 0ul)
+  = F.(to_steel #[Timer; Dump Stage_WP] (
+    _ <-- GCb.par (vptr r0) (vptr r1)
+      (call (write r0) 0ul)
+      (call (write r1) 0ul);
+    return ()
+  ) ())
+// time specs     : 101ms
+// time lin_cond  : 631ms
+// time sub_push  : 124ms
+// time LV2SF     : 7362ms
+// time SF2Fun    : 3ms
+// time Fun_wp    : 586ms
+// total time : 8807ms
+
+
 irreducible let __test__ : unit = ()
 let norm_test () = T.norm [delta_qualifier ["unfold"]; delta_attr [`%__test__]]
 

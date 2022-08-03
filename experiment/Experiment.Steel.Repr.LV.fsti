@@ -143,6 +143,11 @@ let eij_split1 (#a : Type) (src0 src1 #trg : list a) (eij : eq_injection_l L.(sr
 
 #pop-options
 
+val eij_split_assoc_left (s0 s1 s2 : vprop_list) (t : vprop_list) (f : eq_injection_l L.(s0 @ s1 @ s2) t)
+  : Lemma (
+      (**) L.append_assoc s0 s1 s2;
+      (eij_split s0 s1 (eij_split L.(s0 @ s1) s2 f)._1)._1 == (eij_split s0 L.(s1 @ s2) f)._1)
+
 val eij_split1_trg_mask (#a : Type) (src0 src1 #trg : list a) (eij : eq_injection_l L.(src0 @ src1) trg)
   : Lemma (eij_trg_mask eij == mask_comp_or (eij_trg_mask (eij_split  src0 src1 eij)._1)
                                             (eij_trg_mask (eij_split1 src0 src1 eij)))
