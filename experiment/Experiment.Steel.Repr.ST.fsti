@@ -223,7 +223,7 @@ val equiv_Tbind_assoc_Tbind
 
    seems false because the reverse direction of:
      wp pt <==> (as_requires wp /\ (forall (x : a) . as_ensures wp x ==> pt x))
-   does not hold with our assumptions an wp.
+   does not hold with our assumptions on wp.
 *)
 
 (***** Shape *)

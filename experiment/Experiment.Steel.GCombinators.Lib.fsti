@@ -192,6 +192,12 @@ let lc_wp_sound
               lc_ens lc sl0 x sl1 sl_ro ==> post ({val_v = x; sel_v = sl1})
       with SF2Fun.repr_Fun_of_SF_ens sf x sl1
 
+let lc_wp_sound_ens
+      #a #env #t #csm #prd (lc : LV.lin_cond u#a u#p env #a t csm prd)
+      post sl0 sl_ro x sl1
+  : Lemma (requires lc_wp lc sl0 sl_ro post /\ lc_ens lc sl0 x sl1 sl_ro)
+          (ensures post SF.({val_v = x; sel_v = sl1}))
+  = lc_wp_sound lc sl0 sl_ro post
 
 (***** [lc_to_spc_steel_t] *)
 

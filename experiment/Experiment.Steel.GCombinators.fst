@@ -878,7 +878,7 @@ let par_spec_r
   : M.spec_r (a0 & a1)
   = {
     spc_pre  = L.(sp0.spc_pre @ sp1.spc_pre);
-    spc_post = (fun (x : a0 & a1) -> L.(sp0.spc_post x._1 @ sp1.spc_post x._2)); // TODO? reduction of ._1, ._2
+    spc_post = (fun (x : a0 & a1) -> L.(sp0.spc_post x._1 @ sp1.spc_post x._2));
     spc_ro   = L.((sp0.spc_ro @ sp1.spc_ro) @ frame);
     spc_req  = (fun sl0 sl_ro ->
                   let sl0s = split_vars sp0.spc_pre sp1.spc_pre sl0                 in
@@ -896,6 +896,27 @@ let par_spec_r
   }
 
 noeq
+type alt_spec_r (#a : Type) (s : M.spec_r a)
+  = {
+    spca_req : sl_f s.spc_pre -> sl_f s.spc_ro -> Type0;
+    spca_ens : sl_f s.spc_pre -> (x : a) -> sl_f (s.spc_post x) -> sl_f s.spc_ro -> Type0;
+  }
+
+[@@ __reduce__]
+let alt_spec_to_r (#a : Type) (#s : M.spec_r a) (s' : alt_spec_r s)
+  : M.spec_r a
+  = { s with spc_req = s'.spca_req; spc_ens = s'.spca_ens }
+
+type sup_spec_r (#a : Type) (s : M.spec_r a)
+  = s' : alt_spec_r s
+    { forall (sl0 : sl_f s.spc_pre) (sl_ro : sl_f s.spc_ro) .
+        s'.spca_req sl0 sl_ro ==> (s.spc_req sl0 sl_ro /\
+     (forall (x : a) (sl1 : sl_f (s.spc_post x)) .
+        s.spc_ens sl0 x sl1 sl_ro ==> s'.spca_ens sl0 x sl1 sl_ro)) }
+
+                       
+
+noeq
 type par_gen_c
        (a0 a1 : Type u#a)
        (env0 env1 : vprop)
@@ -905,10 +926,160 @@ type par_gen_c
       (sp0 : M.spec_r a0) -> (inner0 : M.spc_steel_t SH.KSteel sp0) ->
       (sp1 : M.spec_r a1) -> (inner1 : M.spc_steel_t SH.KSteel sp1) ->
       (frame : vprop_list) ->
-      par_gen_c a0 a1 env0 env1 f0 f1 (par_spec_r sp0 sp1 frame)
+      (sp  : sup_spec_r (par_spec_r sp0 sp1 frame)) ->
+      par_gen_c a0 a1 env0 env1 f0 f1 (alt_spec_to_r sp)
 
-#push-options "--ifuel 0"
-// TODO: gen_sf_Tspec_wp
+#push-options "--ifuel 0 --fuel 0"
+let by_wp_monotonicity (#a : Type) (wp : pure_wp a) (pt0 pt1 : pure_post a)
+      (h0 : squash (wp pt0)) (h1 : squash (forall (x : a) . pt0 x ==> pt1 x))
+  : squash (wp pt1)
+  = FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp
+
+[@@ __LV2SF__]
+let par_sf_wp
+      (#a0 #a1 : Type u#a)
+      (#env0 : vprop_list) (#f0 : M.prog_tree a0) (#csm0 : LV.csm_t env0) (#prd0 : LV.prd_t a0)
+      (c0 : LV.lin_cond u#a u#p env0 f0 csm0 prd0)
+      (#env1 : vprop_list) (#f1 : M.prog_tree a1) (#csm1 : LV.csm_t env1) (#prd1 : LV.prd_t a1)
+      (c1 : LV.lin_cond u#a u#p env1 f1 csm1 prd1)
+      (frame : vprop_list)
+      (sl0 : sl_f L.(lc_pre c0 @ lc_pre c1)) (sl_ro : sl_f L.((lc_ro c0 @ lc_ro c1) @ frame))
+  : pure_wp SF.(sl_tys_v
+              ({val_t = (a0 & a1); sel_t = (fun x -> vprop_list_sels_t L.(lc_post c0 x._1 @ lc_post c1 x._2))}))
+  =
+    let sl0s   = split_vars (lc_pre c0) (lc_pre c1) sl0         in
+    let sl_ro0 = split_vars L.(lc_ro c0 @ lc_ro c1) frame sl_ro in
+    let sl_ro1 = split_vars (lc_ro c0) (lc_ro c1) sl_ro0._1     in
+    let wp0    = lc_wp c0 sl0s._1 sl_ro1._1                     in
+    let wp1    = lc_wp c1 sl0s._2 sl_ro1._2                     in
+    // ALT? in Twp use a dlist instead of a flist
+    let wp pt =
+      as_requires wp1 /\
+      wp0 (fun xsl0 -> wp1 (fun xsl1 ->
+      pt SF.({val_v = (xsl0.val_v, xsl1.val_v);
+              sel_v = Fl.flist_of_d' (LV2SF.append_vars_l #(prd0 xsl0.val_v) #(prd1 xsl1.val_v)
+                                       (Fl.dlist_of_f xsl0.sel_v) (Fl.dlist_of_f xsl1.sel_v))})))
+    in
+    assert (FStar.Monotonic.Pure.is_monotonic wp)
+      by (
+        let p0 = forall_intro  () in
+        let p1 = forall_intro  () in
+        let h  = implies_intro () in
+        let h0a, h0b = destruct_and (implies_intro ()) in
+        split ();
+          hyp h0a;
+        apply (`by_wp_monotonicity);
+          hyp h0b;
+        let xsl0 = forall_intro () in
+        let h0c = implies_intro () in
+        apply (`by_wp_monotonicity);
+          hyp h0c;
+        norm [];
+        let xsl1 = forall_intro () in
+        let xsl2 = fresh_uvar None in
+        hyp (instantiate h xsl2));
+    FStar.Monotonic.Pure.as_pure_wp wp
+
+/// We cannot prove the reverse direction of
+///   wp pt <==> (as_requires wp /\ (forall (x : a) . as_ensures wp x ==> pt x))
+/// but this lemma can be used to prove [as_ensures wp x]
+let pure_wp_to_ensures
+      (#a : Type) (wp : pure_wp a) (x : a)
+      (lb : (pt : pure_post a) -> Lemma (requires wp pt) (ensures pt x))
+  : Lemma (as_ensures wp x)
+  =
+    let not_x (y : a) = y =!= x in
+    let p : squash (~ (wp not_x)) =
+      introduce wp not_x ==> False with _ . lb not_x
+    in
+    assert (as_ensures wp x) by (exact (``@p))
+
+let par_sf_wp_sound #a0 #a1
+      #env0 #f0 #csm0 #prd0 (c0 : LV.lin_cond u#a u#p env0 #a0 f0 csm0 prd0)
+      #env1 #f1 #csm1 #prd1 (c1 : LV.lin_cond u#a u#p env1 #a1 f1 csm1 prd1)
+      frame
+      (sl0 : sl_f L.(lc_pre c0 @ lc_pre c1)) (sl_ro : sl_f L.((lc_ro c0 @ lc_ro c1) @ frame))
+  : Lemma (
+      let wp = par_sf_wp c0 c1 frame sl0 sl_ro                in
+      let s  = par_spec_r (lc_spec_r c0) (lc_spec_r c1) frame in
+      (as_requires wp ==> s.spc_req sl0 sl_ro) /\
+      (forall x sl1 . s.spc_ens sl0 x sl1 sl_ro ==> as_ensures wp ({val_v = x; sel_v = sl1})))
+  =
+    let wp = par_sf_wp c0 c1 frame sl0 sl_ro                    in
+    let s  = par_spec_r (lc_spec_r c0) (lc_spec_r c1) frame     in
+    let sl0s   = split_vars (lc_pre c0) (lc_pre c1) sl0         in
+    let sl_ro0 = split_vars L.(lc_ro c0 @ lc_ro c1) frame sl_ro in
+    let sl_ro1 = split_vars (lc_ro c0) (lc_ro c1) sl_ro0._1     in
+    let wp0    = lc_wp c0 sl0s._1 sl_ro1._1                     in
+    let wp1    = lc_wp c1 sl0s._2 sl_ro1._2                     in
+    let f (xsl0 : SF.(sl_tys_v ({val_t = a0; sel_t = M.post_sl_t (lc_post c0)})))
+          (xsl1 : SF.(sl_tys_v ({val_t = a1; sel_t = M.post_sl_t (lc_post c1)})))
+      : SF.(sl_tys_v ({val_t = (a0 & a1);
+                       sel_t = (fun x -> vprop_list_sels_t L.(lc_post c0 x._1 @ lc_post c1 x._2))}))
+      = SF.({val_v = (xsl0.val_v, xsl1.val_v);
+              sel_v = Fl.flist_of_d' (LV2SF.append_vars_l #(prd0 xsl0.val_v) #(prd1 xsl1.val_v)
+                                       (Fl.dlist_of_f xsl0.sel_v) (Fl.dlist_of_f xsl1.sel_v))})
+    in
+    let pt1 pt xsl0 xsl1 = pt (f xsl0 xsl1) in
+    let pt0 pt xsl0 = wp1 (pt1 pt xsl0) in
+    let wp_eq pt : squash (wp pt == (as_requires wp1 /\ wp0 (pt0 pt)))
+      = U.by_refl ()
+    in
+
+    introduce as_requires wp ==> s.spc_req sl0 sl_ro
+    with _ . begin
+        let as_req_eq : squash (as_requires wp == (as_requires wp1 /\ wp0 (pt0 (fun _ -> True))))
+          = wp_eq _
+        in
+        lc_wp_sound c0 sl0s._1 sl_ro1._1 (pt0 (fun _ -> True));
+        lc_wp_sound c1 sl0s._2 sl_ro1._2 (fun _ -> True)
+    end;
+    introduce forall x sl1 . s.spc_ens sl0 x sl1 sl_ro ==> as_ensures wp ({val_v = x; sel_v = sl1})
+    with introduce _ ==> _ with _ .
+      pure_wp_to_ensures wp ({val_v = x; sel_v = sl1})
+      begin fun pt ->
+        assert (wp pt);
+        assert (s.spc_ens sl0 x sl1 sl_ro);
+        let x0, x1 = x in
+        let sl1s = split_vars (lc_post c0 x._1) (lc_post c1 x._2) sl1 in
+        assert (lc_ens c0 sl0s._1 x0 sl1s._1 sl_ro1._1);
+        assert (lc_ens c1 sl0s._2 x1 sl1s._2 sl_ro1._2);
+        wp_eq pt;
+        
+        let xsl0 = {SF.val_v = x0; sel_v = sl1s._1}                   in
+        let lem0 = lc_wp_sound_ens c0 (pt0 pt) sl0s._1 sl_ro1._1      in
+        assert (pt0 pt xsl0) by (apply_lemma (``@lem0); smt ());
+
+        let xsl1 = {SF.val_v = x1; sel_v = sl1s._2}                   in
+        let lem1 = lc_wp_sound_ens c1 (pt1 pt xsl0) sl0s._2 sl_ro1._2 in
+        assert (pt1 pt xsl0 xsl1) by (apply_lemma (``@lem1); smt ());
+
+        SF.(calc (==) {
+          f xsl0 xsl1;
+        == { }
+          { val_v = (x0, x1);
+            sel_v = Fl.flist_of_d' (LV2SF.append_vars_l #(prd0 xsl0.val_v) #(prd1 xsl1.val_v)
+                                      (Fl.dlist_of_f sl1s._1) (Fl.dlist_of_f sl1s._2)) };
+        == { }
+          { val_v = (x0, x1); sel_v = append_vars sl1s._1 sl1s._2 };
+        == { split_vars_append (lc_post c0 x._1) (lc_post c1 x._2) sl1 () }
+          {val_v = x; sel_v = sl1};
+        })
+      end
+
+let par_spec_r_sup #a0 #a1
+      #env0 #f0 #csm0 #prd0 (c0 : LV.lin_cond u#a u#p env0 #a0 f0 csm0 prd0)
+      #env1 #f1 #csm1 #prd1 (c1 : LV.lin_cond u#a u#p env1 #a1 f1 csm1 prd1)
+      frame
+  : sup_spec_r (par_spec_r (lc_spec_r c0) (lc_spec_r c1) frame)
+  =
+    let wp = par_sf_wp c0 c1 frame in
+    FStar.Classical.forall_intro_2 (par_sf_wp_sound c0 c1 frame);
+    {
+      spca_req = (fun sl0 sl_ro       -> as_requires (wp sl0 sl_ro));
+      spca_ens = (fun sl0 x sl1 sl_ro -> as_ensures  (wp sl0 sl_ro) ({val_v = x; sel_v = sl1}));
+    }
+
 [@@ __LV2SF__]
 let par_sf
       (#a0 #a1 : Type u#a)
@@ -917,25 +1088,15 @@ let par_sf
       (#env1 : vprop_list) (#f1 : M.prog_tree a1) (#csm1 : LV.csm_t env1) (#prd1 : LV.prd_t a1)
       (c1 : LV.lin_cond u#a u#p env1 f1 csm1 prd1)
       (frame : vprop_list)
-  : LV.gen_sf u#a u#p (par_spec_r (lc_spec_r c0) (lc_spec_r c1) frame)
-  = gen_sf_Tspec ({
-      spc_pre  = L.(lc_pre c0 @ lc_pre c1);
-      spc_post = (fun (x : a0 & a1) -> L.(lc_post c0 x._1 @ lc_post c1 x._2));
-      spc_ro   = L.((lc_ro c0 @ lc_ro c1) @ frame);
-      spc_req  = (fun sl0 sl_ro ->
-                  let sl0s = split_vars (lc_pre c0) (lc_pre c1) sl0             in
-                  let sl_ro0 = split_vars L.(lc_ro c0 @ lc_ro c1) frame sl_ro   in
-                  let sl_ro1 = split_vars (lc_ro c0) (lc_ro c1) sl_ro0._1       in
-                  lc_req c0 sl0s._1 sl_ro1._1 /\
-                  lc_req c1 sl0s._2 sl_ro1._2);
-      spc_ens  = (fun sl0 x sl1 sl_ro ->
-                  let sl0s = split_vars (lc_pre c0) (lc_pre c1) sl0             in
-                  let sl1s = split_vars (lc_post c0 x._1) (lc_post c1 x._2) sl1 in
-                  let sl_ro0 = split_vars L.(lc_ro c0 @ lc_ro c1) frame sl_ro   in
-                  let sl_ro1 = split_vars (lc_ro c0) (lc_ro c1) sl_ro0._1       in
-                  lc_ens c0 sl0s._1 x._1 sl1s._1 sl_ro1._1 /\
-                  lc_ens c1 sl0s._2 x._2 sl1s._2 sl_ro1._2)
-    })
+  : LV.gen_sf u#a u#p (alt_spec_to_r (par_spec_r_sup c0 c1 frame))
+    by (norm [delta_only [`%alt_spec_to_r; `%par_spec_r; `%lc_spec_r; `%par_spec_r_sup;
+                          `%SF.tree_req; `%SF.tree_ens;
+                          `%M.Mkspec_r?.spc_pre; `%M.Mkspec_r?.spc_post; `%M.Mkspec_r?.spc_ro;
+                          `%M.Mkspec_r?.spc_req; `%M.Mkspec_r?.spc_ens;
+                          `%Mkalt_spec_r?.spca_req; `%Mkalt_spec_r?.spca_ens];
+                          iota; zeta; simplify];
+        trivial ())
+  = (fun sl0 sl_ro -> SF.Twp _ _ (par_sf_wp c0 c1 frame sl0 sl_ro))
 
 [@@ __LV2SF__; __extraction__]
 inline_for_extraction
@@ -951,14 +1112,14 @@ let par_cond
       (frame : vprop_list)
   : LV.lc_gen_cond u#a u#p (a0 & a1) (par_gen_c a0 a1 env0 env1 f0 f1)
   =
-    let sp0    = lc_spec_r c0             in
-    let inner0 = lc_to_spc_steel_t f0 c0  in
-    let sp1    = lc_spec_r c1             in
-    let inner1 = lc_to_spc_steel_t f1 c1  in
-    let s      = par_spec_r sp0 sp1 frame in
+    let sp0    = lc_spec_r c0               in
+    let inner0 = lc_to_spc_steel_t f0 c0    in
+    let sp1    = lc_spec_r c1               in
+    let inner1 = lc_to_spc_steel_t f1 c1    in
+    let s      = par_spec_r_sup c0 c1 frame in
     {
-      lcg_s  = par_spec_r sp0 sp1 frame;
-      lcg_sh = Par #a0 #a1 #env0 #env1 #f0 #f1 sp0 inner0 sp1 inner1 frame;
+      lcg_s  = alt_spec_to_r s;
+      lcg_sh = Par #a0 #a1 #env0 #env1 #f0 #f1 sp0 inner0 sp1 inner1 frame s;
       lcg_sf = par_sf c0 c1 frame;
     }
 
@@ -1137,6 +1298,21 @@ let par_steel
   )
 #pop-options
 
+#push-options "--ifuel 0 --fuel 0"
+inline_for_extraction
+let sup_spec_r_steel__steel
+      (#a : Type) (s0 : M.spec_r a) (s1 : sup_spec_r s0)
+      (f : M.spc_steel_t SH.KSteel s0)
+  : M.spc_steel_t SH.KSteel (alt_spec_to_r s1)
+  =
+    SH.steel_f (fun () ->
+      let sl0   = gget_f s0.spc_pre in
+      let sl_ro = gget_f s0.spc_ro  in
+      let x = SH.steel_u f () in
+      let sl1   = gget_f (s0.spc_post x) in
+      SA.return x)
+#pop-options
+
 [@@ __repr_M__]
 inline_for_extraction
 let par
@@ -1146,26 +1322,5 @@ let par
   : M.repr u#a u#p SH.KSteel (a0 & a1)
   =
     make_combinator (a0 & a1) SH.KSteel build_par (par_gen_c a0 a1 env0 env1 f0 f1)
-      (fun _ (Par sp0 inner0 sp1 inner1 frame) -> par_steel a0 a1 sp0 inner0 sp1 inner1 frame)
-
-(* TODO: RM
-noeq
-type lin_cond_r (env : vprop_list) (#a : Type) (t : M.prog_tree a) = {
-  lcr_csm : LV.csm_t env;
-  lcr_prd : LV.prd_t a;
-  lcr_lc  : LV.lin_cond env t lcr_csm lcr_prd
-}
-
-module C = Experiment.Steel.Combinators
-
-let test (v : int -> vprop')
-  : lin_cond_r [v 0; v 1; v 2]
-    (C.bind (par (VUnit (v 0)) (VUnit (v 1)) (C.return SH.KSteel 0) (C.return SH.KSteel true))
-            (fun x -> C.return SH.KSteel x._1)).repr_tree
-  = _ by (
-    apply (`Mklin_cond_r);
-    norm [delta_attr [`%__repr_M__]];
-    norm_lc ();
-    build_lin_cond default_flags dummy_ctx None
-  )
-*)
+      (fun _ (Par sp0 inner0 sp1 inner1 frame sp) ->
+           sup_spec_r_steel__steel _ sp (par_steel a0 a1 sp0 inner0 sp1 inner1 frame))
