@@ -43,6 +43,13 @@ let dl_initi_vp (v : vprop_list) (f : (i : Ll.dom v) -> Tot (L.index v i).t)
     (**) Ll.list_extensionality (vprop_list_sels_t v) (Ll.initi 0 n f_ty) (fun _ -> ());
     Dl.initi 0 n f_ty f
 
+[@@ __LV2SF__]
+let sl_list_of_f (#v : vprop_list) (f : sl_f v)
+  : l : sl_list v {l == Fl.dlist_of_f f}
+  =
+    let l = dl_initi_vp v f in
+    (**) Dl.dlist_extensionality l (Fl.dlist_of_f f) (fun _ -> ());
+    l
 
 [@@ __LV2SF__]
 let eij_sl_l (#src #trg : vprop_list) (eij : eq_injection_l src trg) (xs : sl_list trg)
@@ -143,7 +150,7 @@ let rec repr_SF_of_LV
       SF.Tbind a b (M.post_sl_t f_prd) (M.post_sl_t g_prd)
                (repr_SF_of_LV cf sl0)
                (fun (x : a) (sl1 : sl_f (f_prd x)) ->
-                  repr_SF_of_LV (cg x) (res_sel_l sl0 f_csm (Fl.dlist_of_f sl1)))
+                  repr_SF_of_LV (cg x) (res_sel_l sl0 f_csm (sl_list_of_f sl1)))
   | LCbindP env #a #b #wp #g csm prd cg ->
       SF.TbindP a b (M.post_sl_t prd) wp (fun (x : a) -> repr_SF_of_LV (cg x) sl0)
   | LCif    env #a #guard #thn #els csm prd cthn cels ->
@@ -159,7 +166,7 @@ let rec repr_SF_of_LV
                (repr_SF_of_LV cf sl0)
                (fun (x : a) (sl1 : sl_f (prd0 x)) ->
                   let sl1' : sl_list (prd1 x)
-                           = sub_prd_sl_l #env sl0 csm0 (Fl.dlist_of_f sl1) csm1 (prd_f x) in
+                           = sub_prd_sl_l #env sl0 csm0 (sl_list_of_f sl1) csm1 (prd_f x) in
                   SF.Tret a x (M.post_sl_t prd1) sl1')
 
 

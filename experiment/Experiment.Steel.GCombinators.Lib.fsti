@@ -119,6 +119,7 @@ let lc_ens
   : Type0
   = LV.tree_ens lc (append_vars_mask csm sl0 sl_ro) x sl1
 
+[@@ __LV2SF__]//ALT: add pre, post, ro in [LV.lc_gen_cond].
 let lc_spec_r
       (#a : Type) (#env : vprop_list) (#t : M.prog_tree a) (#csm : LV.csm_t env) (#prd : LV.prd_t a)
       (lc : LV.lin_cond u#a u#p env t csm prd)

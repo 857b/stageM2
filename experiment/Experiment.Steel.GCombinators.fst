@@ -870,7 +870,7 @@ let while_loop_sl
 
 (*** par *)
 
-[@@ __reduce__]
+[@@ __LV2SF__; __reduce__]
 let par_spec_r
       (#a0 #a1 : Type u#a)
       (sp0 : M.spec_r a0) (sp1 : M.spec_r a1)
@@ -902,7 +902,7 @@ type alt_spec_r (#a : Type) (s : M.spec_r a)
     spca_ens : sl_f s.spc_pre -> (x : a) -> sl_f (s.spc_post x) -> sl_f s.spc_ro -> Type0;
   }
 
-[@@ __reduce__]
+[@@ __LV2SF__; __reduce__]
 let alt_spec_to_r (#a : Type) (#s : M.spec_r a) (s' : alt_spec_r s)
   : M.spec_r a
   = { s with spc_req = s'.spca_req; spc_ens = s'.spca_ens }
@@ -945,7 +945,7 @@ let par_sf_wp
       (frame : vprop_list)
       (sl0 : sl_f L.(lc_pre c0 @ lc_pre c1)) (sl_ro : sl_f L.((lc_ro c0 @ lc_ro c1) @ frame))
   : pure_wp SF.(sl_tys_v
-              ({val_t = (a0 & a1); sel_t = (fun x -> vprop_list_sels_t L.(lc_post c0 x._1 @ lc_post c1 x._2))}))
+              ({val_t = (a0 & a1); sel_t = (fun x -> vprop_list_sels_t L.(prd0 x._1 @ prd1 x._2))}))
   =
     let sl0s   = split_vars (lc_pre c0) (lc_pre c1) sl0         in
     let sl_ro0 = split_vars L.(lc_ro c0 @ lc_ro c1) frame sl_ro in
@@ -957,8 +957,9 @@ let par_sf_wp
       as_requires wp1 /\
       wp0 (fun xsl0 -> wp1 (fun xsl1 ->
       pt SF.({val_v = (xsl0.val_v, xsl1.val_v);
-              sel_v = Fl.flist_of_d' (LV2SF.append_vars_l #(prd0 xsl0.val_v) #(prd1 xsl1.val_v)
-                                       (Fl.dlist_of_f xsl0.sel_v) (Fl.dlist_of_f xsl1.sel_v))})))
+              sel_v = Fl.flist_of_d' #(vprop_list_sels_t L.(prd0 xsl0.val_v @ prd1 xsl1.val_v))
+                        (LV2SF.append_vars_l #(prd0 xsl0.val_v) #(prd1 xsl1.val_v)
+                           (LV2SF.sl_list_of_f xsl0.sel_v) (LV2SF.sl_list_of_f xsl1.sel_v))})))
     in
     assert (FStar.Monotonic.Pure.is_monotonic wp)
       by (
@@ -1012,13 +1013,14 @@ let par_sf_wp_sound #a0 #a1
     let sl_ro1 = split_vars (lc_ro c0) (lc_ro c1) sl_ro0._1     in
     let wp0    = lc_wp c0 sl0s._1 sl_ro1._1                     in
     let wp1    = lc_wp c1 sl0s._2 sl_ro1._2                     in
-    let f (xsl0 : SF.(sl_tys_v ({val_t = a0; sel_t = M.post_sl_t (lc_post c0)})))
-          (xsl1 : SF.(sl_tys_v ({val_t = a1; sel_t = M.post_sl_t (lc_post c1)})))
+    let f (xsl0 : SF.(sl_tys_v ({val_t = a0; sel_t = M.post_sl_t prd0})))
+          (xsl1 : SF.(sl_tys_v ({val_t = a1; sel_t = M.post_sl_t prd1})))
       : SF.(sl_tys_v ({val_t = (a0 & a1);
-                       sel_t = (fun x -> vprop_list_sels_t L.(lc_post c0 x._1 @ lc_post c1 x._2))}))
+                       sel_t = (fun x -> vprop_list_sels_t L.(prd0 x._1 @ prd1 x._2))}))
       = SF.({val_v = (xsl0.val_v, xsl1.val_v);
-              sel_v = Fl.flist_of_d' (LV2SF.append_vars_l #(prd0 xsl0.val_v) #(prd1 xsl1.val_v)
-                                       (Fl.dlist_of_f xsl0.sel_v) (Fl.dlist_of_f xsl1.sel_v))})
+              sel_v = Fl.flist_of_d' #(vprop_list_sels_t L.(prd0 xsl0.val_v @ prd1 xsl1.val_v))
+                        (LV2SF.append_vars_l #(prd0 xsl0.val_v) #(prd1 xsl1.val_v)
+                          (LV2SF.sl_list_of_f xsl0.sel_v) (LV2SF.sl_list_of_f xsl1.sel_v))})
     in
     let pt1 pt xsl0 xsl1 = pt (f xsl0 xsl1) in
     let pt0 pt xsl0 = wp1 (pt1 pt xsl0) in
@@ -1041,7 +1043,7 @@ let par_sf_wp_sound #a0 #a1
         assert (wp pt);
         assert (s.spc_ens sl0 x sl1 sl_ro);
         let x0, x1 = x in
-        let sl1s = split_vars (lc_post c0 x._1) (lc_post c1 x._2) sl1 in
+        let sl1s = split_vars (prd0 x._1) (prd1 x._2) sl1 in
         assert (lc_ens c0 sl0s._1 x0 sl1s._1 sl_ro1._1);
         assert (lc_ens c1 sl0s._2 x1 sl1s._2 sl_ro1._2);
         wp_eq pt;
@@ -1059,10 +1061,10 @@ let par_sf_wp_sound #a0 #a1
         == { }
           { val_v = (x0, x1);
             sel_v = Fl.flist_of_d' (LV2SF.append_vars_l #(prd0 xsl0.val_v) #(prd1 xsl1.val_v)
-                                      (Fl.dlist_of_f sl1s._1) (Fl.dlist_of_f sl1s._2)) };
+                                      (LV2SF.sl_list_of_f sl1s._1) (LV2SF.sl_list_of_f sl1s._2)) };
         == { }
           { val_v = (x0, x1); sel_v = append_vars sl1s._1 sl1s._2 };
-        == { split_vars_append (lc_post c0 x._1) (lc_post c1 x._2) sl1 () }
+        == { split_vars_append (prd0 x._1) (prd1 x._2) sl1 () }
           {val_v = x; sel_v = sl1};
         })
       end
@@ -1089,14 +1091,19 @@ let par_sf
       (c1 : LV.lin_cond u#a u#p env1 f1 csm1 prd1)
       (frame : vprop_list)
   : LV.gen_sf u#a u#p (alt_spec_to_r (par_spec_r_sup c0 c1 frame))
-    by (norm [delta_only [`%alt_spec_to_r; `%par_spec_r; `%lc_spec_r; `%par_spec_r_sup;
-                          `%SF.tree_req; `%SF.tree_ens;
-                          `%M.Mkspec_r?.spc_pre; `%M.Mkspec_r?.spc_post; `%M.Mkspec_r?.spc_ro;
-                          `%M.Mkspec_r?.spc_req; `%M.Mkspec_r?.spc_ens;
+    by (norm [delta_only [`%M.Mkspec_r?.spc_pre; `%M.Mkspec_r?.spc_post; `%M.Mkspec_r?.spc_ro;
+                          `%M.Mkspec_r?.spc_req; `%M.Mkspec_r?.spc_ens]];
+        norm [delta_only [`%alt_spec_to_r; `%par_spec_r; `%lc_spec_r; `%par_spec_r_sup];
+              iota];
+        norm [delta_only [`%M.Mkspec_r?.spc_pre; `%M.Mkspec_r?.spc_post; `%M.Mkspec_r?.spc_ro;
+                          `%M.Mkspec_r?.spc_req; `%M.Mkspec_r?.spc_ens]];
+        norm [delta_only [`%SF.tree_req; `%SF.tree_ens; `%lc_post;
                           `%Mkalt_spec_r?.spca_req; `%Mkalt_spec_r?.spca_ens];
-                          iota; zeta; simplify];
+              iota; zeta; simplify];
         trivial ())
-  = (fun sl0 sl_ro -> SF.Twp _ _ (par_sf_wp c0 c1 frame sl0 sl_ro))
+  = (fun sl0 sl_ro ->
+      SF.Twp (a0 & a1) (fun x -> vprop_list_sels_t L.(prd0 x._1 @ prd1 x._2))
+             (par_sf_wp c0 c1 frame sl0 sl_ro))
 
 [@@ __LV2SF__; __extraction__]
 inline_for_extraction

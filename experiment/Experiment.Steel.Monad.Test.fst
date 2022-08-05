@@ -44,9 +44,7 @@ let clean () : Tactics.Tac unit =
 
 ////////// simple full test //////////
 
-//[@@ handle_smt_goals ]
-//let tac () = T.dump "SMT query"
-
+//[@@ handle_smt_goals ] let tac () = T.dump "SMT query"
 //#push-options "--z3refresh --query_stats"
 //#push-options "--print_implicits"
 
@@ -56,18 +54,19 @@ let test3_LV' (r0 r1 : ref U32.t)
       (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
       (requires fun h0 -> U32.v (sel r0 h0) < 42)
       (ensures fun h0 () h1 -> U32.v (sel r1 h1) == U32.v (sel r0 h0) + 1)
-  = F.(to_steel #[Timer; Extract; Dump Stage_Extract] (
+  = F.(to_steel #[Timer; Extract] (
       x <-- call read r0;
       call (write r1) U32.(x +%^ 1ul)
     ) ())
-// time specs     : 95ms
-// time lin_cond  : 276ms
-// time sub_push  : 52ms
+// time specs     : 100ms
+// time M         : 4ms
+// time lin_cond  : 328ms
+// time sub_push  : 58ms
 // time LV2SF     : 19ms
-// time SF2Fun    : 4ms
+// time SF2Fun    : 2ms
 // time Fun_wp    : 15ms
-// time extract   : 186ms
-// total time : 647ms [450ms-750ms]
+// time extract   : 197ms
+// total time : 723ms [500ms-750ms]
 
 
 ////////// test_flatten //////////
@@ -309,7 +308,7 @@ let test3_steel (r0 r1 : ref U32.t)
       (requires fun sl0 -> U32.v (sl0 0) < 42)
       (ensures fun sl0 () sl1 -> U32.v (sl1 1) == U32.v (sl0 0) + 1)
       _ (test3_M r0 r1)
-  = _ by (solve_by_wp F.(make_flags_record [Dump Stage_SF]) (timer_start "" true))
+  = _ by (solve_by_wp F.(make_flags_record [Dump Stage_SF; Dump Stage_M]) (timer_start "" true))
 
 (*let _ = fun r0 r1 ->
   assert (U.print_util (test3_steel r0 r1))
@@ -551,14 +550,15 @@ let test_slrewrite (r0 r1 r2 : ref U32.t)
       GCb.slrewrite r0 r2;;
       return ()
     ) ())
-// time specs     : 103ms
-// time lin_cond  : 68ms
-// time sub_push  : 30ms
-// time LV2SF     : 5ms
+// time specs     : 117ms
+// time M         : 2ms
+// time lin_cond  : 77ms
+// time sub_push  : 31ms
+// time LV2SF     : 6ms
 // time SF2Fun    : 2ms
-// time Fun_wp    : 9ms
-// time extract   : 58ms
-// total time : 275ms
+// time Fun_wp    : 12ms
+// time extract   : 103ms
+// total time : 350ms
 
 inline_for_extraction
 let test_with_invariant_g #opened (r0 : ghost_ref U32.t) (r1 : ref U32.t) (i : inv (ghost_vptr r0))
@@ -569,14 +569,15 @@ let test_with_invariant_g #opened (r0 : ghost_ref U32.t) (r1 : ref U32.t) (i : i
     GCb.with_invariant_g i (
       call_g ghost_read r0
     )) ())
-// time specs     : 117ms
-// time lin_cond  : 445ms
-// time sub_push  : 181ms
-// time LV2SF     : 297ms
-// time SF2Fun    : 4ms
-// time Fun_wp    : 23ms
-// time extract   : 776ms
-// total time : 1843ms
+// time specs     : 79ms
+// time M         : 23ms
+// time lin_cond  : 282ms
+// time sub_push  : 130ms
+// time LV2SF     : 383ms
+// time SF2Fun    : 8ms
+// time Fun_wp    : 33ms
+// time extract   : 1233ms
+// total time : 2171ms
 
 inline_for_extraction
 let test_for_loop_0 (r0 : ref U32.t)
@@ -588,14 +589,15 @@ let test_for_loop_0 (r0 : ref U32.t)
         elift (return U.Unit')
       end
     ) ())
-// time specs     : 38ms
-// time lin_cond  : 41ms
-// time sub_push  : 6ms
-// time LV2SF     : 39ms
-// time SF2Fun    : 3ms
-// time Fun_wp    : 7ms
-// time extract   : 160ms
-// total time : 294ms
+// time specs     : 41ms
+// time M         : 2ms
+// time lin_cond  : 51ms
+// time sub_push  : 11ms
+// time LV2SF     : 75ms
+// time SF2Fun    : 4ms
+// time Fun_wp    : 10ms
+// time extract   : 524ms
+// total time : 718ms
 
 
 inline_for_extraction
@@ -613,13 +615,14 @@ let test_for_loop_1 (r0 r1 : ref U32.t)
         return U.Unit'
       end
     ) ())
-// time specs     : 171ms
-// time lin_cond  : 932ms
-// time sub_push  : 244ms
-// time LV2SF     : 3255ms
+// time specs     : 198ms
+// time M         : 133ms
+// time lin_cond  : 1028ms
+// time sub_push  : 352ms
+// time LV2SF     : 2919ms
 // time SF2Fun    : 8ms
-// time Fun_wp    : 284ms
-// total time : 4894ms
+// time Fun_wp    : 237ms
+// total time : 4875ms
 
 // Extract succeeds in ~25s but F* then takes several minutes and a lot of
 // memory to finish processing the definition.
@@ -637,10 +640,11 @@ let test_par0 (r0 r1 : ref U32.t)
       (call (write r1) 0ul);
     return ()
   ) ())
-// time specs     : 86ms
-// time lin_cond  : 870ms
-// time sub_push  : 179ms
-// time LV2SF     : 6955ms
-// time SF2Fun    : 3ms
-// time Fun_wp    : 428ms
-// total time : 8521ms
+// time specs     : 99ms
+// time M         : 17ms
+// time lin_cond  : 667ms
+// time sub_push  : 225ms
+// time LV2SF     : 5278ms
+// time SF2Fun    : 5ms
+// time Fun_wp    : 545ms
+// total time : 6836ms

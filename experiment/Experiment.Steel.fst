@@ -255,20 +255,21 @@ let extract (a : Type) (pre : M.pre_t) (post : M.post_t a) (req : M.req_t pre) (
 [@@ __tac_helper__; __extraction__]
 inline_for_extraction
 let __solve_by_wp_LV
-      (#ek : SH.effect_kind) (#a : Type) (t : M.repr ek a)
+      (#ek : SH.effect_kind) (#a : Type) (r : M.repr ek a)
       (#pre : M.pre_t) (#post : M.post_t a)
       (#req : M.req_t pre) (#ens : M.ens_t pre a post)
-      (lc0 : LV.top_lin_cond t.repr_tree pre post)
-      (lc1 : LV.top_lin_cond t.repr_tree pre post) (lc1_eq : squash (lc1 == LV.lc_sub_push lc0))
+      (#t : M.prog_tree a) (_ : squash (t == r.repr_tree))
+      (lc0 : LV.top_lin_cond t pre post)
+      (lc1 : LV.top_lin_cond t pre post) (lc1_eq : squash (lc1 == LV.lc_sub_push lc0))
       (t_Fun : (sl0 : Vpl.sl_f pre) ->
                GTot (Fun.prog_tree #SF2Fun.sl_tys ({val_t = a; sel_t = M.post_sl_t post})))
-      (t_Fun_eq : squash (t_Fun == (fun sl0 -> prog_LV_to_Fun t.repr_tree lc1 sl0)))
+      (t_Fun_eq : squash (t_Fun == (fun sl0 -> prog_LV_to_Fun t lc1 sl0)))
       (wp : squash (Fl.forall_flist (Vpl.vprop_list_sels_t pre) (fun sl0 ->
                req sl0 ==>
                Fun.tree_wp (t_Fun sl0) (fun res -> ens sl0 res.val_v res.sel_v))))
       (ext : M.repr_steel_t ek a pre post req ens)
-      (ext_eq : ext == prog_LV_to_Fun_extract_wp t lc0 lc1 lc1_eq req ens (fun sl0 -> ()))
-  : extract a pre post req ens ek t
+      (ext_eq : ext == prog_LV_to_Fun_extract_wp r lc0 lc1 lc1_eq req ens (fun sl0 -> ()))
+  : extract a pre post req ens ek r
   =
     ext
 
@@ -276,11 +277,17 @@ let __solve_by_wp_LV
 let solve_by_wp (fr : flags_record) (t : timer) : Tac unit
   =
     apply_raw (`__solve_by_wp_LV);
-    
+
+    (* t *)
+    dismiss ();
+    let t = timer_enter t "M         " in
+    norm __normal_M;
+    if fr.f_dump Stage_M then dump1 "at stage M";
+    trefl ();
+
     (* lc0 *)
     let t = timer_enter t "lin_cond  " in
     norm __normal_M;
-    if fr.f_dump Stage_M then dump1 "at stage M";
     TcLV.build_top_lin_cond fr (TcS.root_ctx []);
 
     (* lc1 *)
