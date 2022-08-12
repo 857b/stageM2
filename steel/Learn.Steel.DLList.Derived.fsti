@@ -22,11 +22,11 @@ let dll_len (#p : list_param) (#r0 : ref p.r) (#len : nat) (#r1 : ref p.r) (sl :
   : nat
   = len
 
-let dll_entry (#p : list_param) (#r0 : ref p.r) (#len : nat) (#r1 : ref p.r) (sl : dllist_sel_t p r0 len r1)
+let dll_hd (#p : list_param) (#r0 : ref p.r) (#len : nat) (#r1 : ref p.r) (sl : dllist_sel_t p r0 len r1)
   : ref p.r
   = r0
 
-let dll_exit (#p : list_param) (#r0 : ref p.r) (#len : nat) (#r1 : ref p.r) (sl : dllist_sel_t p r0 len r1)
+let dll_lt (#p : list_param) (#r0 : ref p.r) (#len : nat) (#r1 : ref p.r) (sl : dllist_sel_t p r0 len r1)
   : ref p.r
   = r1
 
@@ -42,21 +42,21 @@ let dll_eq3 #p #r0 #len #r1 (sl : dllist_sel_t p r0 len r1) #r0' #len' #r1' (sl'
   = r0 == r0' /\ len == len' /\ r1 == r1' /\ sl == sl'
 
 
-let sg_entry_index (#p : list_param) (l : list (rcell_t p)) (nxt : ref p.r)
-  : Lemma (sg_entry l nxt == (if length l > 0 then (index l 0)._1 else nxt))
+let sg_hd_index (#p : list_param) (l : list (rcell_t p)) (nxt : ref p.r)
+  : Lemma (sg_hd l nxt == (if length l > 0 then (index l 0)._1 else nxt))
   = ()
 
-let sg_exit_index (#p : list_param) (prv : ref p.r) (l : list (rcell_t p))
-  : Lemma (sg_exit prv l == (if length l > 0 then (index l (length l - 1))._1 else prv))
+let sg_lt_index (#p : list_param) (prv : ref p.r) (l : list (rcell_t p))
+  : Lemma (sg_lt prv l == (if length l > 0 then (index l (length l - 1))._1 else prv))
   = if Cons? l then Ll.last_index l
 
 
 let dll_change_nxt #p #r0 #len #r1 (sl : dllist_sel_t p r0 len r1) (nxt : ref p.r)
-  : dllist_sel_t p (sg_entry sl.dll_sg nxt) len r1
+  : dllist_sel_t p (sg_hd sl.dll_sg nxt) len r1
   = {sl with dll_nxt = nxt}
 
 let dll_change_prv #p #r0 #len #r1 (sl : dllist_sel_t p r0 len r1) (prv : ref p.r)
-  : dllist_sel_t p r0 len (sg_exit prv sl.dll_sg)
+  : dllist_sel_t p r0 len (sg_lt prv sl.dll_sg)
   = {sl with dll_prv = prv}
 
 let dll_next_at #p #r0 #len #r1 (sl : dllist_sel_t p r0 len r1) (i : nat {i <= len})
@@ -80,12 +80,12 @@ let dll_cell_at #p #r0 #len #r1 (sl : dllist_sel_t p r0 len r1) (i : Fin.fin len
 
 let dll_nxt0 (#p : list_param) (#r0 : ref p.r) (#len : nat {len > 0}) (#r2 : ref p.r) (sl0 : dllist_sel_t p r0 len r2)
   : ref p.r
-  = sg_entry (tl sl0.dll_sg) sl0.dll_nxt
+  = sg_hd (tl sl0.dll_sg) sl0.dll_nxt
 
 #push-options "--fuel 2"
 let dll_nxt0_eq #p #r0 (#len : nat {len > 0}) #r2 (sl : dllist_sel_t p r0 len r2)
   : Lemma (dll_nxt0 sl == dll_next_at sl 1)
-  = if len > 1 then sg_entry_index (tl sl.dll_sg) sl.dll_nxt
+  = if len > 1 then sg_hd_index (tl sl.dll_sg) sl.dll_nxt
 #pop-options
 
 let dll_head #p #r0 (#len : nat {len > 0}) #r2 (sl : dllist_sel_t p r0 len r2)
@@ -98,7 +98,7 @@ let dll_head #p #r0 (#len : nat {len > 0}) #r2 (sl : dllist_sel_t p r0 len r2)
 
 val dll_tail_lem
       (#p : list_param) (#r0 : ref p.r) (#len : nat {len > 0}) (#r2 : ref p.r) (sl0 : dllist_sel_t p r0 len r2)
-  : Lemma (sg_exit r0 (tl sl0.dll_sg) == r2)
+  : Lemma (sg_lt r0 (tl sl0.dll_sg) == r2)
 
 let dll_tail
       (#p : list_param) (#r0 : ref p.r) (#len : nat {len > 0}) (#r2 : ref p.r) (sl0 : dllist_sel_t p r0 len r2)
@@ -141,7 +141,7 @@ let dll_snoc
 
 let dll_prv0 (#p : list_param) (#r0 : ref p.r) (#len : nat {len > 0}) (#r2 : ref p.r) (sl : dllist_sel_t p r0 len r2)
   : ref p.r
-  = sg_exit sl.dll_prv (init sl.dll_sg)
+  = sg_lt sl.dll_prv (init sl.dll_sg)
 
 #push-options "--fuel 2"
 let dll_prv0_eq #p #r0 (#len : nat {len > 0}) #r2 (sl : dllist_sel_t p r0 len r2)
@@ -149,7 +149,7 @@ let dll_prv0_eq #p #r0 (#len : nat {len > 0}) #r2 (sl : dllist_sel_t p r0 len r2
   =
     if len > 1
     then begin
-      sg_exit_index sl.dll_prv (init sl.dll_sg);
+      sg_lt_index sl.dll_prv (init sl.dll_sg);
       Ll.unsnoc_eq_init sl.dll_sg;
       lemma_unsnoc_index sl.dll_sg (len - 2)
     end
@@ -182,8 +182,8 @@ val dll_append_lem
       (#p : list_param) (#r0 : ref p.r) (#len0 : nat) (#r1 #r2 : ref p.r) (#len1 : nat) (#r3 : ref p.r)
       (sl0 : dllist_sel_t p r0 len0 r1 { sl0.dll_nxt == r2 })
       (sl1 : dllist_sel_t p r2 len1 r3 { sl1.dll_prv == r1 })
-  : Lemma (sg_entry (sl0.dll_sg @ sl1.dll_sg) sl1.dll_nxt == r0 /\
-           sg_exit  sl0.dll_prv (sl0.dll_sg @ sl1.dll_sg) == r3)
+  : Lemma (sg_hd (sl0.dll_sg @ sl1.dll_sg) sl1.dll_nxt == r0 /\
+           sg_lt  sl0.dll_prv (sl0.dll_sg @ sl1.dll_sg) == r3)
 
 let dll_append
       (#p : list_param) (#r0 : ref p.r) (#len0 : nat) (#r1 #r2 : ref p.r) (#len1 : nat) (#r3 : ref p.r)
@@ -252,10 +252,10 @@ let dll_splitAt
     let r2 = dll_next_at sl n in
     let sg0, sg1 = splitAt n sl.dll_sg in
     (**) Ll.splitAt_index n sl.dll_sg;
-    (**) sg_exit_index r0 sl.dll_sg;
-    (**) sg_exit_index sl.dll_prv sg0;
-    (**) sg_exit_index r0 sg1;
-    (**) sg_entry_index sg1 sl.dll_nxt;
+    (**) sg_lt_index r0 sl.dll_sg;
+    (**) sg_lt_index sl.dll_prv sg0;
+    (**) sg_lt_index r0 sg1;
+    (**) sg_hd_index sg1 sl.dll_nxt;
     ({ dll_sg = sg0; dll_prv = sl.dll_prv; dll_nxt = r2 },
      { dll_sg = sg1; dll_prv = r1; dll_nxt = sl.dll_nxt })
 
@@ -269,7 +269,7 @@ let dll_init_eq_splitAt
       (#p : list_param) (#r0 : ref p.r) (#len : nat {len > 0}) (#r2 : ref p.r) (sl : dllist_sel_t p r0 len r2)
   : Lemma (dll_init sl `dll_eq3` (dll_splitAt (len-1) sl)._1)
   =
-    sg_exit_index r0 sl.dll_sg;
+    sg_lt_index r0 sl.dll_sg;
     Ll.unsnoc_eq_init sl.dll_sg;
     dll_prv0_eq sl
 
@@ -303,8 +303,8 @@ let dll_remove
   : Tot (r0' : ref p.r & r1' : ref p.r & dllist_sel_t p r0' (len - 1) r1')
   =
     let sl0, _, sl1 = dll_splitOn sl i in
-    (| sg_entry (sl0.dll_sg @ sl1.dll_sg) sl1.dll_nxt,
-       sg_exit  sl0.dll_prv (sl0.dll_sg @ sl1.dll_sg),
+    (| sg_hd (sl0.dll_sg @ sl1.dll_sg)  sl1.dll_nxt,
+       sg_lt  sl0.dll_prv (sl0.dll_sg @ sl1.dll_sg),
     {
       dll_sg  = sl0.dll_sg @ sl1.dll_sg;
       dll_prv = sl0.dll_prv;
@@ -316,33 +316,33 @@ let dll_remove_eq
       (#p : list_param) (#r0 : ref p.r) (#len : nat {i < len}) (#r1 : ref p.r) (sl : dllist_sel_t p r0 len r1)
   : Lemma (let (|r0', r1', sl'|) = dll_remove i sl  in
            let sl0, _, sl1       = dll_splitOn sl i in
-           sl' `dll_eq3` (dll_append (dll_change_nxt sl0 (dll_entry sl1)) (dll_change_prv sl1 (dll_exit sl0))))
+           sl' `dll_eq3` (dll_append (dll_change_nxt sl0 (dll_hd sl1)) (dll_change_prv sl1 (dll_lt sl0))))
   =
     let sl0, _, sl1 = dll_splitOn sl i in
-    dll_append_lem (dll_change_nxt sl0 (dll_entry sl1)) (dll_change_prv sl1 (dll_exit sl0))
+    dll_append_lem (dll_change_nxt sl0 (dll_hd sl1)) (dll_change_prv sl1 (dll_lt sl0))
 
 
 (*** Ghost lemmas *)
 
-val dllist_rew_len (#opened : Mem.inames) (p : list_param) (entry : ref p.r) (len0 len1 : nat) (exit : ref p.r)
+val dllist_rew_len (#opened : Mem.inames) (p : list_param) (hd : ref p.r) (len0 len1 : nat) (lt : ref p.r)
   : SteelGhost unit opened
-      (dllist p entry len0 exit) (fun () -> dllist p entry len1 exit)
+      (dllist p hd len0 lt) (fun () -> dllist p hd len1 lt)
       (requires fun _ -> len0 = len1)
-      (ensures  fun h0 () h1 -> len0 = len1 /\ sel_dllist p entry len0 exit h0 == sel_dllist p entry len1 exit h1)
+      (ensures  fun h0 () h1 -> len0 = len1 /\ sel_dllist p hd len0 lt h0 == sel_dllist p hd len1 lt h1)
 
 (***** Intro / Elim lemmas *)
 
-val intro_dllist_nil (#opened : Mem.inames) (p : list_param) (entry : ref p.r) (exit : ref p.r)
+val intro_dllist_nil (#opened : Mem.inames) (p : list_param) (hd : ref p.r) (lt : ref p.r)
   : SteelGhost unit opened
-      emp (fun () -> dllist p entry 0 exit)
+      emp (fun () -> dllist p hd 0 lt)
       (requires fun _ -> True)
-      (ensures  fun _ () h1 -> sel_dllist p entry 0 exit h1 == dll_nil entry exit)
+      (ensures  fun _ () h1 -> sel_dllist p hd 0 lt h1 == dll_nil hd lt)
   
-val elim_dllist_nil (#opened : Mem.inames) (p : list_param) (entry exit : ref p.r)
+val elim_dllist_nil (#opened : Mem.inames) (p : list_param) (hd lt : ref p.r)
   : SteelGhost unit opened
-      (dllist p entry 0 exit) (fun () -> emp)
+      (dllist p hd 0 lt) (fun () -> emp)
       (requires fun _ -> True)
-      (ensures  fun h0 () _ -> sel_dllist p entry 0 exit h0 == dll_nil entry exit)
+      (ensures  fun h0 () _ -> sel_dllist p hd 0 lt h0 == dll_nil hd lt)
 
 
 val intro_dllist_cons (#opened : Mem.inames) (p : list_param) (r0 r1 : ref p.r) (len : nat) (r2 : ref p.r)
@@ -398,8 +398,7 @@ let elim_dllist_sglt (#opened : Mem.inames) (p : list_param) (r : ref p.r)
   : SteelGhost unit opened
       (dllist p r 1 r) (fun () -> vcell p r)
       (requires fun _ -> True)
-      (ensures  fun h0 () h1 ->
-        sel_dllist p r 1 r h0 == dll_sglt (g_cl p r h1))
+      (ensures  fun h0 () h1 -> sel_dllist p r 1 r h0 == dll_sglt (g_cl p r h1))
   = elim_dllist_sglt_2 p r r
 
 
@@ -474,12 +473,12 @@ val dllist_splitOn
 
 (***** Null *)
 
-val dllist_entry_null_iff_lem (p : list_param) (r0 : ref p.r) (len : nat) (r1 : ref p.r) (m : Mem.mem)
+val dllist_hd_null_iff_lem (p : list_param) (r0 : ref p.r) (len : nat) (r1 : ref p.r) (m : Mem.mem)
   : Lemma (requires Mem.interp (hp_of (dllist p r0 len r1)) m /\
                     (sel_of (dllist p r0 len r1) m <: dllist_sel_t p r0 len r1).dll_nxt == null)
           (ensures  is_null r0 <==> len = 0)
 
-val dllist_entry_null_iff (#opened : Mem.inames) (p : list_param) (r0 : ref p.r) (len : nat) (r1 : ref p.r)
+val dllist_hd_null_iff (#opened : Mem.inames) (p : list_param) (r0 : ref p.r) (len : nat) (r1 : ref p.r)
   : SteelGhost unit opened
       (dllist p r0 len r1) (fun () -> dllist p r0 len r1)
       (requires fun h0 ->
@@ -488,7 +487,7 @@ val dllist_entry_null_iff (#opened : Mem.inames) (p : list_param) (r0 : ref p.r)
         frame_equalities (dllist p r0 len r1) h0 h1 /\
         (is_null r0 <==> len = 0))
 
-val dllist_exit_null_iff (#opened : Mem.inames) (p : list_param) (r0 : ref p.r) (len : nat) (r1 : ref p.r)
+val dllist_lt_null_iff (#opened : Mem.inames) (p : list_param) (r0 : ref p.r) (len : nat) (r1 : ref p.r)
   : SteelGhost unit opened
       (dllist p r0 len r1) (fun () -> dllist p r0 len r1)
       (requires fun h0 ->

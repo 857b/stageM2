@@ -12,36 +12,36 @@ open Learn.Steel.DLList.Param
 
 #set-options "--fuel 1 --ifuel 1"
 
-let sg_entry (#p : list_param) (l : list (rcell_t p)) (nxt : ref p.r) : ref p.r =
+let sg_hd (#p : list_param) (l : list (rcell_t p)) (nxt : ref p.r) : ref p.r =
   match l with
   | [] -> nxt
   | hd :: _ -> hd._1
 
-let sg_exit  (#p : list_param) (prv : ref p.r) (l : list (rcell_t p)) : ref p.r =
+let sg_lt  (#p : list_param) (prv : ref p.r) (l : list (rcell_t p)) : ref p.r =
   if Cons? l then (last l)._1 else prv
 
 // ALT: dllist_sel_t' + refinement
 // ALT: indexed by prv + entry ?
 noeq
-type dllist_sel_t (p : list_param) (entry : ref p.r) (len : nat) (exit : ref p.r) : Type = {
+type dllist_sel_t (p : list_param) (hd : ref p.r) (len : nat) (lt : ref p.r) : Type = {
   dll_sg  : llist (rcell_t p) len;
-  dll_prv : prv : ref p.r { exit  == sg_exit  prv dll_sg };
-  dll_nxt : nxt : ref p.r { entry == sg_entry dll_sg nxt };
+  dll_prv : prv : ref p.r { lt == sg_lt prv dll_sg };
+  dll_nxt : nxt : ref p.r { hd == sg_hd dll_sg nxt };
 }
 
 let dllist_sel_t_get_ref
-      (#p : list_param) (#entry : ref p.r) (#len : nat) (#exit : ref p.r)
-      (sl : dllist_sel_t p entry len exit)
-  : Lemma (exit  == sg_exit  sl.dll_prv sl.dll_sg /\
-           entry == sg_entry sl.dll_sg  sl.dll_nxt)
+      (#p : list_param) (#hd : ref p.r) (#len : nat) (#lt : ref p.r)
+      (sl : dllist_sel_t p hd len lt)
+  : Lemma (lt == sg_lt sl.dll_prv sl.dll_sg /\
+           hd == sg_hd sl.dll_sg  sl.dll_nxt)
   = ()
 
-let dll_nil (#p : list_param) (entry : ref p.r) (exit : ref p.r)
-  : dllist_sel_t p entry 0 exit
+let dll_nil (#p : list_param) (hd : ref p.r) (lt : ref p.r)
+  : dllist_sel_t p hd 0 lt
   = {
     dll_sg  = [];
-    dll_prv = exit;
-    dll_nxt = entry;
+    dll_prv = lt;
+    dll_nxt = hd;
   }
 
 /// [r1] should be [c.cl_nxt]
@@ -57,48 +57,48 @@ let dll_cons
   }
 
 
-val dllist_sl (p : list_param u#0) (entry : ref p.r) (len : nat) (exit : ref p.r)
+val dllist_sl (p : list_param u#0) (hd : ref p.r) (len : nat) (lt : ref p.r)
   : Mem.slprop u#1
 
-val dllist_sel (p : list_param) (entry : ref p.r) (len : nat) (exit : ref p.r)
-  : selector (dllist_sel_t p entry len exit) (dllist_sl p entry len exit)
+val dllist_sel (p : list_param) (hd : ref p.r) (len : nat) (lt : ref p.r)
+  : selector (dllist_sel_t p hd len lt) (dllist_sl p hd len lt)
 
 [@@__steel_reduce__]
-let dllist' (p : list_param) (entry : ref p.r) ([@@@smt_fallback] len : nat) (exit : ref p.r) : vprop' =
+let dllist' (p : list_param) (hd : ref p.r) ([@@@smt_fallback] len : nat) (lt : ref p.r) : vprop' =
   {
-    hp  = dllist_sl    p entry len exit;
-    t   = dllist_sel_t p entry len exit;
-    sel = dllist_sel   p entry len exit
+    hp  = dllist_sl    p hd len lt;
+    t   = dllist_sel_t p hd len lt;
+    sel = dllist_sel   p hd len lt
   }
-unfold let dllist (p : list_param) (entry : ref p.r) ([@@@smt_fallback] len : nat) (exit : ref p.r) : vprop =
-  VUnit (dllist' p entry len exit)
+unfold let dllist (p : list_param) (hd : ref p.r) ([@@@smt_fallback] len : nat) (lt : ref p.r) : vprop =
+  VUnit (dllist' p hd len lt)
 
 [@@ __steel_reduce__]
-let sel_dllist (#q:vprop) (p : list_param) (entry : ref p.r) (len : nat) (exit : ref p.r)
-  (h:rmem q{FStar.Tactics.with_tactic selector_tactic (can_be_split q (dllist p entry len exit) /\ True)})
-  : GTot (dllist_sel_t p entry len exit)
-  = h (dllist p entry len exit)
+let sel_dllist (#q:vprop) (p : list_param) (hd : ref p.r) (len : nat) (lt : ref p.r)
+  (h:rmem q{FStar.Tactics.with_tactic selector_tactic (can_be_split q (dllist p hd len lt) /\ True)})
+  : GTot (dllist_sel_t p hd len lt)
+  = h (dllist p hd len lt)
 
 
-val dllist_nil_interp (p : list_param) (entry : ref p.r) (exit : ref p.r) (m : Mem.mem)
-  : Lemma (Mem.interp (hp_of (dllist p entry 0 exit)) m /\
-           (sel_of (dllist p entry 0 exit) m <: dllist_sel_t p entry 0 exit) == dll_nil entry exit)
+val dllist_nil_interp (p : list_param) (hd : ref p.r) (lt : ref p.r) (m : Mem.mem)
+  : Lemma (Mem.interp (hp_of (dllist p hd 0 lt)) m /\
+           (sel_of (dllist p hd 0 lt) m <: dllist_sel_t p hd 0 lt) == dll_nil hd lt)
 
-val dllist_cons_interp (p : list_param) (entry : ref p.r) (len : nat) (exit : ref p.r) (m : Mem.mem)
-  : Lemma (Mem.interp (hp_of (dllist p entry (len + 1) exit)) m
-         <==> Mem.interp (hp_of (vcell p entry)) m /\
-           (let      c = (p.cell entry).cl_f (sel_of (vcell p entry) m) in
-            let entry' = c.cl_nxt                                       in
-            Mem.interp (hp_of (vcell p entry) `Mem.star` hp_of (dllist p entry' len exit)) m /\
-           (let sl1 : dllist_sel_t p entry' len exit
-                    = sel_of (dllist p entry' len exit) m               in
-            sl1.dll_prv == entry)))
+val dllist_cons_interp (p : list_param) (hd : ref p.r) (len : nat) (lt : ref p.r) (m : Mem.mem)
+  : Lemma (Mem.interp (hp_of (dllist p hd (len + 1) lt)) m
+         <==> Mem.interp (hp_of (vcell p hd)) m /\
+           (let c   = (p.cell hd).cl_f (sel_of (vcell p hd) m) in
+            let hd' = c.cl_nxt                                 in
+            Mem.interp (hp_of (vcell p hd) `Mem.star` hp_of (dllist p hd' len lt)) m /\
+           (let sl1 : dllist_sel_t p hd' len lt
+                    = sel_of (dllist p hd' len lt) m           in
+            sl1.dll_prv == hd)))
 
 val dllist_cons_sel_eq
-      (p : list_param) (entry : ref p.r) (len : nat) (exit : ref p.r) (m : Mem.mem)
-  : Lemma (requires Mem.interp (hp_of (dllist p entry (len + 1) exit )) m)
-          (ensures (dllist_cons_interp p entry len exit m;
-                    let c      = (p.cell entry).cl_f (sel_of (vcell p entry) m) in
-                    let entry' = c.cl_nxt                                       in
-                    let sl1    = sel_of (dllist p entry' len exit) m            in
-                    sel_of (dllist p entry (len + 1) exit) m == dll_cons #p #entry #entry' #len #exit c sl1))
+      (p : list_param) (hd : ref p.r) (len : nat) (lt : ref p.r) (m : Mem.mem)
+  : Lemma (requires Mem.interp (hp_of (dllist p hd (len + 1) lt )) m)
+          (ensures (dllist_cons_interp p hd len lt m;
+                    let c   = (p.cell hd).cl_f (sel_of (vcell p hd) m) in
+                    let hd' = c.cl_nxt                                 in
+                    let sl1 = sel_of (dllist p hd' len lt) m           in
+                    sel_of (dllist p hd (len + 1) lt) m == dll_cons #p #hd #hd' #len #lt c sl1))

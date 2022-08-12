@@ -6,15 +6,15 @@ module Learn.Steel.DLList.Derived
 
 let dll_tail_lem
       (#p : list_param) (#r0 : ref p.r) (#len : nat {len > 0}) (#r2 : ref p.r) (sl0 : dllist_sel_t p r0 len r2)
-  : Lemma (sg_exit r0 (tl sl0.dll_sg) == r2)
+  : Lemma (sg_lt r0 (tl sl0.dll_sg) == r2)
   = ()
 
 let dll_append_lem
       (#p : list_param) (#r0 : ref p.r) (#len0 : nat) (#r1 #r2 : ref p.r) (#len1 : nat) (#r3 : ref p.r)
       (sl0 : dllist_sel_t p r0 len0 r1 { sl0.dll_nxt == r2 })
       (sl1 : dllist_sel_t p r2 len1 r3 { sl1.dll_prv == r1 })
-  : Lemma (sg_entry (sl0.dll_sg @ sl1.dll_sg) sl1.dll_nxt == r0 /\
-           sg_exit  sl0.dll_prv (sl0.dll_sg @ sl1.dll_sg) == r3)
+  : Lemma (sg_hd (sl0.dll_sg @ sl1.dll_sg) sl1.dll_nxt == r0 /\
+           sg_lt  sl0.dll_prv (sl0.dll_sg @ sl1.dll_sg) == r3)
   = if Cons? (sl1.dll_sg) then lemma_append_last sl0.dll_sg sl1.dll_sg
 
 let dll_tail_append #p #r0 #len0 #r1 #r2 #len1 #r3 sl0 sl1 = ()
@@ -56,23 +56,23 @@ let dll_splitOn_eq
 
 (*** Ghost lemmas *)
 
-let dllist_rew_len (#opened : Mem.inames) (p : list_param) (entry : ref p.r) (len0 len1 : nat) (exit : ref p.r)
+let dllist_rew_len (#opened : Mem.inames) (p : list_param) (hd : ref p.r) (len0 len1 : nat) (lt : ref p.r)
   =
-    change_equal_slprop (dllist p entry len0 exit) (dllist p entry len1 exit)
+    change_equal_slprop (dllist p hd len0 lt) (dllist p hd len1 lt)
 
 (*****  Intro / Elim lemmas *)
 
-let intro_dllist_nil (#opened : Mem.inames) (p : list_param) (entry exit : ref p.r)
+let intro_dllist_nil (#opened : Mem.inames) (p : list_param) (hd lt : ref p.r)
   =
-    change_slprop_rel emp (dllist p entry 0 exit)
-      (fun _ sl -> sl == Mkdllist_sel_t [] exit entry)
-      (fun m -> dllist_nil_interp p entry exit m)
+    change_slprop_rel emp (dllist p hd 0 lt)
+      (fun _ sl -> sl == Mkdllist_sel_t [] lt hd)
+      (fun m -> dllist_nil_interp p hd lt m)
   
-let elim_dllist_nil (#opened : Mem.inames) (p : list_param) (entry exit : ref p.r)
+let elim_dllist_nil (#opened : Mem.inames) (p : list_param) (hd lt : ref p.r)
   =
-    change_slprop_rel (dllist p entry 0 exit) emp
-      (fun sl _ -> sl == Mkdllist_sel_t [] exit entry)
-      (fun m -> dllist_nil_interp p entry exit m; reveal_emp (); Mem.intro_emp m)
+    change_slprop_rel (dllist p hd 0 lt) emp
+      (fun sl _ -> sl == Mkdllist_sel_t [] lt hd)
+      (fun m -> dllist_nil_interp p hd lt m; reveal_emp (); Mem.intro_emp m)
 
 
 let intro_dllist_cons (#opened : Mem.inames) (p : list_param) (r0 r1 : ref p.r) (len : nat) (r2 : ref p.r)
@@ -89,7 +89,7 @@ let elim_dllist_cons (#opened : Mem.inames) (p : list_param) (r0 : ref p.r) (len
   =
     let sl0 : G.erased (dllist_sel_t p r0 (len+1) r2) = gget (dllist p r0 (len+1) r2) in
     let hd :: tl = G.reveal sl0.dll_sg in
-    let r1 : ref p.r = sg_entry tl sl0.dll_nxt in
+    let r1 : ref p.r = sg_hd tl sl0.dll_nxt in
     change_slprop_rel_with_cond
       (dllist p r0 (len+1) r2) (vcell p r0 `star` dllist p r1 len r2)
       (fun sl0' -> sl0' == G.reveal sl0)
@@ -179,7 +179,7 @@ let elim_dllist_snoc (#opened : Mem.inames) (p : list_param) (r0 : ref p.r) (len
   =
     let sl1 : G.erased (dllist_sel_t p r0 (len+1) r2) = gget (dllist p r0 (len+1) r2) in
     let sl0, slc = dll_splitAt len sl1 in
-    let r1       = dll_exit sl0        in
+    let r1       = dll_lt sl0        in
     dll_splitAt_append len sl1;
     dll_init_eq_splitAt sl1;
     let sl0 : dllist_sel_t p r0 len r1 = U.cast _ sl0 in
@@ -196,7 +196,7 @@ let dllist_splitOn
     let sl   : G.erased (dllist_sel_t p r0 len r1) = gget (dllist p r0 len r1)         in
     let len1 = len - i - 1                                                             in
     let _sl0, _sl1' = dll_splitAt i sl                                                 in
-    let rs0 = dll_exit _sl0                                                            in
+    let rs0 = dll_lt _sl0                                                            in
     let sl0  : dllist_sel_t p r0   i     rs0 = U.cast _ _sl0                           in
     let sl1' : dllist_sel_t p r (len1+1) r1  = U.cast _ _sl1'                          in
     dll_splitAt_append i sl;
@@ -218,7 +218,7 @@ let dllist_splitOn
 
 (***** Null *)
 
-let dllist_entry_null_iff_lem (p : list_param) (r0 : ref p.r) (len : nat) (r1 : ref p.r) (m : Mem.mem)
+let dllist_hd_null_iff_lem (p : list_param) (r0 : ref p.r) (len : nat) (r1 : ref p.r) (m : Mem.mem)
   =
     if len > 0
     then begin
@@ -226,13 +226,13 @@ let dllist_entry_null_iff_lem (p : list_param) (r0 : ref p.r) (len : nat) (r1 : 
       p.nnull r0 m
     end
 
-let dllist_entry_null_iff (#opened : Mem.inames) (p : list_param) (r0 : ref p.r) (len : nat) (r1 : ref p.r)
+let dllist_hd_null_iff (#opened : Mem.inames) (p : list_param) (r0 : ref p.r) (len : nat) (r1 : ref p.r)
   =
     let sl0 = gget (dllist p r0 len r1) in
     extract_info (dllist p r0 len r1) sl0 (is_null r0 <==> len = 0)
-      (dllist_entry_null_iff_lem p r0 len r1)
+      (dllist_hd_null_iff_lem p r0 len r1)
 
-let dllist_exit_null_iff (#opened : Mem.inames) (p : list_param) (r0 : ref p.r) (len : nat) (r1 : ref p.r)
+let dllist_lt_null_iff (#opened : Mem.inames) (p : list_param) (r0 : ref p.r) (len : nat) (r1 : ref p.r)
   =
     let sl0 = gget (dllist p r0 len r1) in
     if len > 0
@@ -279,7 +279,7 @@ let dllist_change_prv
       (p : list_param) (r0 : ref p.r) (len : G.erased nat) (r1 : G.erased (ref p.r))
       (prv : ref p.r)
   =
-    (**) dllist_entry_null_iff p r0 len r1;
+    (**) dllist_hd_null_iff p r0 len r1;
     if not (is_null r0)
     then begin
       dllist_change_prv_cons p r0 len r1 prv;
@@ -309,7 +309,7 @@ let dllist_change_nxt
       (p : list_param) (r0 : ref p.r) (len : G.erased nat) (r1 : ref p.r)
       (nxt : ref p.r)
   =
-    (**) dllist_exit_null_iff p r0 len r1;
+    (**) dllist_lt_null_iff p r0 len r1;
     if is_null r1
     then begin
       (**) dllist_rew_len p r0 len 0 r1;
