@@ -291,6 +291,7 @@ val filter_mask_perm_append (#a : Type) (#n : nat) (m : vec n bool) (l : vec n a
   : Lemma (filter_mask m l @ filter_mask (mask_not m) l == Perm.apply_perm_r (mask_perm_append m) l)
 
 // ALT? directly define this version
+[@@__mask__]
 let mask_pequiv_append (#a : Type) (#n : nat) (m : vec n bool) (l : vec n a)
   : Perm.pequiv l (filter_mask m l @ filter_mask (mask_not m) l)
   =
@@ -300,6 +301,7 @@ let mask_pequiv_append (#a : Type) (#n : nat) (m : vec n bool) (l : vec n a)
 val filter_mask_perm_append' (#a : Type) (#n : nat) (m : vec n bool) (l : vec n a)
   : Lemma (l == Perm.apply_perm_r (mask_perm_append' m) (filter_mask m l @ filter_mask (mask_not m) l))
 
+[@@__mask__]
 let mask_pequiv_append' (#a : Type) (#n : nat) (m : vec n bool) (l : vec n a)
   : Perm.pequiv (filter_mask m l @ filter_mask (mask_not m) l) l
   =

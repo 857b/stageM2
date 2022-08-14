@@ -74,6 +74,14 @@ let call_g (#b : Type)
   : M.repr (SH.KGhost (opened x)) (a x)
   = C.repr_of_steel (pre x) (post x) (req x) (ens x) (SH.ghost_fe (fun () -> f x))
 
+[@@ __repr_M__]
+let call_a (#b : Type)
+      (#a : b -> Type) (#opened : b -> Mem.inames) (#pre : b -> SE.pre_t) (#post : (x : b) -> SE.post_t (a x))
+      (#req : (x : b) -> SE.req_t (pre x)) (#ens : (x : b) -> SE.ens_t (pre x) (a x) (post x))
+      ($f : (x : b) -> SA.SteelAtomic (a x) (opened x) (pre x) (post x) (req x) (ens x)) (x : b)
+  : M.repr (SH.KAtomic (opened x)) (a x)
+  = C.repr_of_steel (pre x) (post x) (req x) (ens x) (SH.atomic_fe (fun () -> f x))
+
 
 private
 let assert_sq_steel (#opened : Mem.inames) (p : Type0)

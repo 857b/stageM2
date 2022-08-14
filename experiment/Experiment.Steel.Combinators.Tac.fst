@@ -152,7 +152,7 @@ let bind_steel_t_for (ek0 ek1 : effect_kind_enum) : term
   = match if ek0 `ek_le` ek1 then ek1 else ek0 with
   | EGhost  -> (`bind_steel__ghost)
   | EGhostI -> (`bind_steel__ghostI)
-  | EAtomic -> let ek' = if ek0 `ek_le` ek1 then ek1 else ek0 in
+  | EAtomic -> let ek' = if ek0 `ek_le` ek1 then ek0 else ek1 in
               if ek' `ek_le` EGhostI
               then (if ek0 = EAtomic then (`bind_steel__atomic_ghost) else (`bind_steel__ghost_atomic))
               else (`bind_steel__steel)

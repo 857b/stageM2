@@ -107,7 +107,7 @@ let slrewrite (#t : Type u#t) (#opened : Mem.inames) (x0 x1 : t)
       (fun _ (SlRewrite v0 v1 frame veq) -> slrewrite_steel opened x0 x1 v0 v1 frame veq)
 
 
-(**** with_invariant_g *)
+(**** with_invariant *)
 
 #push-options "--ifuel 0 --fuel 0"
 
@@ -227,6 +227,59 @@ let with_invariant_g_sl_list
     elim_vrefine (post x) (ref_post x);
     x
 
+inline_for_extraction
+let with_invariant_sl_list
+      (#a : Type)
+      (pre : pre_t) (post : post_t a)
+      (#opened : Mem.inames)
+      (#p : vprop)
+      (i : inv p { not (mem_inv opened i) })
+      (p' : vprop) (_ : squash (p `equiv` p'))
+      (req : t_of p' -> t_of pre -> Type0) (ens : t_of p' -> t_of pre -> (x : a) -> t_of p' -> t_of (post x) -> Type0)
+      (f : unit -> SteelAtomic a (add_inv opened i)
+                    (p' `star` pre) (fun x -> p' `star` (post x))
+                    (requires fun h0      -> req (h0 p') (h0 pre))
+                    (ensures  fun h0 x h1 -> ens (h0 p') (h0 pre) x (h1 p') (h1 (post x))))
+  : SteelAtomic a opened pre post
+      (requires fun h0      -> forall (sl_p0 : t_of p') . req sl_p0 (h0 pre))
+      (ensures  fun h0 x h1 -> exists (sl_p0 sl_p1 : t_of p') . ens sl_p0 (h0 pre) x sl_p1 (h1 (post x)))
+  =
+    let sl_pre = gget pre                                           in
+    let ref_pre  (sl_pre' : t_of pre) : prop
+      = sl_pre' == Ghost.reveal sl_pre                              in
+    let ref_post (x : a) (sl_post : t_of (post x)) : prop
+      = exists (sl_p0 sl_p1 : t_of p') . ens sl_p0 sl_pre x sl_p1 sl_post in
+    intro_vrefine pre ref_pre;
+    let x = SA.with_invariant
+      #a #(vrefine pre ref_pre) #(fun x -> vrefine (post x) (ref_post x))
+      #opened #p i
+      (fun () -> begin
+        change_equiv_slprop p p' (fun () -> ());
+        slassert (p' `star` vrefine pre ref_pre);
+        let sl_p0   = gget p'       in
+        elim_vrefine pre ref_pre;
+        let sl_pre' = gget pre      in
+        (U.assert_by (sl_pre' == sl_pre) (fun () ->
+          assert (Ghost.reveal sl_pre' == Ghost.reveal sl_pre);
+          Ghost.hide_reveal sl_pre;
+          Ghost.hide_reveal sl_pre');
+        eliminate forall (sl_p0 : t_of p') . req sl_p0 sl_pre
+          with sl_p0;
+        ());
+        let x = f () in
+        let sl_p1   = gget p'       in
+        let sl_post = gget (post x) in
+        (introduce exists (sl_p0 sl_p1 : t_of p') . ens sl_p0 sl_pre x sl_p1 sl_post
+          with sl_p0 sl_p1 and ();
+        ());
+        intro_vrefine (post x) (ref_post x);
+        change_equiv_slprop p' p (fun () -> equiv_sym p p');
+        SA.return x
+      end <: SteelAtomicT a (add_inv opened i)
+               (p `star` vrefine pre ref_pre) (fun x -> p `star` vrefine (post x) (ref_post x)))
+    in
+    elim_vrefine (post x) (ref_post x);
+    SA.return x
 #pop-options
 
 [@@ __reduce__]
@@ -309,6 +362,36 @@ let with_invariant_g_steel
       let x = SH.ghost_u inner () in
       (**) elim_vpl_append p' (post x);
       x
+    end
+  )
+
+inline_for_extraction
+let with_invariant_steel
+      (a : Type u#a) (opened : Mem.inames)
+      (#p : vprop) (i : inv p{not (mem_inv opened i)})
+      (p' : vprop_list) (tp : vprop_to_list p p')
+      (pre : M.pre_t) (post : M.post_t a) (ro : vprop_list)
+      (req : sl_f L.(p' @ pre) -> sl_f ro -> Type0)
+      (ens : sl_f L.(p' @ pre) -> (x : a) -> sl_f L.(p' @ post x) -> sl_f ro -> Type0)
+      (inner : M.spc_steel_t (SH.KAtomic (add_inv opened i)) (with_invariant_inner_spec_r p' pre post ro req ens))
+  : M.spc_steel_t (SH.KAtomic opened) (with_invariant_spec_r p' pre post ro req ens)
+  = SH.atomic_f #opened (fun () ->
+    (**) (vprop_to_list_equiv tp; ());
+    with_invariant_sl_list
+      (vprop_of_list pre `star` vprop_of_list ro)
+      (fun x -> vprop_of_list (post x) `star` vprop_of_list ro)
+      i (vprop_of_list p') ()
+      (fun sl_p0 sl0 ->
+        req (append_vars sl_p0 sl0._1) sl0._2)
+      (fun sl_p0 sl0 x sl_p1 sl1 ->
+        ens (append_vars sl_p0 sl0._1) x
+            (append_vars sl_p1 sl1._1) sl0._2 /\
+        sl1._2 == sl0._2)
+    begin fun () ->
+      (**) intro_vpl_append p' pre;
+      let x = SH.atomic_u inner () in
+      (**) elim_vpl_append p' (post x);
+      SA.return x
     end
   )
 #pop-options
@@ -490,6 +573,19 @@ let with_invariant_g
       build_with_invariant_g (with_invariant_gen_c a (SH.KGhost (add_inv opened i)) f p)
       (fun _ (WithInvariant p' tp pre post ro req ens inner) ->
          with_invariant_g_steel a opened i p' tp pre post ro req ens inner)
+
+[@@ __repr_M__]
+inline_for_extraction
+let with_invariant
+      (#a : Type) (#opened : Mem.inames)
+      (#p : vprop) (i : inv p{not (mem_inv opened i)})
+      (f : M.repr (SH.KAtomic (add_inv opened i)) a)
+  : M.repr u#a u#p (SH.KAtomic opened) a
+  =
+    make_combinator a (SH.KAtomic opened)
+      build_with_invariant_g (with_invariant_gen_c a (SH.KAtomic (add_inv opened i)) f p)
+      (fun _ (WithInvariant p' tp pre post ro req ens inner) ->
+         with_invariant_steel a opened i p' tp pre post ro req ens inner)
 
 #pop-options
 
