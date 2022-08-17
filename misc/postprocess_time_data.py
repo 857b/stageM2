@@ -9,12 +9,12 @@ for l in sys.stdin:
     ts = [int(i) for i in l.strip().split()]
     n     = ts[0]
     begt  = ts[1]
-    # ts[8+extr] is total time
-    steps = ts[2:8+extr] + [ts[9+extr]]
-    endt  = ts[10+extr]
+    # we swap M and lin_cond ts[9+extr] is total time
+    steps = [ts[2], ts[4], ts[3]] + ts[5:9+extr] + [ts[10+extr]]
+    endt  = ts[11+extr]
     print(n, end=" ")
     tsum = 0
     for i in steps:
         tsum += i
-        print(tsum, end=" ")
-    print(endt - begt)
+        print(tsum/1e3, end=" ")
+    print((endt - begt)/1e3)

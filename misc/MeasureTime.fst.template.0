@@ -1,0 +1,30 @@
+module MeasureTime
+
+module F   = Experiment.Steel.Monad
+module T   = FStar.Tactics
+module M   = Experiment.Steel.Repr.M
+module C   = Experiment.Steel.Combinators
+module SH  = Experiment.Steel.Steel
+module U32 = FStar.UInt32
+
+open Steel.Effect
+open Steel.Reference
+open Learn.Tactics.Util
+
+
+inline_for_extraction
+let steel_add_1 (r : ref U32.t)
+  : Steel unit (vptr r) (fun () -> vptr r)
+      (requires fun h0       -> U32.v (sel r h0) < FStar.UInt.max_int U32.n)
+      (ensures  fun h0 () h1 -> U32.v (sel r h1) = U32.v (sel r h0) + 1)
+  =
+    let x = read r in
+    write r U32.(x +^ 1ul)
+
+#push-options "--query_stats"
+noextract inline_for_extraction
+let test_time (r : ref U32.t)
+  : F.usteel unit (vptr r) (fun () -> vptr r)
+      (requires fun h0       -> U32.v (sel r h0) <= 100)
+      (ensures  fun h0 () h1 -> U32.v (sel r h1) = U32.v (sel r h0) + REPEAT)
+= F.(to_steel (

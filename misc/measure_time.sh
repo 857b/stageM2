@@ -17,6 +17,11 @@ fstar.exe \
 for i in $(seq 1 20)
 do
 	echo
-	sed -e 's/REPEAT/'$i'/g' < misc/MeasureTime.fst.template > misc/MeasureTime.fst
+	sed -e 's/REPEAT/'$i'/g' < misc/MeasureTime.fst.template.0 > misc/MeasureTime.fst
+	for j in $(seq 1 $i)
+	do
+		echo 'call steel_add_1 r;;' >> misc/MeasureTime.fst
+	done
+	sed -e 's/REPEAT/'$i'/g' < misc/MeasureTime.fst.template.1 >> misc/MeasureTime.fst
 	{ fstar misc/MeasureTime.fst && rm misc/MeasureTime.fst ; } || { echo "error"; exit 1; }
 done
