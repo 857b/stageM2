@@ -11,16 +11,16 @@ open Steel.Effect
 open Steel.FractionalPermission
 open Steel.Reference
 
-
+//#push-options "--print_full_names"
 //[@@handle_smt_goals]let tac () = Tactics.dump "SMT query"
 
 let test_steel (r0 r1 : ref int)
   : Steel unit (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
-      (requires fun h0      -> sel r1 h0 <= 20)
-      (ensures  fun h0 _ h1 -> sel r0 h1 <= 30)
+      (requires fun h0      -> sel r0 h0 >= 0)
+      (ensures  fun h0 _ h1 -> sel r1 h1 >= 1)
   =
-    let x1 = read r1 in
-    write r0 (x1 + 10)
+    let x = read r0 in
+    write r1 (x + 1)
 
 /// [vprop]
 /// Definition
@@ -50,11 +50,11 @@ let test_steel_func
 noextract
 let test_steel' (r0 r1 : ref int)
   : F.usteel unit (vptr r0 `star` vptr r1) (fun _ -> vptr r0 `star` vptr r1)
-      (requires fun h0      -> sel r1 h0 <= 20)
-      (ensures  fun h0 _ h1 -> sel r0 h1 <= 30)
-  = F.(to_steel (
-    x1 <-- call read r1;
-    call (write r0) (x1 + 10)
+      (requires fun h0      -> sel r0 h0 >= 0)
+      (ensures  fun h0 _ h1 -> sel r1 h1 >= 1)
+  = F.(to_steel #[Dump Stage_WP] (
+    x <-- call read r0;
+    call (write r1) (x + 1)
   ) ())
 
 /// [Experiment.Steel.Repr.M.prog_tree]
